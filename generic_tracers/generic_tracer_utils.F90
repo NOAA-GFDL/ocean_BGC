@@ -33,6 +33,10 @@ module g_tracer_utils
 
 
   implicit none ; private
+!-----------------------------------------------------------------------
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 16.0.4.1.2.3 2008/10/06 23:32:42 nnz Exp $'
+  character(len=128) :: tag = '$Name: perth_2008_10 $'
+!-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
 
@@ -127,13 +131,16 @@ module g_tracer_utils
      ! Tracer name, descriptive name, package that instantiates it 
      character(len=fm_string_len) :: name, longname, alias, package_name
 
+     ! Tracer molecular wt
+     real :: flux_gas_molwt
+
      ! Tracer flux names recognized by component models (OCN, LND, ICE, ATM) 
      character(len=fm_string_len) :: flux_gas_name, flux_runoff_name, flux_wetdep_name, flux_drydep_name
      real, _ALLOCATABLE, dimension(:) :: flux_param, flux_gas_param
 
      ! IN and OUT (restart) files
-     character(len=fm_string_len) :: ice_file_in, ice_file_out, ocean_file_in, ocean_file_out
-     character(len=fm_string_len) :: flux_gas_file_in, flux_gas_file_out 
+     character(len=fm_string_len) :: ice_restart_file, ocean_restart_file
+     character(len=fm_string_len) :: flux_gas_restart_file 
      ! Units of measurement for its field and its flux
      character(len=fm_string_len) :: units, flux_units
 
@@ -224,7 +231,7 @@ module g_tracer_utils
      integer, _ALLOCATABLE, dimension(:,:):: grid_mask_coast    _NULL
 
      ! IN and OUT (restart) files
-     character(len=fm_string_len) :: ice_file_in, ice_file_out, ocean_file_in, ocean_file_out
+     character(len=fm_string_len) :: ice_restart_file, ocean_restart_file
   end type g_tracer_common
 
   !Keep the state of this common type for ALL tracers
@@ -502,11 +509,12 @@ contains
   !       prog       = .true.,              &
   !       flux_gas       = .true.,                      &
   !       flux_gas_name  = 'co2_flux',                  &
+  !       flux_gas_molwt = WTMCO2,                      &
   !       flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
   !       flux_runoff    = .true.,          &
   !       flux_param     = (/12.011e-03  /),  &
   !       flux_bottom    = .true.,          &
-  !       ice_file_in    = topaz%ice_file_in, ice_file_out = topaz%ice_file_out)
+  !       ice_restart_file = topaz%ice_restart_file)
   !
   !  </TEMPLATE>
   !  <IN NAME="node_ptr" TYPE="type(g_tracer_type), pointer">
@@ -554,6 +562,9 @@ contains
   !  <IN NAME="btm_reservoir" TYPE="logical">
   !   .true. if there is bottom reservoir.
   !  </IN>
+  !  <IN NAME="flux_gas_molwt" TYPE="real">
+  !   Molecular wt of gas defined in constants.F90 (g/mol)
+  !  </IN>
   !  <IN NAME="flux_gas_param" TYPE="real, dimension(:)">
   !   Aray of parameters for gas flux (refer to documentation for subroutine aof_set_coupler_flux() ).
   !  </IN>
@@ -563,24 +574,18 @@ contains
   !  <IN NAME="sink_rate" TYPE="real">
   !   Sinking rate if non-zero.
   !  </IN>
-  !  <IN NAME="ice_file_in" TYPE="character(len=*)">
+  !  <IN NAME="ice_restart_file" TYPE="character(len=*)">
   !   refer to documentation for subroutine aof_set_coupler_flux().
   !  </IN>
-  !  <IN NAME="ice_file_out" TYPE="character(len=*)">
-  !   refer to documentation for subroutine aof_set_coupler_flux().
-  !  </IN>
-  !  <IN NAME="ocean_file_in" TYPE="character(len=*)">
-  !   refer to documentation for subroutine aof_set_coupler_flux().
-  !  </IN>
-  !  <IN NAME="ocean_file_out" TYPE="character(len=*)">
+  !  <IN NAME="ocean_restart_file" TYPE="character(len=*)">
   !   refer to documentation for subroutine aof_set_coupler_flux().
   !  </IN>
   !  
   ! </SUBROUTINE>
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
-       flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_param, flux_param, &   
-       flux_bottom, btm_reservoir, sink_rate, flux_gas_file_in, flux_gas_file_out) 
+       flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
+       flux_param, flux_bottom, btm_reservoir, sink_rate, flux_gas_restart_file) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -594,11 +599,11 @@ contains
     logical,            intent(in), optional :: flux_drydep
     logical,            intent(in), optional :: flux_bottom
     logical,            intent(in), optional :: btm_reservoir
+    real,               intent(in), optional :: flux_gas_molwt
     real, dimension(:), intent(in), optional :: flux_gas_param
     real, dimension(:), intent(in), optional :: flux_param
     character(len=*),   intent(in), optional :: flux_gas_name
-    character(len=*),   intent(in), optional :: flux_gas_file_in
-    character(len=*),   intent(in), optional :: flux_gas_file_out
+    character(len=*),   intent(in), optional :: flux_gas_restart_file
 
     !
     !       Local parameters
@@ -627,15 +632,12 @@ contains
     g_tracer%prog         = prog 
 
     !Restart files for tracers 
-    g_tracer%ocean_file_in = trim(g_tracer_com%ocean_file_in)
-    g_tracer%ocean_file_out= trim(g_tracer_com%ocean_file_out)
+    g_tracer%ocean_restart_file = trim(g_tracer_com%ocean_restart_file)
     !Restart files for ice fluxes
-    g_tracer%ice_file_in   = trim(g_tracer_com%ice_file_in)
-    g_tracer%ice_file_out  = trim(g_tracer_com%ice_file_out)
+    g_tracer%ice_restart_file   = trim(g_tracer_com%ice_restart_file)
 
     !Restart files for csurf and alpha for tracers with gas flux default values
-    g_tracer%flux_gas_file_in = trim("INPUT/ocean_airsea_flux.res.nc")    
-    g_tracer%flux_gas_file_out= trim("RESTART/ocean_airsea_flux.res.nc")
+    g_tracer%flux_gas_restart_file = trim("ocean_airsea_flux.res.nc")    
 
     g_tracer%alias        = trim(name)
     !%alias is the global name for this tracer 
@@ -663,6 +665,11 @@ contains
     !Determine the fluxes 
     !
 
+    if(present(flux_gas_molwt)) then
+       g_tracer%flux_gas_molwt=flux_gas_molwt
+    else
+       g_tracer%flux_gas_molwt = 0.0
+    endif
     if(present(flux_gas_param)) then
        allocate(g_tracer%flux_gas_param(size(flux_gas_param)))
        g_tracer%flux_gas_param=flux_gas_param
@@ -676,8 +683,7 @@ contains
     if(g_tracer%flux_gas) then
        g_tracer%flux_gas_name=trim(g_tracer%alias) // trim("_flux")
        if(present(flux_gas_name)) g_tracer%flux_gas_name=flux_gas_name
-       if(present(flux_gas_file_in))  g_tracer%flux_gas_file_in  = flux_gas_file_in
-       if(present(flux_gas_file_out)) g_tracer%flux_gas_file_out = flux_gas_file_out
+       if(present(flux_gas_restart_file))  g_tracer%flux_gas_restart_file  = flux_gas_restart_file
     endif
 
     if(present(flux_runoff))  g_tracer%flux_runoff = flux_runoff
@@ -769,38 +775,39 @@ contains
 
     if(g_tracer%flux_gas) then
        g_tracer%flux_gas_ind  = aof_set_coupler_flux(g_tracer%flux_gas_name,                  &
-            flux_type      = 'air_sea_gas_flux',                                              &
-            implementation = 'ocmip2',                                                        &
-            param          = g_tracer%flux_gas_param,                                                  &
-            ice_file_in    = g_tracer%ice_file_in, ice_file_out = g_tracer%ice_file_out,      &
-            ocean_file_in  = g_tracer%flux_gas_file_in, ocean_file_out = g_tracer%flux_gas_file_out &
+            flux_type         = 'air_sea_gas_flux',                                           &
+            implementation    = 'ocmip2',                                                     &
+            mol_wt            = g_tracer%flux_gas_molwt,                                      &
+            param             = g_tracer%flux_gas_param,                                      &
+            ice_restart_file  = g_tracer%ice_restart_file,                                    &
+            ocean_restart_file= g_tracer%flux_gas_restart_file                                &
             )
     endif
 
     if(g_tracer%flux_runoff) then
        g_tracer%flux_runoff_ind  = aof_set_coupler_flux(g_tracer%flux_runoff_name,            &
-            flux_type      = 'land_sea_runoff',                                               &
-            implementation = 'river',                                                         &
-            param          = g_tracer%flux_param,                                                      &
-            ice_file_in    = g_tracer%ice_file_in, ice_file_out = g_tracer%ice_file_out       &
+            flux_type            = 'land_sea_runoff',                                         &
+            implementation       = 'river',                                                   &
+            param                = g_tracer%flux_param,                                       &
+            ice_restart_file     = g_tracer%ice_restart_file                                  &
             )
     endif
 
     if(g_tracer%flux_wetdep) then
        g_tracer%flux_wetdep_ind  = aof_set_coupler_flux(g_tracer%flux_wetdep_name,            &
-            flux_type      = 'air_sea_deposition',                                            &
-            implementation = 'wet',                                                           &
-            param          = g_tracer%flux_param,                                                      &
-            ice_file_in    = g_tracer%ice_file_in, ice_file_out = g_tracer%ice_file_out       &
+            flux_type            = 'air_sea_deposition',                                      &
+            implementation       = 'wet',                                                     &
+            param                = g_tracer%flux_param,                                       &
+            ice_restart_file       = g_tracer%ice_restart_file                                &
             )
     endif
 
     if(g_tracer%flux_drydep) then
        g_tracer%flux_drydep_ind  = aof_set_coupler_flux(g_tracer%flux_drydep_name,            &
-            flux_type      = 'air_sea_deposition',                                            &
-            implementation = 'dry',                                                           &
-            param          = g_tracer%flux_param,                                                      &
-            ice_file_in    = g_tracer%ice_file_in, ice_file_out = g_tracer%ice_file_out       &
+            flux_type            = 'air_sea_deposition',                                      &
+            implementation       = 'dry',                                                     &
+            param                = g_tracer%flux_param,                                       &
+            ice_restart_file     = g_tracer%ice_restart_file                                  &
             )
     endif
     
@@ -1114,16 +1121,17 @@ contains
   !   grid_mask array and initial time.
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,init_time)
+  !   call g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time)
   !  </TEMPLATE>
   !  <IN NAME="" TYPE="">
   !   
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,init_time)
+  subroutine g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time)
     integer,                     intent(in) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes(3)
     real, dimension(isd:,jsd:,:),intent(in) :: grid_tmask
+    integer,dimension(isd:,jsd:),intent(in) :: grid_kmt
     type(time_type),             intent(in) :: init_time 
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_set_common'
@@ -1148,17 +1156,10 @@ contains
     g_tracer_com%grid_tmask=grid_tmask 
 
 
-    if(.NOT. allocated(g_tracer_com%grid_kmt)) allocate(g_tracer_com%grid_kmt(isd:ied,jsd:jed))
+    if(.NOT. allocated(g_tracer_com%grid_kmt)) allocate(g_tracer_com%grid_kmt(isd:ied,jsd:jed))    
+    g_tracer_com%grid_kmt = grid_kmt
+
     if(.NOT. allocated(g_tracer_com%grid_mask_coast)) allocate(g_tracer_com%grid_mask_coast(isd:ied,jsd:jed))
-
-
-    g_tracer_com%grid_kmt(:,:) = 0
-    do j = jsc, jec ; do i = isc, iec   
-       ! Tell the code that a layer thicker than 1m is the bottom layer.
-       if (g_tracer_com%grid_tmask(i,j,1) .gt. 0) then
-          g_tracer_com%grid_kmt(i,j) = nk
-       endif
-    enddo; enddo 
 
     !Determine the coast line.
     !In order to that grid_tmask must have the proper value on the data domain boundaries isd,ied,jsd,jed
@@ -1222,21 +1223,17 @@ contains
     if(present(grid_tmask))       grid_tmask => g_tracer_com%grid_tmask
     if(present(grid_mask_coast))  grid_mask_coast=> g_tracer_com%grid_mask_coast
     if(present(grid_kmt))         grid_kmt => g_tracer_com%grid_kmt
-!    if(present(ice_file_in))      ice_file_in    = g_tracer_com%ice_file_in
-!    if(present(ice_file_out))     ice_file_out   = g_tracer_com%ice_file_out
-!    if(present(ocean_file_in))    ocean_file_in  = g_tracer_com%ocean_file_in
-!    if(present(ocean_file_out))   ocean_file_out = g_tracer_com%ocean_file_out
+!    if(present(ice_restart_file)) ice_restart_file    = g_tracer_com%ice_restart_file
+!    if(present(ocean_restart_file)) ocean_restart_file  = g_tracer_com%ocean_restart_file
 
   end subroutine g_tracer_get_common
 
-  subroutine g_tracer_set_files(ice_file_in,ice_file_out,ocean_file_in,ocean_file_out)
-    character(len=*),   intent(in) :: ice_file_in,ice_file_out
-    character(len=*),   intent(in) :: ocean_file_in,ocean_file_out    
+  subroutine g_tracer_set_files(ice_restart_file,ocean_restart_file)
+    character(len=*),   intent(in) :: ice_restart_file
+    character(len=*),   intent(in) :: ocean_restart_file
 
-    g_tracer_com%ice_file_in    = ice_file_in
-    g_tracer_com%ice_file_out   = ice_file_out
-    g_tracer_com%ocean_file_in  = ocean_file_in 
-    g_tracer_com%ocean_file_out = ocean_file_out 
+    g_tracer_com%ice_restart_file    = ice_restart_file
+    g_tracer_com%ocean_restart_file  = ocean_restart_file
 
   end subroutine g_tracer_set_files
     
@@ -1511,10 +1508,8 @@ contains
        string = g_tracer%units
     case ('package') 
        string = g_tracer%package_name
-    case ('ocean_file_in') 
-       string = g_tracer%ocean_file_in
-    case ('ocean_file_out') 
-       string = g_tracer%ocean_file_out
+    case ('ocean_restart_file') 
+       string = g_tracer%ocean_restart_file
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1975,47 +1970,56 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine g_tracer_vertdiff_G(g_tracer,h_old, ea, eb, dt, Rho_0,tau)
+  subroutine g_tracer_vertdiff_G(g_tracer, h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau)
     type(g_tracer_type),    pointer  :: g_tracer
     real, dimension(g_tracer_com%isd:,g_tracer_com%jsd:,:), intent(in) :: h_old, ea, eb
-    real,                   intent(in) :: dt,Rho_0
+    real,                   intent(in) :: dt, kg_m2_to_H, m_to_H
     integer,                intent(in) :: tau
 
-    ! Arguments: h_old -  Layer thickness before entrainment, in m.
-    !  (in)      ea - The amount of fluid entrained from the layer above, in m.
-    !  (in)      eb - The amount of fluid entrained from the layer below, in m.
+    ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
+    !                     In all the following comments the units of h_old are
+    !                     denoted as H.
+    !  (in)      ea - The amount of fluid entrained from the layer above, in H.
+    !  (in)      eb - The amount of fluid entrained from the layer below, in H.
     !  (in)      dt - The amount of time covered by this call, in s.
+    !  (in)      kg_m2_to_H - A conversion factor that translates kg m-2 into
+    !                         the units of h_old (H).
+    !  (in)      m_to_H - A conversion factor that translates m into the units
+    !                     of h_old (H).
 
     !   This subroutine solves a tridiagonal equation for the final tracer
     ! concentrations after the dual-entrainments, and possibly sinking or surface
     ! and bottom sources, are applied.  The sinking is implemented with an
     ! fully implicit upwind advection scheme.
 
-    real :: sink_dist    ! The distance the tracer sinks in a time step, in m.
+    real :: sink_dist    ! The distance the tracer sinks in a time step, in H.
     real :: sfc_src      ! The time-integrated surface source of the tracer, in
-    ! units of m times a concentration.
+    ! units of H times a concentration.
     real :: btm_src      ! The time-integrated bottom source of the tracer, in
-    ! units of m times a concentration.
-    real :: b1           ! b1 is used by the tridiagonal solver, in m-1.
+    ! units of H times a concentration.
+    real :: b1           ! b1 is used by the tridiagonal solver, in H-1.
     real :: d1           ! d1=1-c1 is used by the tridiagonal solver, nondimensional.
     real :: c1(1:g_tracer_com%nk)     ! c1 is used by the tridiagonal solver, ND.
     real :: h_minus_dsink(1:g_tracer_com%nk)  ! The layer thickness minus the
-    ! difference in sinking rates across the layer, in m.
+    ! difference in sinking rates across the layer, in H.
     ! By construction, 0 <= h_minus_dsink < h_old.
     real :: sink(1:g_tracer_com%nk+1) ! The tracer's sinking distances at the
     ! interfaces, limited to prevent characteristics from
-    ! crossing within a single timestep, in m.
-    real :: b_denom_1 ! The first term in the denominator of b1, in m.
+    ! crossing within a single timestep, in H.
+    real :: b_denom_1    ! The first term in the denominator of b1, in H.
+    real :: H_to_kg_m2   ! 1 / kg_m2_to_H.
     integer :: i, j, k, nz
 
     d1=0.0
-    nz=g_tracer_com%nk
+    H_to_kg_m2 = 1.0 / kg_m2_to_H
 
-    sink_dist = dt*g_tracer%sink_rate
+    sink_dist = (dt*g_tracer%sink_rate) * m_to_H
 
     do j=g_tracer_com%jsc,g_tracer_com%jec ; do i=g_tracer_com%isc,g_tracer_com%iec 
 
        if (g_tracer_com%grid_tmask(i,j,1) > 0.5) then
+
+          nz=g_tracer_com%grid_kmt(i,j)
 
           sfc_src = 0.0 ; btm_src = 0.0 
 
@@ -2053,7 +2057,7 @@ contains
           b1 = 1.0 / (b_denom_1 + eb(i,j,1))
           d1 = b_denom_1 * b1
 
-          if (allocated(g_tracer%stf)) sfc_src = g_tracer%stf(i,j)*dt/Rho_0
+          if (allocated(g_tracer%stf)) sfc_src = (g_tracer%stf(i,j)*dt)*kg_m2_to_H
 
           g_tracer%field(i,j,1,tau) = b1*(h_old(i,j,1)*g_tracer%field(i,j,1,tau) + sfc_src)
 
@@ -2072,13 +2076,14 @@ contains
           b_denom_1 = h_minus_dsink(nz) + d1 * (ea(i,j,nz) + sink(nz))
           b1 = 1.0 / (b_denom_1 + eb(i,j,nz))
 
-          if (allocated(g_tracer%btf)) btm_src = -g_tracer%btf(i,j)*dt/Rho_0
+          if (allocated(g_tracer%btf)) btm_src = (-g_tracer%btf(i,j)*dt)*kg_m2_to_H
 
           g_tracer%field(i,j,nz,tau) = b1 * ((h_old(i,j,nz) * g_tracer%field(i,j,nz,tau) + btm_src) + &
                (ea(i,j,nz) + sink(nz)) * g_tracer%field(i,j,nz-1,tau))
 
           if (allocated(g_tracer%btm_reservoir)) then 
-             g_tracer%btm_reservoir(i,j) = g_tracer%btm_reservoir(i,j) + sink(nz+1)*g_tracer%field(i,j,nz,tau)
+             g_tracer%btm_reservoir(i,j) = g_tracer%btm_reservoir(i,j) + &
+                 (sink(nz+1)*g_tracer%field(i,j,nz,tau))*H_to_kg_m2
           endif
 
           do k=nz-1,1,-1
@@ -2148,7 +2153,7 @@ contains
        !Via GOLD's vertdiff routine
        !===========================
        !            
-       !h_old(i,j,k) = dh(i,j,k)/rho0
+       !h_old(i,j,k) = dh(i,j,k) (in kg m-2)
 
        allocate(   ea(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed,1:g_tracer_com%nk))
        allocate(   eb(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed,1:g_tracer_com%nk))
@@ -2167,8 +2172,8 @@ contains
              eb(i,j,g_tracer_com%nk) = 0.0 
           enddo
        enddo
-       !Note: divisions by rho0 are needed since stf and btf are divided by rho inside the GOLD routine
-       call g_tracer_vertdiff_G(g_tracer, dh/rho0, ea/rho0, eb/rho0, dt, rho0, tau)
+       !Note: dh, ea, and eb have units here of kg m-2.
+       call g_tracer_vertdiff_G(g_tracer, dh, ea, eb, dt, 1.0, rho0, tau)
 
        !Mask out the field over "land" (land under Ocean)
        g_tracer%field(:,:,:,tau) = g_tracer%field(:,:,:,tau) * g_tracer_com%grid_tmask(:,:,:)

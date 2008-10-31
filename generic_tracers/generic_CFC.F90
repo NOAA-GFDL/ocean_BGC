@@ -90,8 +90,8 @@ module generic_CFC
      real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
      ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
      real :: Rho_0
-     character(len=fm_string_len) :: ice_file_in, ice_file_out
-     character(len=fm_string_len) :: ocean_file_in,ocean_file_out,IC_file
+     character(len=fm_string_len) :: ice_restart_file
+     character(len=fm_string_len) :: ocean_restart_file,IC_file
   end type generic_CFC_params
 
 
@@ -230,16 +230,13 @@ contains
 
 
     call g_tracer_start_param_list(package_name)!nnz: Does this append?
-    call g_tracer_add_param('ice_file_in'   , param%ice_file_in   , 'INPUT/ice_ocmip2_cfc.res.nc')
-    call g_tracer_add_param('ice_file_out'  , param%ice_file_out  , 'RESTART/ice_ocmip2_cfc.res.nc')
-    call g_tracer_add_param('ocean_file_in' , param%ocean_file_in , 'INPUT/ocmip2_cfc.res.nc' )
-    call g_tracer_add_param('ocean_file_out', param%ocean_file_out, 'RESTART/ocmip2_cfc.res.nc')
+    call g_tracer_add_param('ice_restart_file'   , param%ice_restart_file   , 'ice_ocmip2_cfc.res.nc')
+    call g_tracer_add_param('ocean_restart_file' , param%ocean_restart_file , 'ocmip2_cfc.res.nc' )
     call g_tracer_add_param('IC_file'       , param%IC_file       , '')
     call g_tracer_end_param_list(package_name)
 
     ! Set Restart files
-    call g_tracer_set_files(ice_file_in    = param%ice_file_in, ice_file_out = param%ice_file_out, &
-         ocean_file_in  = param%ocean_file_in, ocean_file_out = param%ocean_file_out)
+    call g_tracer_set_files(ice_restart_file=param%ice_restart_file, ocean_restart_file=param%ocean_restart_file )
 
     !=====================================================
     !Specify all prognostic tracers of this modules.
@@ -261,8 +258,7 @@ contains
          prog       = .true.,              &
          flux_gas       = .true.,                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
-         flux_gas_file_in  = 'INPUT/ocmip2_cfc_airsea_flux.res.nc', &
-         flux_gas_file_out = 'RESTART/ocmip2_cfc_airsea_flux.res.nc')
+         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
 
     !g_cfc_11
     call g_tracer_add(tracer_list,package_name,&
@@ -272,8 +268,7 @@ contains
          prog       = .true.,              &
          flux_gas       = .true.,                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
-         flux_gas_file_in  = 'INPUT/ocmip2_cfc_airsea_flux.res.nc', &
-         flux_gas_file_out = 'RESTART/ocmip2_cfc_airsea_flux.res.nc')
+         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
 
 
   end subroutine user_add_tracers

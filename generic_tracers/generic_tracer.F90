@@ -136,10 +136,11 @@ contains
   !   Grid mask
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_tracer_init(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,init_time)
+  subroutine generic_tracer_init(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time)
     integer,                       intent(in) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes(3)
     type(time_type),               intent(in) :: init_time
     real, dimension(:,:,:),target, intent(in) :: grid_tmask
+    integer, dimension(:,:)      , intent(in) :: grid_kmt
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
     integer :: ioun, io_status, ierr
@@ -155,7 +156,7 @@ contains
     ierr = check_nml_error(io_status,'generic_tracer_nml')
     call close_file (ioun)
 
-    call g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,init_time) 
+    call g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time) 
 
     !Allocate and initialize all registered generic tracers
     if(do_generic_CFC .or. do_generic_TOPAZ) then
@@ -356,9 +357,9 @@ contains
   !   
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_tracer_vertdiff_G(h_old, ea, eb, dt, Rho_0,tau)
+  subroutine generic_tracer_vertdiff_G(h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau)
     real, dimension(:,:,:), intent(in) :: h_old, ea, eb
-    real,                   intent(in) :: dt,Rho_0
+    real,                   intent(in) :: dt, kg_m2_to_H, m_to_H
     integer,                intent(in) :: tau
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
@@ -369,7 +370,7 @@ contains
        !Go through the list of tracers 
        do  
           if(g_tracer_is_prog(g_tracer)) &
-               call g_tracer_vertdiff_G(g_tracer,h_old, ea, eb, dt, Rho_0,tau) 
+             call g_tracer_vertdiff_G(g_tracer,h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau)
 
           !traverse the linked list till hit NULL
           call g_tracer_get_next(g_tracer, g_tracer_next)

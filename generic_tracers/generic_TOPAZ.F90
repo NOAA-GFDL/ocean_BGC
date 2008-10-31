@@ -83,6 +83,7 @@ module generic_TOPAZ
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
   use diag_manager_mod,  only: register_diag_field, send_data 
+  use constants_mod,     only: WTMCO2, WTMO2
 
   use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
   use g_tracer_utils, only : g_tracer_add,g_tracer_add_param, g_tracer_set_files
@@ -94,6 +95,10 @@ module generic_TOPAZ
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
   implicit none ; private
+!-----------------------------------------------------------------------
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 16.0.4.1.2.3 2008/10/06 14:59:36 nnz Exp $'
+  character(len=128) :: tag = '$Name: perth_2008_10 $'
+!-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
   character(len=fm_string_len), parameter :: package_name   = 'generic_topaz'
@@ -414,9 +419,9 @@ module generic_TOPAZ
           p_sio4
 
      integer :: nkml
-     character(len=fm_string_len)          :: file_in, file_out
-     character(len=fm_string_len) :: ice_file_in, ice_file_out
-     character(len=fm_string_len) :: ocean_file_in,ocean_file_out,IC_file
+     character(len=fm_string_len)          :: file
+     character(len=fm_string_len) :: ice_restart_file
+     character(len=fm_string_len) :: ocean_restart_file,IC_file
 
      integer                   :: &
           id_alpha         = -1,       & ! 
@@ -1668,8 +1673,6 @@ contains
     !Block Ends: g_tracer_add_param
     !===========
 
-
-
   end subroutine user_add_params
 
   !
@@ -1686,26 +1689,28 @@ contains
     !Add here only the parameters that are required at the time of registeration 
     !(to make flux exchanging Ocean tracers known for all PE's) 
     !
+    call g_tracer_start_param_list(package_name)
+    !
     call g_tracer_add_param('htotal_in', topaz%htotal_in, 1.0e-08)
 
     ! Sinking velocity of detritus - 20 m d-1 consistent with a characteristic sinking
     ! velocity of 100 m d-1 of marine aggregates and a disaggregation rate constant
     ! of 5 d-1 (Clegg and Whitfield, 1992; Dunne, 1999)
     !
-!## jgj NOTE: mom4p1 default is currently 10.0 / sperd
+    !## jgj NOTE: mom4p1 default is currently 10.0 / sperd
     call g_tracer_add_param('wsink',  topaz%wsink,20.0 / sperd) ! m s-1
 
-    call g_tracer_add_param('ice_file_in'   , topaz%ice_file_in   , 'INPUT/ice_topaz.res.nc')
-    call g_tracer_add_param('ice_file_out'  , topaz%ice_file_out  , 'RESTART/ice_topaz.res.nc')
-    call g_tracer_add_param('ocean_file_in' , topaz%ocean_file_in , 'INPUT/ocean_topaz.res.nc' )
-    call g_tracer_add_param('ocean_file_out', topaz%ocean_file_out, 'RESTART/ocean_topaz.res.nc')
+    call g_tracer_add_param('ice_restart_file'   , topaz%ice_restart_file   , 'ice_topaz.res.nc')
+    call g_tracer_add_param('ocean_restart_file' , topaz%ocean_restart_file , 'ocean_topaz.res.nc' )
     call g_tracer_add_param('IC_file'       , topaz%IC_file       , '')
+    !
+    call g_tracer_end_param_list(package_name)
+
 
     ! Set Restart files
-    call g_tracer_set_files(ice_file_in    = topaz%ice_file_in,&
-         ice_file_out   = topaz%ice_file_out ,&
-         ocean_file_in  = topaz%ocean_file_in,&
-         ocean_file_out = topaz%ocean_file_out)
+    call g_tracer_set_files(ice_restart_file    = topaz%ice_restart_file,&
+         ocean_restart_file  = topaz%ocean_restart_file )
+
 
     !All tracer fields shall be registered for diag output.
 
@@ -1756,9 +1761,9 @@ contains
          prog       = .true.,              &
          flux_gas       = .true.,                      &
          flux_gas_name  = 'co2_flux',                  &
+         flux_gas_molwt = WTMCO2,                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
-         flux_gas_file_in  = 'INPUT/ocean_topaz_airsea_flux.res.nc',  &
-         flux_gas_file_out = 'RESTART/ocean_topaz_airsea_flux.res.nc',&
+         flux_gas_restart_file  = 'ocean_topaz_airsea_flux.res.nc',  &
          flux_runoff    = .true.,          &
          flux_param     = (/12.011e-03  /),&
          flux_bottom    = .true.,          &
@@ -1927,9 +1932,10 @@ contains
          prog       = .true.,              &
          flux_gas       = .true.,                      &
          flux_gas_name  = 'o2_flux',                  &
-         flux_gas_param    = (/ 9.36e-07, 9.7561e-06 /), &
-         flux_gas_file_in  = 'INPUT/ocean_topaz_airsea_flux.res.nc', &
-         flux_gas_file_out = 'RESTART/ocean_topaz_airsea_flux.res.nc')
+         flux_gas_molwt = WTMO2,                      &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
+         flux_gas_restart_file  = 'ocean_topaz_airsea_flux.res.nc' )
+
     !
     !    Pdet (Sinking detrital/particulate Phosphorus)
     !
@@ -1974,6 +1980,22 @@ contains
          units      = 'mol/kg',            &
          prog       = .true.               )
     !
+    !       SDON (Semilabile dissolved organic nitrogen for variable N:P ratios)
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'sdon',           &
+         longname   = 'Semilabile DON', &
+         units      = 'mol/kg',           &
+         prog       = .true.              )
+    !
+    !       SDOP (Semilabile dissolved organic phosphorus for variable N:P ratios)
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'sdop',           &
+         longname   = 'Semilabile DOP', &
+         units      = 'mol/kg',           &
+         prog       = .true.              )
+    !
     !       Sidet (Sinking detrital/particulate Silicon)
     !
     call g_tracer_add(tracer_list,package_name,&
@@ -1991,22 +2013,6 @@ contains
          units      = 'mol/kg',          &
          prog       = .true.             )
     !
-    !       SDON (Semilabile dissolved organic nitrogen for variable N:P ratios)
-    !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'sdon',           &
-         longname   = 'Semilabile DON', &
-         units      = 'mol/kg',           &
-         prog       = .true.              )
-    !
-    !       SDOP (Semilabile dissolved organic phosphorus for variable N:P ratios)
-    !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'sdop',           &
-         longname   = 'Semilabile DOP', &
-         units      = 'mol/kg',           &
-         prog       = .true.              )
-    !
     !       SiO4
     !
     call g_tracer_add(tracer_list,package_name,&
@@ -2014,6 +2020,23 @@ contains
          longname   = 'Silicate', &
          units      = 'mol/kg',     &
          prog       = .true.        )
+
+    !
+    !       Passive tracer for testing purposes
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'topaz_passive',            &
+         longname   = 'Topaz Passive Tracer', &
+         units      = 'mol/kg',            &
+         const_init_value = 1.0,&
+         prog       = .true.               )
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'topaz_sinking_passive',            &
+         longname   = 'Topaz Passive Sinking Tracer', &
+         units      = 'mol/kg',            &
+         const_init_value = 1.0,&
+         sink_rate  = topaz%wsink,&
+         prog       = .true.               )
 
     !===========================================================
     !Diagnostic Tracers

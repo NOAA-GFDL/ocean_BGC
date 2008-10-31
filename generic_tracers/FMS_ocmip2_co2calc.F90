@@ -47,7 +47,7 @@ public  :: FMS_ocmip2_co2calc, CO2_dope_vector
 public  :: FMS_ocmip2_co2_alpha
 
 character(len=128) :: version = '$Id: FMS_ocmip2_co2calc.F90,v 16.0 2008/07/30 22:44:39 fms Exp $'
-character(len=128) :: tagname = '$Name: perth $'
+character(len=128) :: tagname = '$Name: perth_2008_10 $'
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
