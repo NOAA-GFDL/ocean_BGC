@@ -34,8 +34,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 16.0.4.1.2.3 2008/10/06 23:32:42 nnz Exp $'
-  character(len=128) :: tag = '$Name: perth_2008_10 $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 17.0 2009/07/21 03:18:15 fms Exp $'
+  character(len=128) :: tag = '$Name: quebec $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -818,10 +818,10 @@ contains
 
   ! <SUBROUTINE NAME="g_tracer_register_diag">
   !  <OVERVIEW>
-  !   Diag-register all the internal fields that were allocated for a tracer.
+  !   Diag-register all the internal fields that were _ALLOCATED for a tracer.
   !  </OVERVIEW>
   !  <DESCRIPTION>
-  !   Use diag_manager register_diag_field for each of the field arrays that were allocated for a tracer node.
+  !   Use diag_manager register_diag_field for each of the field arrays that were _ALLOCATED for a tracer node.
   !   These include %field,  %tendency, %stf, %btf, %triver, %alpha, %csurf, %btm_reservoir. 
   !  </DESCRIPTION>
   !  <TEMPLATE>
@@ -860,7 +860,7 @@ contains
          g_tracer_com%axes(1:2),      &
          g_tracer_com%init_time,           &
          trim(string),                   &
-         trim(g_tracer%units),         &
+         trim('mole/m^2/sec'),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_btf")
@@ -869,7 +869,7 @@ contains
          g_tracer_com%axes(1:2),      &
          g_tracer_com%init_time,           &
          trim(string),                   &
-         trim(g_tracer%units),         &
+         trim('mole/m^2/sec'),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_btm_reservoir")
@@ -912,7 +912,7 @@ contains
 
   ! <SUBROUTINE NAME="g_tracer_coupler_set">
   !  <OVERVIEW>
-  !   Set coupler values only for tracers that have allocated %alpha and %csurf
+  !   Set coupler values only for tracers that have _ALLOCATED %alpha and %csurf
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Use coupler_util subroutine set_coupler_values() to set the coupler values
@@ -950,10 +950,10 @@ contains
     !Go through the list of tracers 
     do  
        !
-       !Set coupler values only for tracers that have allocated %alpha and %csurf
+       !Set coupler values only for tracers that have _ALLOCATED %alpha and %csurf
        !
 
-       if(allocated(g_tracer%alpha)) then
+       if(_ALLOCATED(g_tracer%alpha)) then
 
           if(present(value)) g_tracer%alpha=value 
 
@@ -967,7 +967,7 @@ contains
                )
        endif
 
-       if(allocated(g_tracer%csurf)) then
+       if(_ALLOCATED(g_tracer%csurf)) then
 
           if(present(value)) g_tracer%csurf=value 
 
@@ -990,7 +990,7 @@ contains
 
   ! <SUBROUTINE NAME="g_tracer_coupler_get">
   !  <OVERVIEW>
-  !   Get coupler values only for tracers that have allocated arrays for the fluxes
+  !   Get coupler values only for tracers that have _ALLOCATED arrays for the fluxes
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Use coupler_util subroutine extract_coupler_values() to get the coupler values
@@ -1152,14 +1152,14 @@ contains
     g_tracer_com%axes=axes
     g_tracer_com%init_time=init_time
 
-    if(.NOT. allocated(g_tracer_com%grid_tmask)) allocate(g_tracer_com%grid_tmask(isd:ied,jsd:jed,nk))
+    if(.NOT. _ALLOCATED(g_tracer_com%grid_tmask)) allocate(g_tracer_com%grid_tmask(isd:ied,jsd:jed,nk))
     g_tracer_com%grid_tmask=grid_tmask 
 
 
-    if(.NOT. allocated(g_tracer_com%grid_kmt)) allocate(g_tracer_com%grid_kmt(isd:ied,jsd:jed))    
+    if(.NOT. _ALLOCATED(g_tracer_com%grid_kmt)) allocate(g_tracer_com%grid_kmt(isd:ied,jsd:jed))    
     g_tracer_com%grid_kmt = grid_kmt
 
-    if(.NOT. allocated(g_tracer_com%grid_mask_coast)) allocate(g_tracer_com%grid_mask_coast(isd:ied,jsd:jed))
+    if(.NOT. _ALLOCATED(g_tracer_com%grid_mask_coast)) allocate(g_tracer_com%grid_mask_coast(isd:ied,jsd:jed))
 
     !Determine the coast line.
     !In order to that grid_tmask must have the proper value on the data domain boundaries isd,ied,jsd,jed
@@ -1532,12 +1532,6 @@ contains
 
     g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
 
-    !nnz: Is this check necessary?
-    if(  LBOUND(array,1).ne.g_tracer_com%isd .or. UBOUND(array,1).ne.g_tracer_com%ied .or. &
-         LBOUND(array,2).ne.g_tracer_com%jsd .or. UBOUND(array,2).ne.g_tracer_com%jed &
-         ) call mpp_error(FATAL, trim(sub_name)//"Wrong array bounds.")
-
-
     !Find the node which has name=name
     call g_tracer_find(g_tracer,name)
     if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
@@ -1584,12 +1578,6 @@ contains
 
     g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
 
-
-    !nnz: Is this check necessary?
-    if(  LBOUND(array,1).ne.g_tracer_com%isd .or. UBOUND(array,1).ne.g_tracer_com%ied .or. &
-         LBOUND(array,2).ne.g_tracer_com%jsd .or. UBOUND(array,2).ne.g_tracer_com%jed &
-         ) call mpp_error(FATAL, trim(sub_name)//"Wrong array bounds.")
-
     !Find the node which has name=name
     call g_tracer_find(g_tracer,name)
     if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
@@ -1624,12 +1612,6 @@ contains
          ": No tracer in the list.")
 
     g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
-
-
-    !nnz: Is this check necessary?
-    if(  LBOUND(array,1).ne.g_tracer_com%isd .or. UBOUND(array,1).ne.g_tracer_com%ied .or. &
-         LBOUND(array,2).ne.g_tracer_com%jsd .or. UBOUND(array,2).ne.g_tracer_com%jed &
-         ) call mpp_error(FATAL, trim(sub_name)//"Wrong array bounds.")
 
     !Find the node which has name=name
     call g_tracer_find(g_tracer,name)
@@ -1758,7 +1740,8 @@ contains
     type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer
     type(time_type),          intent(in) :: model_time
     integer,                  intent(in) :: tau
-    integer :: used, tau_1
+    integer :: tau_1
+    logical :: used
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_send_diag'
 
@@ -1785,42 +1768,42 @@ contains
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        endif
 
-       if (g_tracer%diag_id_stf .gt. 0 .and. allocated(g_tracer%stf)) then
+       if (g_tracer%diag_id_stf .gt. 0 .and. _ALLOCATED(g_tracer%stf)) then
           used = send_data(g_tracer%diag_id_stf, g_tracer%stf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
-       if (g_tracer%diag_id_btf .gt. 0 .and. allocated(g_tracer%btf)) then
+       if (g_tracer%diag_id_btf .gt. 0 .and. _ALLOCATED(g_tracer%btf)) then
           used = send_data(g_tracer%diag_id_btf, g_tracer%btf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
-       if (g_tracer%diag_id_btm .gt. 0 .and. allocated(g_tracer%btm_reservoir)) then
+       if (g_tracer%diag_id_btm .gt. 0 .and. _ALLOCATED(g_tracer%btm_reservoir)) then
           used = send_data(g_tracer%diag_id_btm, g_tracer%btm_reservoir(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
-       if (g_tracer%diag_id_triver .gt. 0 .and. allocated(g_tracer%triver)) then
+       if (g_tracer%diag_id_triver .gt. 0 .and. _ALLOCATED(g_tracer%triver)) then
           used = send_data(g_tracer%diag_id_triver, g_tracer%triver(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
-       if (g_tracer%diag_id_alpha .gt. 0 .and. allocated(g_tracer%alpha)) then
+       if (g_tracer%diag_id_alpha .gt. 0 .and. _ALLOCATED(g_tracer%alpha)) then
           used = send_data(g_tracer%diag_id_alpha, g_tracer%alpha(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
-       if (g_tracer%diag_id_csurf .gt. 0 .and. allocated(g_tracer%csurf)) then
+       if (g_tracer%diag_id_csurf .gt. 0 .and. _ALLOCATED(g_tracer%csurf)) then
           used = send_data(g_tracer%diag_id_csurf, g_tracer%csurf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
@@ -2027,7 +2010,7 @@ contains
           ! so that the characteristics do not cross within a timestep.
           !   If a non-constant sinking rate were used, that would be incorprated
           ! here.
-          if (allocated(g_tracer%btm_reservoir)) then
+          if (_ALLOCATED(g_tracer%btm_reservoir)) then
              do k=2,nz 
                 sink(k) = sink_dist ; h_minus_dsink(k) = h_old(i,j,k)
              enddo
@@ -2051,13 +2034,18 @@ contains
 
           sink(1) = 0.0 ; h_minus_dsink(1) = (h_old(i,j,1) + sink(2))
 
+          !Avoid sinking tracers with negative concentrations
+          do k=2,nz+1
+             if(g_tracer%field(i,j,k-1,tau) <= 0.0) sink(k) = 0.0
+          enddo
+
           ! Now solve the tridiagonal equation for the tracer concentrations.
 
           b_denom_1 = h_minus_dsink(1) + ea(i,j,1)
           b1 = 1.0 / (b_denom_1 + eb(i,j,1))
           d1 = b_denom_1 * b1
 
-          if (allocated(g_tracer%stf)) sfc_src = (g_tracer%stf(i,j)*dt)*kg_m2_to_H
+          if (_ALLOCATED(g_tracer%stf)) sfc_src = (g_tracer%stf(i,j)*dt)*kg_m2_to_H
 
           g_tracer%field(i,j,1,tau) = b1*(h_old(i,j,1)*g_tracer%field(i,j,1,tau) + sfc_src)
 
@@ -2076,12 +2064,12 @@ contains
           b_denom_1 = h_minus_dsink(nz) + d1 * (ea(i,j,nz) + sink(nz))
           b1 = 1.0 / (b_denom_1 + eb(i,j,nz))
 
-          if (allocated(g_tracer%btf)) btm_src = (-g_tracer%btf(i,j)*dt)*kg_m2_to_H
+          if (_ALLOCATED(g_tracer%btf)) btm_src = (-g_tracer%btf(i,j)*dt)*kg_m2_to_H
 
           g_tracer%field(i,j,nz,tau) = b1 * ((h_old(i,j,nz) * g_tracer%field(i,j,nz,tau) + btm_src) + &
                (ea(i,j,nz) + sink(nz)) * g_tracer%field(i,j,nz-1,tau))
 
-          if (allocated(g_tracer%btm_reservoir)) then 
+          if (_ALLOCATED(g_tracer%btm_reservoir)) then 
              g_tracer%btm_reservoir(i,j) = g_tracer%btm_reservoir(i,j) + &
                  (sink(nz+1)*g_tracer%field(i,j,nz,tau))*H_to_kg_m2
           endif
@@ -2215,9 +2203,9 @@ contains
              b(i,g_tracer_com%nk) = 1.0 - a(i,g_tracer_com%nk) - c(i,g_tracer_com%nk)
 
              ! top and bottom b.c.
-             if (allocated(g_tracer%stf)) &
+             if (_ALLOCATED(g_tracer%stf)) &
                   f(i,1) = g_tracer%field(i,j,1,tau) + g_tracer%stf(i,j)*dt*g_tracer_com%grid_tmask(i,j,1)/dh(i,j,1)
-             if (allocated(g_tracer%btf)) then
+             if (_ALLOCATED(g_tracer%btf)) then
                 k = max(2,g_tracer_com%grid_kmt(i,j))
                 f(i,k) = g_tracer%field(i,j,k,tau) - g_tracer%btf(i,j)*dt*g_tracer_com%grid_tmask(i,j,k)/dh(i,j,k)
              endif

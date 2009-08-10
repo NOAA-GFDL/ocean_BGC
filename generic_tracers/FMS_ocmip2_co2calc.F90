@@ -46,8 +46,8 @@ private
 public  :: FMS_ocmip2_co2calc, CO2_dope_vector
 public  :: FMS_ocmip2_co2_alpha
 
-character(len=128) :: version = '$Id: FMS_ocmip2_co2calc.F90,v 16.0 2008/07/30 22:44:39 fms Exp $'
-character(len=128) :: tagname = '$Name: perth_2008_10 $'
+character(len=128) :: version = '$Id: FMS_ocmip2_co2calc.F90,v 17.0 2009/07/21 03:18:07 fms Exp $'
+character(len=128) :: tagname = '$Name: quebec $'
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
@@ -207,9 +207,9 @@ real :: logf_of_s
         dlogtk    = log(tk)
         is        = 19.924 * s_in(i,j) /(1000.0 -1.005 * s_in(i,j))
         is2       = is * is
-        sqrtis    = sqrt(is)
+        sqrtis    = sqrt(max(0.0,is))
         s2        = s_in(i,j) * s_in(i,j)
-        sqrts     = sqrt(s_in(i,j))
+        sqrts     = sqrt(max(0.0,s_in(i,j)))
         scl       = s_in(i,j) / 1.80655
         logf_of_s = log(1.0 - 0.001005 * s_in(i,j))
 !
@@ -351,7 +351,7 @@ real :: logf_of_s
         htotal(i,j) = drtsafe(  k1, k2, kb, k1p, k2p, k3p, ksi, kw,   &
                                 ks, kf, bt, dic_in(i,j), ft, pt_in(i,j),&
                                 sit_in(i,j), st, ta_in(i,j),            &
-                                htotalhi(i,j), htotallo(i,j), xacc)
+                                htotalhi(i,j), htotallo(i,j),htotal(i,j), xacc)
 !
 ! Calculate [CO2*] as defined in DOE Methods Handbook 1994 Ver.2, 
 ! ORNL/CDIAC-74, Dickson and Goyet, eds. (Ch 2 p 10, Eq A.49)
@@ -410,7 +410,7 @@ end subroutine  FMS_ocmip2_co2calc  !}
 ! </DESCRIPTION>
 
 function drtsafe(k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
-               bt, dic, ft, pt, sit, st, ta, x1, x2, xacc)  !{
+               bt, dic, ft, pt, sit, st, ta, x1, x2, x, xacc)  !{
 
 implicit none
 
@@ -421,7 +421,7 @@ implicit none
 real    :: k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf
 real    :: bt, dic, ft, pt, sit, st, ta
 real    :: drtsafe
-real    :: x1, x2, xacc
+real    :: x1, x2, x, xacc
 
 !
 !       local parameters
@@ -436,10 +436,20 @@ integer, parameter      :: maxit = 100
 integer :: j
 real    :: fl, df, fh, swap, xl, xh, dxold, dx, f, temp
 
+drtsafe=x
 call ta_iter_1(k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
-               bt, dic, ft, pt, sit, st, ta, x1, fl, df)
+               bt, dic, ft, pt, sit, st, ta, drtsafe, f, df)
+dx=f/df
+if (abs(dx) .lt. xacc) then
+!     write (6,*) 'Exiting drtsafe at C on iteration  ', j, ', ph = ', -log10(drtsafe)
+  return
+endif
+
 call ta_iter_1(k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
-               bt, dic, ft, pt, sit, st, ta, x2, fh, df)
+               bt, dic, ft, pt, sit, st, ta, x1, fl, temp)
+call ta_iter_1(k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
+               bt, dic, ft, pt, sit, st, ta, x2, fh, temp)
+
 if(fl .lt. 0.0) then
   xl=x1
   xh=x2
@@ -453,8 +463,7 @@ end if
 drtsafe=0.5*(x1+x2)
 dxold=abs(x2-x1)
 dx=dxold
-call ta_iter_1(k1, k2, kb, k1p, k2p, k3p, ksi, kw, ks, kf, &
-               bt, dic, ft, pt, sit, st, ta, drtsafe, f, df)
+
 do j=1,maxit  !{
   if (((drtsafe-xh)*df-f)*((drtsafe-xl)*df-f) .ge. 0.0 .or.     &
       abs(2.0*f) .gt. abs(dxold*df)) then
@@ -523,34 +532,59 @@ real    :: bt, dic, ft, pt, sit, st, ta, x, fn, df
 !       local variables
 !
 
-real    :: x2, x3, k12, k12p, k123p, c, a, a2, da, b, b2, db
+real    :: x2, x3, k12, k12p, k123p, c, a, am1, am2, da, b, bm1, bm2, db
+real    :: xpkbm1,xpkfm1,xpksim1,xpkscm1
 
 x2 = x*x
 x3 = x2*x
 k12 = k1*k2
 k12p = k1p*k2p
 k123p = k12p*k3p
-c = 1.0 + st/ks
+c = 1.0/(1.0 + st/ks)
+
 a = x3 + k1p*x2 + k12p*x + k123p
-a2 = a*a
+am1 = 1.0/a
+am2 = am1*am1
 da = 3.0*x2 + 2.0*k1p*x + k12p
+
 b = x2 + k1*x + k12
-b2 = b*b
+bm1 = 1.0/b
+bm2 = bm1*bm1
 db = 2.0*x + k1
+
+xpkbm1  = 1.0/(x+kb)
+xpkfm1  = 1.0/(x+kf)
+xpksim1 = 1.0/(x+ksi)
+xpkscm1 = 1.0/(x+ks*c)
+
 !
 !     fn = hco3+co3+borate+oh+hpo4+2*po4+silicate+hfree+hso4+hf+h3po4-ta
-!
-fn = k1*x*dic/b + 2.0*dic*k12/b + bt/ (1.0 + x/kb) + kw/x +   &
-     pt*k12p*x/a + 2.0*pt*k123p/a + sit/(1.0 + x/ksi) -       &
-     x/c - st/(1.0 + ks/x/c) - ft/(1.0 + kf/x) - pt*x3/a - ta
+!OR
+!fn = -ta  + kw/x - c x 
+!   + dic (k1 x + 2 k12)/(k12 + k1 x + x^2)
+!   + pt  (2 k123p + k12p x - x^3)/(k123p + k12p x + k1p x^2 + x^3)
+!   + bt/(1. + x/kb) + sit/(1. + x/ksi) 
+!   - st/(1. + (c ks)/x) - ft/(1. + kf/x)
+
+fn = - ta + kw/x - c*x               &
+     +dic*(k1*x+2.0*k12)*bm1         &
+     + pt*(-x3+k12p*x+2.0*k123p)*am1 &
+     + bt *kb *xpkbm1                &
+     + sit*ksi*xpksim1               &
+     - st *x  *xpkscm1               &
+     - ft *x  *xpkfm1              
+
 !
 !     df = dfn/dx
 !
-df = ((k1*dic*b) - k1*x*dic*db)/b2 - 2.0*dic*k12*db/b2 -      &
-     bt/kb/(1.0+x/kb)**2 - kw/x2 + (pt*k12p*(a - x*da))/a2 -  &
-     2.0*pt*k123p*da/a2 - sit/ksi/ (1.0+x/ksi)**2 - 1.0/c +   &
-     st*(1.0 + ks/x/c)**(-2)*(ks/c/x2) +                      &
-     ft*(1.0 + kf/x)**(-2)*kf/x2 - pt*x2*(3.0*a-x*da)/a2
+df = - kw/x2 - c                                               &
+     + dic*(bm1*k1 - bm2*db*(k1*x+2.0*k12))                    &
+     + pt*(am1*(-3.*x2+k12p) - am2*da*(-x3+k12p*x+2.0*k123p))  &
+     - bt*  kb  *xpkbm1 *xpkbm1                                &
+     - sit* ksi *xpksim1*xpksim1                               &
+     - st*  ks*c*xpkscm1*xpkscm1                               &
+     - ft*  kf  *xpkfm1 *xpkfm1                                
+     
 
 return
 

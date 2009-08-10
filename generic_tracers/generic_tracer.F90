@@ -316,7 +316,7 @@ contains
   !   Calls the corresponding generic_X_update_from_bottom routine for each package X.
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_tracer_update_from_bottom(dt, tau)
+  !   call generic_tracer_update_from_bottom(dt, tau, model_time)
   !  </TEMPLATE>
   !  <IN NAME="dt" TYPE="real">
   !   Time step increment
@@ -326,15 +326,16 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine generic_tracer_update_from_bottom(dt, tau)
+  subroutine generic_tracer_update_from_bottom(dt, tau, model_time)
     real,    intent(in) :: dt
     integer, intent(in) ::tau
+    type(time_type),                intent(in) :: model_time
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_bottom'
 
     !    if(do_generic_CFC)    call generic_CFC_update_from_bottom(tracer_list)!Nothing to do for CFC 
 
-    if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_bottom(tracer_list,dt, tau)
+    if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_bottom(tracer_list,dt, tau, model_time)
 
     return
 

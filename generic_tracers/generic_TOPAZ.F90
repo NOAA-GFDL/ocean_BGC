@@ -96,8 +96,8 @@ module generic_TOPAZ
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 16.0.4.1.2.3 2008/10/06 14:59:36 nnz Exp $'
-  character(len=128) :: tag = '$Name: perth_2008_10 $'
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 17.0 2009/07/21 03:18:11 fms Exp $'
+  character(len=128) :: tag = '$Name: quebec $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
@@ -151,9 +151,14 @@ module generic_TOPAZ
           si_2_n_max,    &
           si_2_n_static, &
           thetamax     
+     real, ALLOCATABLE, dimension(:,:)  :: &
+          jgraz_n_100     ! Nitrogen grazing 100m vertical integral
      real, ALLOCATABLE, dimension(:,:,:)  :: &
           def_fe      , & ! Fe Deficiency
           def_p       , & ! P Deficiency
+          f_fe        , & ! Phytoplankton Fe concentration
+          f_n         , & ! Phytoplankton Nitrogen concentration
+          f_p         , & ! Phytoplankton Phosphorus concentration
           felim       , & ! Fed Limitation
           irrlim      , & ! Light Limitation
           jgraz_fe    , & ! Fe grazing layer integral
@@ -176,12 +181,14 @@ module generic_TOPAZ
           silim       , & ! SiO4 limitation
           theta           ! Chl:C ratio
      integer ::            &
+          id_chl        = -1, & ! Diag id for Phyto. Chl
           id_def_fe     = -1, & ! Diag id for Phyto. Fe Deficiency
           id_def_p      = -1, & ! Diag id for Phyto. P Deficiency
           id_felim      = -1, & ! Diag id for Phyto. Fed Limitation
           id_irrlim     = -1, & ! Diag id for Phyto. Light Limitation
           id_jgraz_fe   = -1, & ! Diag id for iron grazing layer integral
           id_jgraz_n    = -1, & ! Diag id for nitrogen grazing layer integral
+          id_jgraz_n_100 = -1, & ! Diag id for nitrogen grazing 100m vertical integral
           id_jgraz_sio2 = -1, & ! Diag id for silicon grazing layer integral
           id_jprod_n2   = -1, & ! Diag id for Nitrogen fixation layer integral
           id_jprod_fe   = -1, & ! Diag id for phyto. Fed production layer integral
@@ -228,25 +235,25 @@ module generic_TOPAZ
           atm_co2_flux,     &
           bio_tau,          &                  ! Miscellaneous
           c_2_n,            &                  ! Stoichiometry
-          ca_2_n_het,       &                  ! CaCO3 formation in heterotrophis
+          ca_2_n_arag,      &                  ! Aragonite CaCO3 formation in heterotrophs
+          ca_2_n_calc,      &                  ! Calcite CaCO3 formation in heterotrophs
           ca_2_n_het_static,&                  ! CaCO3 formation if fixed
-          caco3_sat_max,    &                  ! Calcite maximum saturation state
+          caco3_sat_max,    &                  ! Maximum saturation state effect
           fe_2_n_sed,       &                  ! Iron
           fe_coast,         &                  ! Iron
           felig_2_don,      &                  ! Iron
           felig_bkg ,       &                  ! Iron
-          gamma_cadet,      &                  ! Grazing
-          gamma_cased_dis,  &                  ! Grazing
+          gamma_cadet_arag, &                  ! Aragonite Dissolution
+          gamma_cadet_calc, &                  ! Calcite Dissolution
           gamma_irr_mem,    &                  ! Photosynthesis
           gamma_ldon,       &                  ! Dissolved Organic Material
-          gamma_ndet,       &                  ! Grazing
+          gamma_ndet,       &                  ! Remineralization
           gamma_nhet,       &                  ! Grazing
           gamma_nitrif,     &                  ! Miscellaneous
-          gamma_sidet,      &                  ! Grazing
+          gamma_sidet,      &                  ! Dissolution
           gamma_sdon,       &                  ! Dissolved Organic Material
           gamma_sdop,       &                  ! Dissolved Organic Material
-          irr_inhibit,      &                  ! Miscellaneous  ! Photosynthesis?
-          k_caco3_pres,     &                  ! Grazing
+          irr_inhibit,      &                  ! Miscellaneous
           k_diss_sio2,      &                  ! Grazing
           k_n_inhib_di,     &                  ! Photosynthesis
           k_o2,             &                  ! Stoichiometry
@@ -258,13 +265,13 @@ module generic_TOPAZ
           kfe_eq_lig,       &                  ! Iron
           kfe_org,          &
           k_lith,           &                  ! Miscellaneous
-          ksp_caco3,        &                  ! Grazing
           lambda0,          &                  ! Grazing
+          alk_2_n_denit,    &                  ! Stoichiometry
           mass_2_n,         &                  ! Stoichiometry
           n_2_n_denit,      &                  ! Stoichiometry
           o2_min,           &                  ! Grazing
           o2_2_c,           &                  ! Stoichiometry
-          o2_2_nfix,        &
+          o2_2_nfix,        &                  ! Stoichiometry
           o2_2_nh4,         &                  ! Stoichiometry
           o2_2_no3,         &                  ! Stoichiometry
           o2_2_nitrif,      &                  ! Stoichiometry
@@ -288,7 +295,9 @@ module generic_TOPAZ
           rplith,           &                  ! Grazing
           rpsio2,           &                  ! Grazing
           thetamin,         &                  ! Photosynthesis
+          thetamin_nolim,   &                  ! Photosynthesis
           wsink,            &                  ! Sinking
+          z_sed,            &                  ! Sediment thickness
           zeta                                 ! Photosynthesis
 
      real, dimension(3)                    :: total_atm_co2
@@ -297,53 +306,55 @@ module generic_TOPAZ
      real    :: Rho_0, a_0, a_1, a_2, a_3, a_4, a_5, b_0, b_1, b_2, b_3, c_0
      real    :: a1_co2, a2_co2, a3_co2, a4_co2, a1_o2, a2_o2, a3_o2, a4_o2
 
-     real, dimension(:,:,:,:), ALLOCATABLE :: f_n
-
      real, dimension(:,:,:), ALLOCATABLE ::  &
-          co3_solubility,&
-          f_o2,&
+          co3_sol_arag,&
+          co3_sol_calc,&
           f_alk,&
-          f_cadet,&
+          f_cadet_arag,&
+          f_cadet_arag_btf,&
+          f_cadet_calc,&
+          f_cadet_calc_btf,&
           f_cased,&
-          f_dic,&
-          f_fcadet_btm,&
-          f_fed,&
-          f_fedi,&
-          f_felg,&
-          f_fedet,&
-          f_fesm,&
           f_chl,&
+          f_co3_ion,&
+          f_dic,&
+          f_fed,&
+          f_fedet,&
           f_htotal,&
-          f_irr_inst,&
           f_irr_mem,&
           f_ldon,&
           f_lith,&
           f_lithdet,&
+          f_lithdet_btf,&
           f_ndet,&
+          f_ndet_btf,&
           f_nh4,&
           f_nhet,&
           f_no3,&
-          f_co3_ion,&
+          f_o2,&
           f_pdet,&
-          f_pdi,&
-          f_plg,&
+          f_pdet_btf,&
           f_po4,&
-          f_psm,&
           f_sdon,&
           f_sdop,&
           f_sidet,&
+          f_sidet_btf,&
           f_silg,&
           f_sio4,&
           expkT,&
           frac_det_prod,&
+          irr_inst,&
           irr_mix,&
-          jcadet,&
-          jdenit_wc,&
+          jalk,&
+          jcadet_arag,&
+          jcadet_calc,&
+          jdic,&
           jdiss_sio2,&
           jfe_ads,&
           jfe_des,&
           jfe_graz,&
           jfe_coast,&
+          jfed,&
           jfedet,&
           jldon,&
           jndet,&
@@ -352,11 +363,13 @@ module generic_TOPAZ
           jnhet,&
           jnitrif,&
           jno3,&
+          jno3denit_wc,&
           jo2,&
           jpdet,&
           jpo4,&
           jpo4_graz,&
-          jprod_cadet,&
+          jprod_cadet_arag,&
+          jprod_cadet_calc,&
           jprod_lithdet,&
           jprod_nhet,&
           jprod_fedet,&
@@ -365,6 +378,7 @@ module generic_TOPAZ
           jsdon,&
           jsdop,&
           jsidet,&
+          jsio4,&
           nLg_diatoms,&
           q_si_2_n_Lg_diatoms,&
           tot_layer_int_c,&
@@ -375,21 +389,39 @@ module generic_TOPAZ
           zt
 
      real, dimension(:,:), ALLOCATABLE :: &
+          b_alk,b_dic,b_fed,b_nh4,b_no3,b_o2,b_po4,b_sio4,&
+          c_integral,&
           co2_csurf,pco2_csurf,co2_alpha,&
-          htotallo, htotalhi,&
-          fcaco3_sed,&
-          fcaco3_redis,&
-          fcaco3_burial,&
-          fcadet_btm,&
-          fdenit_sed,&
+          fcadet_arag_100,&
+          fcadet_arag_btm,&
+          fcadet_calc_100,&
+          fcadet_calc_btm,&
+          fcased_burial,&
+          fcased_redis,&
           ffe_sed,&
+          ffedet_100,&
           ffedet_btm,&
           flithdet_btm,&
-          b_alk,b_dic,b_fed,b_ndet,b_no3,b_pdet,b_po4
+          fndet_100,&
+          fndet_btm,&
+          fnfeso4red_sed,&
+          fno3denit_sed,&
+          fnoxic_sed,&
+          fpdet_100,&
+          fpdet_btm,&
+          fsidet_100,&
+          fsidet_btm,&
+          htotallo, htotalhi,&
+          jnitrif_100,&
+          jno3denit_wc_vert_int,&
+          jprod_n_100,&
+          jprod_no3_100,&
+          nfix
 
      real, dimension(:,:,:,:), pointer :: &
           p_alk,&
-          p_cadet,&
+          p_cadet_arag,&
+          p_cadet_calc,&
           p_dic,&
           p_fed,&
           p_fedi,&
@@ -423,38 +455,52 @@ module generic_TOPAZ
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
 
-     integer                   :: &
+     integer               ::          &
           id_alpha         = -1,       & ! 
-          id_btm_flux_alk  = -1,       & ! Bottom Flux - Alk
-          id_btm_flux_dic  = -1,       & ! Bottom Flux - DIC
-          id_btm_flux_ndet = -1,       & ! Bottom Flux - ndet
-          id_btm_flux_no3  = -1,       & ! Bottom Flux - no3
-          id_btm_flux_pdet = -1,       & ! Bottom Flux - pdet
-          id_btm_flux_po4  = -1,       & ! Bottom Flux - po4
+          id_c_integral    = -1,       & ! Total Carbon vertical integral
           id_co3_ion       = -1,       & ! Carbonate Ion
-          id_co3_solubility = -1,      & ! Carbonate Ion Solubility
+          id_co3_sol_arag  = -1,       & ! Carbonate Ion Solubility for Aragonite
+          id_co3_sol_calc  = -1,       & ! Carbonate Ion Solubility for Calcite
           id_csurf         = -1,       & ! CO2* water
-          id_fcaco3        = -1,       & ! CaCO3 sinking flux
-          id_fcaco3_burial = -1,       & ! CaCO3 sinking flux permanent burial
-          id_fcaco3_redis  = -1,       & ! CaCO3 redissolution after sinking flux burial
-          id_fcaco3_sed    = -1,       & ! CaCO3 sinking flux to sediment layer
-          id_fdenit_sed    = -1,       & ! Sediment Denitrification flux
+          id_fcadet_arag   = -1,       & ! Aragonite CaCO3 sinking flux
+          id_fcadet_arag_100 = -1,     & ! Aragonite CaCO3 sinking flux 100m vertical integral
+          id_fcadet_arag_btm = -1,     & ! Aragonite CaCO3 sinking flux at bottom
+          id_fcadet_calc   = -1,       & ! Calcite CaCO3 sinking flux
+          id_fcased_burial = -1,       & ! Calcite CaCO3 sinking flux permanent burial
+          id_fcased_redis  = -1,       & ! Calcite CaCO3 redissolution after sinking flux burial
+          id_fcadet_calc_100 = -1,     & ! Calcite CaCO3 sinking flux 100m vertical integral
+          id_fcadet_calc_btm = -1,     & ! Calcite CaCO3 sinking flux at bottom
           id_ffe_sed       = -1,       & ! Sediment iron efflux
+          id_ffedet        = -1,       & ! POFe sinking flux
+          id_ffedet_100    = -1,       & ! POFe sinking flux 100m vertical integral
           id_ffedet_btm    = -1,       & ! Fe sinking flux burial
-          id_flith         = -1,       & ! Lith sinking flux
+          id_flithdet      = -1,       & ! Lith sinking flux
           id_flithdet_btm  = -1,       & ! Lithogenic sinking flux burial
-          id_fpofe         = -1,       & ! POFe sinking flux
-          id_fpon          = -1,       & ! PON sinking flux
-          id_fpop          = -1,       & ! POP sinking flux
-          id_fsio2         = -1,       & ! Si sinking flux
+          id_fndet         = -1,       & ! PON sinking flux
+          id_fndet_100     = -1,       & ! PON sinking flux 100m vertical integral
+          id_fndet_btm     = -1,       & ! N sinking flux at bottom
+          id_fnfeso4red_sed= -1,       & ! Sediment NDET Fe and SO4 reducing degradation flux
+          id_fno3denit_sed = -1,       & ! Sediment NO3 Denitrification flux
+          id_fnoxic_sed    = -1,       & ! Sediment NDET oxic degradation flux
+          id_fpdet         = -1,       & ! POP sinking flux
+          id_fpdet_100     = -1,       & ! POP sinking flux 100m vertical integral
+          id_fpdet_btm     = -1,       & ! P sinking flux at bottom
+          id_fsidet        = -1,       & ! Si sinking flux
+          id_fsidet_100    = -1,       & ! Si sinking flux 100m vertical integral
+          id_fsidet_btm    = -1,       & ! Si sinking flux at bottom
           id_htotal        = -1,       & ! H+ ion concentration
-          id_jcadet        = -1,       & ! CaCO3 change layer integral
-          id_jdenit_wc     = -1,       & ! Water column Denitrification layer integral
+          id_irr_inst      = -1,       & ! Instantaneous Light
+          id_irr_mix       = -1,       & ! Light in mixing layer
+          id_jalk          = -1,       & ! Alk source layer integral
+          id_jcadet_arag   = -1,       & ! Aragonite CaCO3 change layer integral
+          id_jcadet_calc   = -1,       & ! Calcite CaCO3 change layer integral
+          id_jdic          = -1,       & ! DIC source layer integral
           id_jdiss_sio2    = -1,       & ! SiO2 Dissolution during grazing layer integral
           id_jfe_ads       = -1,       & ! Iron adsorption layer integral
           id_jfe_des       = -1,       & ! Iron desorption layer integral
           id_jfe_graz      = -1,       & ! Dissolved iron grazing source layer integral
           id_jfe_coast     = -1,       & ! Coastal iron efflux layer integral
+          id_jfed          = -1,       & ! Dissolved iron source layer integral
           id_jfedet        = -1,       & ! Loss of sinking iron layer integral
           id_jldon         = -1,       & ! Labile DON source layer integral
           id_jndet         = -1,       & ! Loss of sinking nitrogen layer integral
@@ -462,21 +508,32 @@ module generic_TOPAZ
           id_jnh4_graz     = -1,       & ! NH4 grazing source layer integral
           id_jnhet         = -1,       & ! Heterotrophic N remineralization layer integral
           id_jnitrif       = -1,       & ! Nitrification layer integral
+          id_jnitrif_100   = -1,       & ! Nitrification 100m vertical integral
           id_jno3          = -1,       & ! NO3 source layer integral
+          id_jno3denit_wc  = -1,       & ! Water column Denitrification layer integral
           id_jo2           = -1,       & ! O2 source layer integral
           id_jpdet         = -1,       & ! Loss of sinking phosphorus layer integral
           id_jpo4          = -1,       & ! PO4 source layer integral
           id_jpo4_graz     = -1,       & ! PO4 source from grazing layer integral
-          id_jprod_cadet   = -1,       & ! CaCO3 production layer integral  
-          id_jprod_lithdet = -1,       & ! Lithogenic removal to sinking layer integral
-          id_jprod_nhet    = -1,       & ! Heterotrophic N Production layer integral
+          id_jprod_cadet_arag = -1,    & ! Aragonite CaCO3 production layer integral  
+          id_jprod_cadet_calc = -1,    & ! Calcite CaCO3 production layer integral  
           id_jprod_fedet   = -1,       & ! Detrital Fe production layer integral
+          id_jprod_lithdet = -1,       & ! Lithogenic removal to sinking layer integral
+          id_jprod_n_100   = -1,       & ! Total N production 100m vertical integral
+          id_jprod_nhet    = -1,       & ! Heterotrophic N Production layer integral
           id_jprod_ndet    = -1,       & ! Detrital N production layer integral
+          id_jprod_no3_100 = -1,       & ! NO3 producation 100m vertical integral
           id_jprod_pdet    = -1,       & ! Detrital P production layer integral
           id_jsdon         = -1,       & ! Semilabile DON source layer integral
           id_jsdop         = -1,       & ! Semilabile DOP source layer integral
-          id_jsidet         = -1,       & ! SiO4 source layer integral
+          id_jsidet        = -1,       & ! Loss of sinking silicon layer integral
+          id_jsio4         = -1,       & ! SiO4 source layer integral
           id_nLg_diatoms   = -1,       & ! Large diatom nitrogen
+          id_nLg_nondiatoms= -1,       & ! Large nondiatom nitrogen
+          id_nphyto_tot    = -1,       & ! Total NO3 (Di+Lg+Sm)
+          id_jno3denit_wc_vert_int = -1, & ! Water column Denitrification vertical integral
+          id_no3_in_source = -1,       & ! Diag id for Nitrate Concentration used in source routine
+          id_nfix          = -1,       & ! N fix 100m vertical integral
           id_pco2surf      = -1,       & ! Oceanic pCO2
           id_runoff_alk    = -1,       & ! Runoff - Alkalinity
           id_runoff_dic    = -1,       & ! Runoff - Dissolved Inorganic Carbon
@@ -493,20 +550,35 @@ module generic_TOPAZ
           id_runoff_nh4    = -1,       & ! Runoff - NH4
           id_runoff_no3    = -1,       & ! Runoff - NO3
           id_sfc_chl       = -1,       & ! Surface Chl
+          id_sfc_fed       = -1,       & ! Surface Fed 
+          id_sfc_irr       = -1,       & ! Surface Irr 
+          id_sfc_irr_mem   = -1,       & ! Surface Irr_mem
+          id_sfc_ndi       = -1,       & ! Surface ndi
+          id_sfc_nlg       = -1,       & ! Surface nlg
           id_sfc_no3       = -1,       & ! Surface NO3
+          id_sfc_nsm       = -1,       & ! Surface nsm
+          id_sfc_phyto_c   = -1,       & ! Surface phyto C 
+          id_sfc_po4       = -1,       & ! Surface PO4
+          id_sfc_temp      = -1,       & ! Surface Temp
           id_sfc_flux_co2  = -1,       & ! Surface Flux - CO2
           id_sfc_flux_fed  = -1,       & ! Surface Flux - Fed
           id_sfc_flux_lith = -1,       & ! Surface Flux - Lith
           id_sfc_flux_no3  = -1,       & ! Surface Flux - NO3
           id_sfc_flux_nh4  = -1,       & ! Surface Flux - NH4
           id_sfc_flux_o2   = -1,       & ! Surface Flux - O2
+          id_tot_bfe = -1,             & ! Total Biogenic Iron (Phyto+Det)
+          id_tot_bsi = -1,             & ! Total Biogenic Silica (Phyto+Det)
+          id_tot_doc = -1,             & ! Total Dissolved Organic Carbon (refractory+labile+semilabile)
           id_tot_layer_int_c = -1,     & ! Total Carbon (DIC+OC+IC) boxwise layer integral
           id_tot_layer_int_fe = -1,    & ! Total Phosphorus (Fed+OFe) boxwise layer integral
           id_tot_layer_int_n = -1,     & ! Total Nitrogen (NO3+NH4+ON) boxwise layer integral
           id_tot_layer_int_p = -1,     & ! Total Phosphorus (PO4+OP) boxwise layer integral
           id_tot_layer_int_si = -1,    & ! Total Silicon (SiO4+SiO2) boxwise layer integral
+          id_tot_pon = -1,             & ! Total Particulate Organic Nitrogen (Phyto+Nhet+Det)
+          id_tot_pop = -1,             & ! Total Particulate Organic Phosphorus (Phyto+Nhet+Det)
           id_alk           = -1,       & ! Alkalinity Prognostic tracer
-          id_cadet         = -1,       & ! Particulate Detrital CaCO3 Prognostic tracer
+          id_cadet_arag    = -1,       & ! Particulate Detrital Aragonite CaCO3 Prognostic tracer
+          id_cadet_calc    = -1,       & ! Particulate Detrital Calcite CaCO3 Prognostic tracer
           id_dic           = -1,       & ! DIC Prognostic tracer
           id_fed           = -1,       & ! Dissolved Iron Prognostic tracer
           id_fedi          = -1,       & ! Diaz Iron Prognostic tracer
@@ -536,7 +608,6 @@ module generic_TOPAZ
           id_sio4          = -1,       & ! Silicic Acid Prognostic tracer
           id_cased         = -1,       & ! Sediment CaCO3 Diagnostic tracer
           id_chl           = -1,       & ! Chlorophyll Diagnostic tracer
-          id_fcadet_btm    = -1,       & ! CaCO3 sinking flux at bottom
           id_irr           = -1,       & ! Irradiance Diagnostic tracer
           id_irr_mem       = -1          ! Irradiance Memory Diagnostic tracer
 
@@ -567,7 +638,6 @@ contains
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
 
-    
     
   end subroutine generic_TOPAZ_register
 
@@ -626,6 +696,18 @@ contains
     !
     ! Register Limitation Diagnostics
     !
+    vardesc_temp = vardesc("chl_Di","Chlorophyll in Diaz. Phyto",'h','L','s','ug kg-1','f')
+    phyto(DIAZO)%id_chl = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("chl_Lg","Chlorophyll in Large Phyto",'h','L','s','ug kg-1','f')
+    phyto(LARGE)%id_chl = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("chl_Sm","Chlorophyll in Small Phyto",'h','L','s','ug kg-1','f')
+    phyto(SMALL)%id_chl = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("def_fe_Di","Diaz. Phyto. Fe Deficiency",'h','L','s','unknown units','f')
     phyto(DIAZO)%id_def_fe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -710,7 +792,7 @@ contains
     phyto(LARGE)%id_po4lim = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("po4lim_Sm","Phosphate Limitation of Small Phyto",'h','L','unknown units','unknown units','f')
+    vardesc_temp = vardesc("po4lim_Sm","Phosphate Limitation of Small Phyto",'h','L','s','unknown units','f')
     phyto(SMALL)%id_po4lim = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -753,9 +835,23 @@ contains
     vardesc_temp = vardesc("silim_Lg","SiO4 Limitation of Large Phyto",'h','L','s','unknown units','f')
     phyto(LARGE)%id_silim = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     !
     ! Register Grazing Diagnostics
     !
+
+    vardesc_temp = vardesc("jgraz_n_Di_100","Diazotroph nitrogen grazing 100m vertical integral",'h','1','s','mol m-2 s-1','f')
+    phyto(DIAZO)%id_jgraz_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jgraz_n_Lg_100","Large nitrogen grazing 100m vertical integral",'h','1','s','mol m-2 s-1','f')
+    phyto(LARGE)%id_jgraz_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jgraz_n_Sm_100","Small nitrogen grazing 100m vertical integral",'h','1','s','mol m-2 s-1','f')
+    phyto(SMALL)%id_jgraz_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("jgraz_fe_Di","Diazotroph iron grazing layer integral",'h','L','s','mol m-2 s-1','f')
     phyto(DIAZO)%id_jgraz_fe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -841,69 +937,165 @@ contains
     vardesc_temp = vardesc("jprod_sio4_Lg","Large phyto. SiO4 production layer integral",'h','L','s','mol m-2 s-1','f')
     phyto(LARGE)%id_jprod_sio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     !
     ! Register non Phytoplankton Diagnostics
     !
 
-    vardesc_temp = vardesc("co3_solubility","Carbonate Ion Solubility",'h','L','s','mol kg-1','f')
-    topaz%id_co3_solubility = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("co3_sol_arag","Carbonate Ion Solubility for Aragonite",'h','L','s','mol kg-1','f')
+    topaz%id_co3_sol_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("co3_sol_calc","Carbonate Ion Solubility for Calcite",'h','L','s','mol kg-1','f')
+    topaz%id_co3_sol_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("pco2surf","Oceanic pCO2",'h','1','s','uatm','f')
     topaz%id_pco2surf = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-
-    vardesc_temp = vardesc("tot_layer_int_c","Total Carbon (DIC+OC+IC) boxwise layer integral",'h','L','s','mol m-2','f')
-    topaz%id_tot_layer_int_c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("jsdop","Semilabile DOP source layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jsdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("tot_layer_int_fe","Total Iron (Fed_OFe) boxwise layer integral",'h','L','s','mol m-2','f')
-    topaz%id_tot_layer_int_fe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("jsidet","Loss of sinking silicon layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jsidet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("tot_layer_int_n","Total Nitrogen (NO3+NH4+ON) boxwise layer integral",'h','L','s','mol m-2','f')
-    topaz%id_tot_layer_int_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("jsio4","SiO4 source layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jsio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("tot_layer_int_p","Total Phosphorus (PO4+OP) boxwise layer integral",'h','L','s','mol m-2','f')
-    topaz%id_tot_layer_int_p = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcadet_arag","Aragonite CaCO3 detrital sinking flux",'h','L','s','mol m-2 s-1','f')
+    topaz%id_fcadet_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("tot_layer_int_si","Total Silicon (SiO4+SiO2) boxwise layer integral",'h','L','s','mol m-2','f')
-    topaz%id_tot_layer_int_si = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcadet_arag_100","Aragonite CaCO3 sinking flux at 100m",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fcadet_arag_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("nLg_diatoms","Large diatom nitrogen",'h','L','s','unknown units','f')
-    topaz%id_nLg_diatoms = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcadet_arag_btm","Aragonite CaCO3 sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fcadet_arag_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_cadet","CaCO3 production layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jprod_cadet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcadet_calc","Calcite CaCO3 detrital sinking flux",'h','L','s','mol m-2 s-1','f')
+    topaz%id_fcadet_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_lithdet","Lithogenic removal to sinking layer integral",'h','L','s','g m-2 s-1','f')
-    topaz%id_jprod_lithdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcadet_calc_100","Calcite CaCO3 sinking flux at 100m",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fcadet_calc_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nhet","heterotrophic N Production layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jprod_nhet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcadet_calc_btm","Calcite CaCO3 sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fcadet_calc_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_fedet","Detrital Fedet production layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jprod_fedet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcased_burial","CaCO3 permanent burial flux",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fcased_burial = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ndet","Detrital PON production layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jprod_ndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("fcased_redis","CaCO3 redissolution from sediments",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fcased_redis = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_pdet","Detrital phosphorus production layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jprod_pdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("ffedet","POFe sinking flux",'h','L','s','mol m-2 s-1','f')
+    topaz%id_ffedet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jcadet","CaCO3 change layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jcadet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("ffedet_100","POFe sinking flux at 100m",'h','1','s','mol m-2 s-1','f')
+    topaz%id_ffedet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("ffedet_btm","Fe detrital sinking flux burial",'h','1','s','mol m-2 s-1','f')
+    topaz%id_ffedet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("ffe_sed","Sediment iron efflux",'h','1','s','mol m-2 s-1','f')
+    topaz%id_ffe_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("flithdet","Lith sinking flux",'h','L','s','g m-2 s-1','f')
+    topaz%id_flithdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("flithdet_btm","Lithogenic detrital sinking flux burial",'h','1','s','g m-2 s-1','f')
+    topaz%id_flithdet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fndet","PON sinking flux",'h','L','s','mol m-2 s-1','f')
+    topaz%id_fndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fndet_100","PON sinking flux at 100m",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fndet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fndet_btm","PON sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fndet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fnfeso4red_sed","Sediment Ndet Fe and SO4 reduction flux",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fnfeso4red_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fno3denit_sed","Sediment denitrification flux",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fno3denit_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fnoxic_sed","Sediment oxic Ndet remineralization flux",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fnoxic_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fpdet","POP sinking flux",'h','L','s','mol m-2 s-1','f')
+    topaz%id_fpdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fpdet_100","POP sinking flux at 100m",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fpdet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fpdet_btm","POP sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fpdet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fsidet","Si sinking flux",'h','L','s','mol m-2 s-1','f')
+    topaz%id_fsidet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fsidet_100","Si sinking flux at 100m",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fsidet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fsidet_btm","Si sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
+    topaz%id_fsidet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("irr_inst","Instantaneous Light",'h','L','s','W m-2','f')
+    topaz%id_irr_inst = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("irr_mix","Light averaged over mixing layer",'h','L','s','W m-2','f')
+    topaz%id_irr_mix = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jalk","Alkalinity source layer integral",'h','L','s','eq m-2 s-1','f')
+    topaz%id_jalk = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jcadet_arag","Aragonite CaCO3 change layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jcadet_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jcadet_calc","Calcite CaCO3 change layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jcadet_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jdic","DIC source layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jdic = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jdiss_sio2","SiO2 Dissolution during grazing layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jdiss_sio2 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jfe_ads","Iron adsorption layer integral",'h','L','s','mol m-2 s-1','f')
@@ -920,6 +1112,10 @@ contains
 
     vardesc_temp = vardesc("jfe_coast","Coastal iron efflux layer integral",'h','L','s','mol m-2 s-1','f')
     topaz%id_jfe_coast = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jfed","Dissolved iron source layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jfed = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jfedet","Loss of sinking iron layer integral",'h','L','s','mol m-2 s-1','f')
@@ -954,6 +1150,10 @@ contains
     topaz%id_jno3 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("jno3denit_wc","Water column Denitrification layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jno3denit_wc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("jo2","O2 source layer integral",'h','L','s','mol m-2 s-1','f')
     topaz%id_jo2 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -970,77 +1170,166 @@ contains
     topaz%id_jpo4_graz = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jdenit_wc","Water column Denitrification layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jdenit_wc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("jprod_cadet_arag","Aragonite CaCO3 production layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jprod_cadet_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jdiss_sio2","SiO2 Dissolution during grazing layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jdiss_sio2 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("jprod_cadet_calc","Calcite CaCO3 production layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jprod_cadet_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_lithdet","Lithogenic removal to sinking layer integral",'h','L','s','g m-2 s-1','f')
+    topaz%id_jprod_lithdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_nhet","heterotrophic N Production layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jprod_nhet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_fedet","Detrital Fedet production layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jprod_fedet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_ndet","Detrital PON production layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jprod_ndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_pdet","Detrital phosphorus production layer integral",'h','L','s','mol m-2 s-1','f')
+    topaz%id_jprod_pdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jsdon","Semilabile DON source layer integral",'h','L','s','mol m-2 s-1','f')
     topaz%id_jsdon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jsdop","Semilabile DOP source layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jsdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("nLg_diatoms","Large diatom nitrogen",'h','L','s','unknown units','f')
+    topaz%id_nLg_diatoms = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jsidet","SiO4 source layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jsidet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("nLg_nondiatoms","Large non-diatom nitrogen",'h','L','s','unknown units','f')
+    topaz%id_nLg_nondiatoms = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fcaco3","CaCO3 detrital sinking flux",'h','L','s','mol m-2 s-1','f')
-    topaz%id_fcaco3 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("nphyto_tot","Total NO3: Di+Lg+Sm",'h','L','s','mol m-2 s-1','f')
+    topaz%id_nphyto_tot = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fcaco3_burial","CaCO3 permanent burial flux",'h','1','s','mol m-2 s-1','f')
-    topaz%id_fcaco3_burial = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("no3_in_source","Nitrate in source routine",'h','L','s','mol/kg','f')
+    topaz%id_no3_in_source = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fcaco3_redis","CaCO3 redissolution from sediments",'h','1','s','mol m-2 s-1','f')
-    topaz%id_fcaco3_redis = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("tot_bfe","Total Biogenic Iron",'h','L','s','mol m-2','f')
+    topaz%id_tot_bfe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fcaco3_sed","CaCO3 flux to sediment layer",'h','1','s','mol m-2 s-1','f')
-    topaz%id_fcaco3_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("tot_bsi","Total Biogenic Silica",'h','L','s','mol m-2','f')
+    topaz%id_tot_bsi = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fdenit_sed","Sediment Denitrification flux",'h','1','s','mol m-2 s-1','f')
-    topaz%id_fdenit_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("tot_doc","Total Dissolved Organic Carbon (refractory+sdoc+ldoc)",'h','L','s','mol m-2','f')
+    topaz%id_tot_doc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("ffe_sed","Sediment iron efflux",'h','1','s','mol m-2 s-1','f')
-    topaz%id_ffe_sed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("tot_layer_int_c","Total Carbon (DIC+OC+IC) boxwise layer integral",'h','L','s','mol m-2','f')
+    topaz%id_tot_layer_int_c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("ffedet_btm","Fe detrital sinking flux burial",'h','1','s','mol m-2 s-1','f')
-    topaz%id_ffedet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("tot_layer_int_fe","Total Iron (Fed_OFe) boxwise layer integral",'h','L','s','mol m-2','f')
+    topaz%id_tot_layer_int_fe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("flith","Lith sinking flux",'h','L','s','g m-2 s-1','f')
-    topaz%id_flith = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("tot_layer_int_n","Total Nitrogen (NO3+NH4+ON) boxwise layer integral",'h','L','s','mol m-2','f')
+    topaz%id_tot_layer_int_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("flithdet_btm","Lithogenic detrital sinking flux burial",'h','1','s','g m-2 s-1','f')
-    topaz%id_flithdet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+    vardesc_temp = vardesc("tot_layer_int_p","Total Phosphorus (PO4+OP) boxwise layer integral",'h','L','s','mol m-2','f')
+    topaz%id_tot_layer_int_p = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fpofe","POFe sinking flux",'h','L','s','mol m-2 s-1','f')
-    topaz%id_fpofe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("tot_layer_int_si","Total Silicon (SiO4+SiO2) boxwise layer integral",'h','L','s','mol m-2','f')
+    topaz%id_tot_layer_int_si = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fpon","PON sinking flux",'h','L','s','mol m-2 s-1','f')
-    topaz%id_fpon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("tot_pon","Total Particulate Organic Nitrogen",'h','L','s','mol m-2','f')
+    topaz%id_tot_pon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fpop","POP sinking flux",'h','L','s','mol m-2 s-1','f')
-    topaz%id_fpop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    vardesc_temp = vardesc("tot_pop","Total Particulate Organic Phosphorus",'h','L','s','mol m-2','f')
+    topaz%id_tot_pop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("fsio2","Si sinking flux",'h','L','s','mol m-2 s-1','f')
-    topaz%id_fsio2 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+    !
+    ! Surface Diagnostics
+    !
+
+    vardesc_temp = vardesc("sfc_chl","Surface Chl",'h','1','s','','f')
+    topaz%id_sfc_chl = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_fed","Surface Fed",'h','1','s','','f')
+    topaz%id_sfc_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_irr","Surface Irradiance",'h','1','s','W m-2','f')
+    topaz%id_sfc_irr = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_irr_mem","Surface Irradiance memory",'h','1','s','W m-2','f')
+    topaz%id_sfc_irr_mem = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_ndi","Surface Diazotroph NO3",'h','1','s','mol kg-1','f')
+    topaz%id_sfc_ndi = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_nlg","Surface Large NO3",'h','1','s','mol kg-1','f')
+    topaz%id_sfc_nlg = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_no3","Surface NO3",'h','1','s','mol kg-1','f')
+    topaz%id_sfc_no3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_nsm","Surface Small NO3",'h','1','s','mol kg-1','f')
+    topaz%id_sfc_nsm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_phyto_C","Surface Phytoplankton Carbon",'h','1','s','mol kg-1','f')
+    topaz%id_sfc_phyto_c = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_po4","Surface PO4",'h','1','s','mol kg-1','f')
+    topaz%id_sfc_po4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_temp","Surface Temperature",'h','1','s','deg C','f')
+    topaz%id_sfc_temp = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jno3denit_wc_vert_int","Water column Denitrification vertical integral",'h','1','s','mol m-2 s-1','f')
+    topaz%id_jno3denit_wc_vert_int = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("c_integral","Total Carbon (DIC+OC+IC) vertical integral",'h','1','s','mol m-2','f')
+    topaz%id_c_integral = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jnitrif_100","Nitrification 100m vertical integral",'h','1','s','mol m-2 s-1','f')
+    topaz%id_jnitrif_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_n_100","N total production 100m vertical integral",'h','1','s','mol m-2 s-1','f')
+    topaz%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_no3_100","NO3 total production 100m vertical integral",'h','1','s','mol m-2 s-1','f')
+    topaz%id_jprod_no3_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("nfix","N fix vertical integral",'h','1','s','mol m-2 s-1','f')
+    topaz%id_nfix = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
 
   end subroutine generic_TOPAZ_register_diag
 
@@ -1122,34 +1411,57 @@ contains
     ! Stoichiometry
     !-----------------------------------------------------------------------
     !
-    ! Values taken from OCMIP-II Biotic protocols after Anderson
-    ! and Sarmiento (1994)
+    ! Values taken from OCMIP-II Biotic protocols after Anderson (1995) for an
+    ! organic material of C106H172O38N16(H3PO4) which gives an average oxidation state
+    ! for carbon of (3*16+2*38-172)/106 = -0.4528.  These calculations ignore H3PO4.
     !
-    call g_tracer_add_param('c_2_n', topaz%c_2_n, 106.0 / 16)                        ! mol C mol N-1
-    call g_tracer_add_param('mass_2_n', topaz%mass_2_n, 106.0 / 16.0 * 12.0 * 1.87)     ! g mol N-1
-    call g_tracer_add_param('n_2_n_denit', topaz%n_2_n_denit, 6.5)                         ! mol N NO3 mol N org-1
-    call g_tracer_add_param('o2_2_c', topaz%o2_2_c, 150.0 / 106)                      ! mol O2 mol C-1
-    call g_tracer_add_param('o2_2_nfix', topaz%o2_2_nfix, (118.0 + 3/5*(150-118)) / 16)  ! mol O2 mol N-1
-    call g_tracer_add_param('o2_2_nh4', topaz%o2_2_nh4, 118.0 / 16)                     ! mol O2 mol N-1
-    call g_tracer_add_param('o2_2_nitrif', topaz%o2_2_nitrif, 2.0)                         ! mol O2 mol N-1
-    call g_tracer_add_param('o2_2_no3', topaz%o2_2_no3, 150.0 / 16)                     ! mol O2 mol N-1
+    ! Nitrate Production:
+    !   16*H+ + 16*NO3- + 106*CO2 + 78*H2O <-> C106H172O38N16 + 150*O2
+    !   Effect is to increase alkalinity by 16 NO3 equivalents.
+    !
+    ! Ammonia Production (and reverse for remineralization):
+    !   16*NH4+ + 106*CO2 + 62*H2O <-> C106H172O38N16 + 118*O2 + 16*H+
+    !   Effect is to decrease (increase for remineralization) alkalinity by 16 NH4 equivalents.
+    !
+    ! N2 Production:
+    !   8*N2 + 106*CO2 + 86*H2O <-> C106H172O38N16 + 130*O2
+    !   No effect on alkalinity.
+    !
+    ! Nitrification:
+    !   NH4+ + 2*O2 <-> NO3- + H2O + 2*H+
+    !   Effect is to decrease alkalinity by 2 NH4 equivalents.
+    !
+    ! Denitrification:
+    !   C106H172O38N16 + 472/5*NO3- + 552/5*H+ <-> 106*CO2 + 16*NH4+ + 236/5*N2 + 546/5*H2O 
+    !   Effect is to decrease alkalinity by 552/472 = 1.169 NO3 equivalents.
+    !   
+    call g_tracer_add_param('alk_2_n_denit', topaz%alk_2_n_denit, 552.0 / 472.0)            ! eq. alk mol NO3-1
+    call g_tracer_add_param('c_2_n', topaz%c_2_n, 106.0 / 16.0)                             ! mol C mol N-1
+    call g_tracer_add_param('mass_2_n', topaz%mass_2_n, 106.0 / 16.0 * 12.0 * 1.87)         ! g mol N-1
+    call g_tracer_add_param('n_2_n_denit', topaz%n_2_n_denit, 472.0 / (5.0 * 16.0))         ! mol N NO3 mol N org-1
+    call g_tracer_add_param('o2_2_c', topaz%o2_2_c, 150.0 / 106.0)                          ! mol O2 mol C-1
+    call g_tracer_add_param('o2_2_nfix', topaz%o2_2_nfix, (118.0+3.0/(5.0+3.0)*(150.0-118.0))/16.0) ! mol O2 mol N-1
+    call g_tracer_add_param('o2_2_nh4', topaz%o2_2_nh4, 118.0 / 16.0)                       ! mol O2 mol N-1
+    call g_tracer_add_param('o2_2_nitrif', topaz%o2_2_nitrif, 2.0)                          ! mol O2 mol N-1
+    call g_tracer_add_param('o2_2_no3', topaz%o2_2_no3, 150.0 / 16.0)                       ! mol O2 mol N-1
     !
     ! CaCO3 to nitrogen uptake ratio set in order to obtain a global CaCO3 export flux out of
     ! the euphotic zone of approximately 0.6 Pg C in CaCO3 after Sarmiento et al (2002)
     !
-    call g_tracer_add_param('ca_2_n_het', topaz%ca_2_n_het, 0.015 * 106.0 / 16)          ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_arag', topaz%ca_2_n_arag, 0.015 * 106.0 / 16)           ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_calc', topaz%ca_2_n_calc, 0.010 * 106.0 / 16)           ! mol Ca mol N-1
     !
     ! Upper limit with which CaCO3 supersaturation (co3/co3_sol - 1) can modulate the CaCO3
     ! to nitrogen uptake ratio
     !
-    call g_tracer_add_param('caco3_sat_max', topaz%caco3_sat_max, 10.0)                      ! dimensionless
+    call g_tracer_add_param('caco3_sat_max', topaz%caco3_sat_max, 10.0)                     ! dimensionless
     !
     ! Static small phytoplankton/coccholith/foram-grazed/pteropod-grazed CaCO3 to
     ! nitrogen uptake ratio for a single, globally constant value instead of a
     ! dynamic value.
     !
     call g_tracer_add_param('ca_2_n_static', topaz%ca_2_n_static, .false.)
-    call g_tracer_add_param('ca_2_n_static_het', topaz%ca_2_n_het_static, 0.012 * 106.0 / 16)    ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_het_static', topaz%ca_2_n_het_static, 0.012 * 106.0 / 16) ! mol Ca mol N-1
     !
     ! P:N limitation of phytoplankton growth, is taken from the fraction of the
     ! cell dedicated to assembly after Klausmeier et al (2004, Optimal nitrogen-to-phosphorus
@@ -1164,17 +1476,17 @@ contains
     ! eukaryotes (large) and 6.0 for prokaryotes (small, diaz) from Elser et al. (1996, Organism
     ! size, life history, and N:P stoichiometry, BioScience, 46, 674-684).
     !
-    call g_tracer_add_param('p_2_n_assem_Di', phyto(DIAZO)%p_2_n_assem, 1.0 / 6.0 )               ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_assem_Lg', phyto(LARGE)%p_2_n_assem, 1.0 / 7.2 )               ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_assem_Sm', phyto(SMALL)%p_2_n_assem, 1.0 / 6.0 )               ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_photo', topaz%p_2_n_photo, 0.0128 )                     ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_assem_Di', phyto(DIAZO)%p_2_n_assem, 1.0 / 6.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_assem_Lg', phyto(LARGE)%p_2_n_assem, 1.0 / 7.2 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_assem_Sm', phyto(SMALL)%p_2_n_assem, 1.0 / 6.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_photo', topaz%p_2_n_photo, 0.0128 )                      ! mol P mol N-1
     !
     ! Standard P:N value of 16 from Redfield, Ketchum and Richards (1963; The influence 
     ! of organisms on the composition of sea-water; The Sea, 2, 26-77).  Alternatively,
     ! some studies suggest a value of 15 from Goldman (1980) as 
     ! reprinted in Broecker and Peng (1982; Tracers in the Sea).
     !
-    call g_tracer_add_param('p_2_n_RKR', topaz%p_2_n_RKR, 1.0 / 16.0)                    ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_RKR', topaz%p_2_n_RKR, 1.0 / 16.0)                       ! mol P mol N-1
     !
     ! In contrast to Klausmeier et al, a finite value of
     ! phosphorus in uptake machinery (p_2_n_uptake) is assumed in order to simulate
@@ -1195,15 +1507,15 @@ contains
     ! Trichodesmium spp. and its ecological implications. Limnol Oceanogr, 51, 1777-1790.
     ! To avoid negative allocations, thetamax*plastid_2_chl+r_other_min+r_nfix must be < 1.
     !
-    call g_tracer_add_param('r_nfix_Di',      phyto(DIAZO)%r_nfix, 0.5)                           ! dimensionless
-    call g_tracer_add_param('r_nfix_Lg',      phyto(LARGE)%r_nfix, 0.0)                           ! dimensionless
-    call g_tracer_add_param('r_nfix_Sm',      phyto(SMALL)%r_nfix, 0.0)                           ! dimensionless
-    call g_tracer_add_param('r_other_min_Di', phyto(DIAZO)%r_other_min, 0.1)                      ! dimensionless
-    call g_tracer_add_param('r_other_min_Lg', phyto(LARGE)%r_other_min, 0.2)                      ! dimensionless
-    call g_tracer_add_param('r_other_min_Sm', phyto(SMALL)%r_other_min, 0.2)                      ! dimensionless
-    call g_tracer_add_param('r_uptake_max_Di',phyto(DIAZO)%r_uptake_max, 0.2)                     ! dimensionless
-    call g_tracer_add_param('r_uptake_max_Lg',phyto(LARGE)%r_uptake_max, 0.2)                     ! dimensionless
-    call g_tracer_add_param('r_uptake_max_Sm',phyto(SMALL)%r_uptake_max, 0.4)                     ! dimensionless
+    call g_tracer_add_param('r_nfix_Di',      phyto(DIAZO)%r_nfix, 0.5)                     ! dimensionless
+    call g_tracer_add_param('r_nfix_Lg',      phyto(LARGE)%r_nfix, 0.0)                     ! dimensionless
+    call g_tracer_add_param('r_nfix_Sm',      phyto(SMALL)%r_nfix, 0.0)                     ! dimensionless
+    call g_tracer_add_param('r_other_min_Di', phyto(DIAZO)%r_other_min, 0.1)                ! dimensionless
+    call g_tracer_add_param('r_other_min_Lg', phyto(LARGE)%r_other_min, 0.2)                ! dimensionless
+    call g_tracer_add_param('r_other_min_Sm', phyto(SMALL)%r_other_min, 0.2)                ! dimensionless
+    call g_tracer_add_param('r_uptake_max_Di',phyto(DIAZO)%r_uptake_max, 0.2)               ! dimensionless
+    call g_tracer_add_param('r_uptake_max_Lg',phyto(LARGE)%r_uptake_max, 0.2)               ! dimensionless
+    call g_tracer_add_param('r_uptake_max_Sm',phyto(SMALL)%r_uptake_max, 0.4)               ! dimensionless
     !
     ! The relationship between chlorophyll and carbon is taken from J. T. O. Kirk and R. A. E.
     ! Tilney-Bassett (1978, The Plastids: Their chemistry, structure, growth and inheritance.
@@ -1211,9 +1523,9 @@ contains
     ! for eukaryotes (large) that have chloroplasts and 6.0 for prokaryotes (small, diaz) which
     ! only have the thylakoid.
     !
-    call g_tracer_add_param('plast_2_chl_Di', phyto(DIAZO)%plast_2_chl, 1.0 / 1.87 / 0.08)        ! g C g Chl-1
-    call g_tracer_add_param('plast_2_chl_Lg', phyto(LARGE)%plast_2_chl, 1.0 / 1.87 / 0.043)       ! g C g Chl-1
-    call g_tracer_add_param('plast_2_chl_Sm', phyto(SMALL)%plast_2_chl, 1.0 / 1.87 / 0.08)        ! g C g Chl-1
+    call g_tracer_add_param('plast_2_chl_Di', phyto(DIAZO)%plast_2_chl, 1.0 / 1.87 / 0.08)  ! g C g Chl-1
+    call g_tracer_add_param('plast_2_chl_Lg', phyto(LARGE)%plast_2_chl, 1.0 / 1.87 / 0.043) ! g C g Chl-1
+    call g_tracer_add_param('plast_2_chl_Sm', phyto(SMALL)%plast_2_chl, 1.0 / 1.87 / 0.08)  ! g C g Chl-1
     !
     ! Static phosphorus to nitrogen uptake ratio for a single, globally constant value for each
     ! phytoplankton group instead of dynamic values for each.
@@ -1224,19 +1536,19 @@ contains
     ! D. M. Role of Trichodesmium spp. in the productivity of the subtropical North
     ! Pacific Ocean. Mar. Ecol. Prog. Ser. 133, 263-273 (1996).
     !
-    call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static, 1.0 / 40.0 )             ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static, 1.0 / 40.0 )      ! mol P mol N-1
     !
     ! If static, Large and Small are assumed to have RKR P:N.
     !
-    call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static, 1.0 / 16.0 )             ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static, 1.0 / 16.0 )             ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static, 1.0 / 16.0 )      ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static, 1.0 / 16.0 )      ! mol P mol N-1
     !
     ! Maximum diatom silicon to nitrogen uptake ratio after Mongin, M., D. M. Nelson,
     ! P. Pondaven, M. A. Brzezinski and P. Treguer (2003): Simulation of upper-ocean
     ! biogeochemistry with a flexible-composition phytoplankton model: C, N and Si
     ! cycling in the western Sargasso Sea. Deep-Sea Res. I, 50, 1445-1480.
     !
-    call g_tracer_add_param('si_2_n_max_Lg', phyto(LARGE)%si_2_n_max, 5.0)                        ! mol Si mol N-1
+    call g_tracer_add_param('si_2_n_max_Lg', phyto(LARGE)%si_2_n_max, 5.0)                  ! mol Si mol N-1
     !
     ! Static large phytoplankton/diatom silicon to nitrogen uptake ratio for a single,
     ! globally constant value instead of a dynamic value.
@@ -1252,7 +1564,7 @@ contains
     ! variability on nutrient consumption ratio of diatoms in oceanic waters. Nature, 393,
     ! 774-777.
     !
-    call g_tracer_add_param('si_2_n_static_Lg', phyto(LARGE)%si_2_n_static, 2.0)                    ! mol Si mol N-1
+    call g_tracer_add_param('si_2_n_static_Lg', phyto(LARGE)%si_2_n_static, 2.0)            ! mol Si mol N-1
     !
     !-----------------------------------------------------------------------
     ! Monod half saturation coefficients.  k_PO4 for small phytoplankton was taken
@@ -1267,19 +1579,19 @@ contains
     ! Nature, 391, 270-273).  
     !-----------------------------------------------------------------------
     !
-    call g_tracer_add_param('k_fed_Di', phyto(DIAZO)%k_fed, 15.0e-9)    ! mol Fed kg-1
-    call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 15.0e-9)    ! mol Fed kg-1
-    call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  5.0e-9)    ! mol Fed kg-1
-    call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  6.0e-7)    ! mol NH4 kg-1
-    call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  2.0e-7)    ! mol NH4 kg-1
-    call g_tracer_add_param('k_no3_Lg', phyto(LARGE)%k_no3,  6.0e-6)    ! mol NO3 kg-1
-    call g_tracer_add_param('k_no3_Sm', phyto(SMALL)%k_no3,  2.0e-6)    ! mol NO3 kg-1
-    call g_tracer_add_param('k_po4_Di', phyto(DIAZO)%k_po4,  6.0e-7)    ! mol PO4 kg-1
-    call g_tracer_add_param('k_po4_Lg', phyto(LARGE)%k_po4,  6.0e-7)    ! mol PO4 kg-1
-    call g_tracer_add_param('k_po4_Sm', phyto(SMALL)%k_po4,  2.0e-7)    ! mol PO4 kg-1
-!    call g_tracer_add_param('k_sio4_Lg',phyto(LARGE)%k_sio4, 3.0e-6)    ! mol SiO4 kg-1
+    call g_tracer_add_param('k_fed_Di', phyto(DIAZO)%k_fed, 15.0e-9)                        ! mol Fed kg-1
+    call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 15.0e-9)                        ! mol Fed kg-1
+    call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  5.0e-9)                        ! mol Fed kg-1
+    call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  6.0e-7)                        ! mol NH4 kg-1
+    call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  2.0e-7)                        ! mol NH4 kg-1
+    call g_tracer_add_param('k_no3_Lg', phyto(LARGE)%k_no3,  6.0e-6)                        ! mol NO3 kg-1
+    call g_tracer_add_param('k_no3_Sm', phyto(SMALL)%k_no3,  2.0e-6)                        ! mol NO3 kg-1
+    call g_tracer_add_param('k_po4_Di', phyto(DIAZO)%k_po4,  6.0e-7)                        ! mol PO4 kg-1
+    call g_tracer_add_param('k_po4_Lg', phyto(LARGE)%k_po4,  6.0e-7)                        ! mol PO4 kg-1
+    call g_tracer_add_param('k_po4_Sm', phyto(SMALL)%k_po4,  2.0e-7)                        ! mol PO4 kg-1
+!    call g_tracer_add_param('k_sio4_Lg',phyto(LARGE)%k_sio4, 3.0e-6)                       ! mol SiO4 kg-1
 !## jgj NOTE: k_sio4_Sm = 1.0e-6 in mom4p1
-    call g_tracer_add_param('k_sio4_Lg',phyto(LARGE)%k_sio4, 1.0e-6)    ! mol SiO4 kg-1
+    call g_tracer_add_param('k_sio4_Lg',phyto(LARGE)%k_sio4, 1.0e-6)                        ! mol SiO4 kg-1
 
     !-----------------------------------------------------------------------
     ! Iron
@@ -1300,7 +1612,7 @@ contains
     ! and phosphate in the global ocean. Glob. Biogeochem. Cycles, 19, 
     ! doi: 10.1029/2004GB002280.
     !
-    call g_tracer_add_param('felig_bkg', topaz%felig_bkg, 2.0e-9)                        ! mol Fe kg-1
+    call g_tracer_add_param('felig_bkg', topaz%felig_bkg, 2.0e-9)                           ! mol Fe kg-1
     !
     ! Ratio of iron ligand to semilabile and labile don taken from the ratio of
     ! ligand to dissolved organic carbon in deep water.
@@ -1311,7 +1623,7 @@ contains
     ! iron to modulate diazotrophic phytoplankton light utilization
     ! efficiency.  This value is set to a relatively high value after Raven et al.
     !
-    !call g_tracer_add_param('k_fe_2_n_Di', phyto(DIAZO)%k_fe_2_n, 24.0e-6 * 106.0 / 16.0)      ! mol Fe mol N-1
+    !call g_tracer_add_param('k_fe_2_n_Di', phyto(DIAZO)%k_fe_2_n, 24.0e-6 * 106.0 / 16.0)  ! mol Fe mol N-1
     !
     ! Iron limitation of the Chl:C, through the def_fe factor, to allow
     ! iron to modulate small phytoplankton light utilization efficiency.
@@ -1321,9 +1633,9 @@ contains
     !
     ! values raised to stimulate expression of iron limitation.
     !
-    call g_tracer_add_param('k_fe_2_n_Di', phyto(DIAZO)%k_fe_2_n, 60.0e-6 * 106.0 / 16.0)      ! mol Fe mol N-1
-    call g_tracer_add_param('k_fe_2_n_Lg', phyto(LARGE)%k_fe_2_n, 30.0e-6 * 106.0 / 16.0)      ! mol Fe mol N-1
-    call g_tracer_add_param('k_fe_2_n_Sm', phyto(SMALL)%k_fe_2_n, 10.0e-6 * 106.0 / 16.0)      ! mol Fe mol N-1
+    call g_tracer_add_param('k_fe_2_n_Di', phyto(DIAZO)%k_fe_2_n, 60.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
+    call g_tracer_add_param('k_fe_2_n_Lg', phyto(LARGE)%k_fe_2_n, 30.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
+    call g_tracer_add_param('k_fe_2_n_Sm', phyto(SMALL)%k_fe_2_n, 10.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
     !
     ! Maximum Fe:N level where uptake ceases for Small Phytoplankton...
     ! that is, where the phytoplankton get "full" of iron.  This maximum
@@ -1332,7 +1644,7 @@ contains
     ! Since the Droop function diminishes to zero at half the maximum, the
     ! Droop maximum is set to twice the observed maximum.
     !
-    call g_tracer_add_param('fe_2_n_max_Sm', phyto(SMALL)%fe_2_n_max, 46.e-6 * 106.0 / 16.0)     ! mol Fe mol N-1
+    call g_tracer_add_param('fe_2_n_max_Sm', phyto(SMALL)%fe_2_n_max, 46.e-6 * 106.0 / 16.0) ! mol Fe mol N-1
     !
     ! Maximum Fe:N level where uptake ceases for Large Phytoplankton...
     ! that is, where the phytoplankton get "full" of iron.  This maximum
@@ -1340,12 +1652,12 @@ contains
     ! coast diatom T weissflogii observed by Sunda and Huntsman (1995, 
     ! Mar. Chem, 50, 189-206).
     !
-    call g_tracer_add_param('fe_2_n_max_Lg', phyto(LARGE)%fe_2_n_max, 666.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
-    call g_tracer_add_param('fe_2_n_max_Di', phyto(DIAZO)%fe_2_n_max, 666.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
-    !
+    call g_tracer_add_param('fe_2_n_max_Lg', phyto(LARGE)%fe_2_n_max, 666.0e-6 * 106.0 / 16.0) ! mol Fe mol N-1
+    call g_tracer_add_param('fe_2_n_max_Di', phyto(DIAZO)%fe_2_n_max, 666.0e-6 * 106.0 / 16.0) ! mol Fe mol N-1
+    
     ! Ratio of iron influx from bottom sediment boundaries based on nitrogen flux
     !
-    call g_tracer_add_param('fe_2_n_sed', topaz%fe_2_n_sed, 100.0e-6 * 106 / 16)      ! mol Fe mol N-1
+    call g_tracer_add_param('fe_2_n_sed', topaz%fe_2_n_sed, 100.0e-6 * 106 / 16)            ! mol Fe mol N-1
     !
     ! Static iron to nitrogen uptake ratio for a single, globally constant value for each
     ! phytoplankton group instead of dynamic values for each.
@@ -1376,39 +1688,39 @@ contains
     !
     ! Rate kinetics of iron influx from side boundaries
     !
-    call g_tracer_add_param('fe_coast', topaz%fe_coast,1.0e-11 )                      ! mol Fe m kg-1 s-1
+    call g_tracer_add_param('fe_coast', topaz%fe_coast,1.0e-11 )                            ! mol Fe m kg-1 s-1
     !
     ! Second-order iron scavenging in order to prevent high iron
     ! accumulations in high deposition regions (like the tropical
     ! Atlantic).
     !
-    call g_tracer_add_param('kfe_2nd_order', topaz%kfe_2nd_order, 1.0e10/sperd)              ! mol Fe-1 kg s-1
+    call g_tracer_add_param('kfe_2nd_order', topaz%kfe_2nd_order, 1.0e10/sperd)             ! mol Fe-1 kg s-1
     !
     ! Adsorption rate coefficient for ballast.  This was
     ! set to a low value to prevent iron from accumulating in
     ! the deep ocean and keep a no3-like profile instead of a sio4-like profile.
     !
-    call g_tracer_add_param('kfe_bal', topaz%kfe_bal, 0.0/sperd)                       ! g ballast-1 m3 s-1
+    call g_tracer_add_param('kfe_bal', topaz%kfe_bal, 0.0/sperd)                            ! g ballast-1 m3 s-1
     !
     ! Desorption rate coefficient.  Set to 0.0068 d-1 after Bacon and Anderson (1982)
     ! J. Geophys. Res., 87, No. C3, 2045-2056. and Clegg and Whittfield (1993)
     ! Deep-Sea Res., 40, 1529-1545 from Thorium.
     !
-    call g_tracer_add_param('kfe_des', topaz%kfe_des, 0.0068/sperd)                    ! s-1
+    call g_tracer_add_param('kfe_des', topaz%kfe_des, 0.0068/sperd)                         ! s-1
     !
     ! Equilibrium constant for (free and inorganically bound) iron binding with organic
     ! ligands taken from Parekh, P., M. J. Follows and E. A. Boyle (2005) Decoupling of
     ! iron and phosphate in the global ocean. Glob. Biogeochem. Cycles, 19, 
     ! doi: 10.1029/2004GB002280.
     !
-    call g_tracer_add_param('kfe_eq_lig', topaz%kfe_eq_lig, 1.0e11)                      ! mol lig-1 kg
+    call g_tracer_add_param('kfe_eq_lig', topaz%kfe_eq_lig, 1.0e11)                         ! mol lig-1 kg
     !
     ! Adsorption rate coefficient for detrital organic material.  This was
     ! set to a low value to prevent iron from accumulating in
     ! the deep ocean and keep a no3-like profile instead of a sio4-like profile.
 
     !
-    call g_tracer_add_param('kfe_org', topaz%kfe_org, 0.0/sperd)                       ! g org-1 m3 s-1
+    call g_tracer_add_param('kfe_org', topaz%kfe_org, 0.0/sperd)                            ! g org-1 m3 s-1
     !
     !-----------------------------------------------------------------------
     ! Photosynthesis
@@ -1436,21 +1748,22 @@ contains
     call g_tracer_add_param('alpha_Lg', phyto(LARGE)%alpha,  2.0e-5 * 2.77e18 / 6.022e17)   ! g C g Chl-1 m2 W-1 s-1
     call g_tracer_add_param('alpha_Sm', phyto(SMALL)%alpha,  2.0e-5 * 2.77e18 / 6.022e17)   ! g C g Chl-1 m2 W-1 s-1
     call g_tracer_add_param('kappa_eppley', topaz%kappa_eppley, 0.063)                      ! deg C-1
-    call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.6e-5)                       ! s-1
-    call g_tracer_add_param('P_C_max_Lg', phyto(LARGE)%P_C_max, 1.5e-5)                       ! s-1
-    call g_tracer_add_param('P_C_max_Sm', phyto(SMALL)%P_C_max, 2.0e-5)                       ! s-1
-    call g_tracer_add_param('thetamax_Di', phyto(DIAZO)%thetamax, 0.04)                        ! g Chl g C-1
-    call g_tracer_add_param('thetamax_Lg', phyto(LARGE)%thetamax, 0.06)                        ! g Chl g C-1
-    call g_tracer_add_param('thetamax_Sm', phyto(SMALL)%thetamax, 0.04)                        ! g Chl g C-1
-    call g_tracer_add_param('thetamin', topaz%thetamin, 0.005)                          ! g Chl g C-1
-    call g_tracer_add_param('zeta', topaz%zeta, 0.1)                                ! dimensionless
+    call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.6e-5)                     ! s-1
+    call g_tracer_add_param('P_C_max_Lg', phyto(LARGE)%P_C_max, 1.5e-5)                     ! s-1
+    call g_tracer_add_param('P_C_max_Sm', phyto(SMALL)%P_C_max, 2.0e-5)                     ! s-1
+    call g_tracer_add_param('thetamax_Di', phyto(DIAZO)%thetamax, 0.04)                     ! g Chl g C-1
+    call g_tracer_add_param('thetamax_Lg', phyto(LARGE)%thetamax, 0.06)                     ! g Chl g C-1
+    call g_tracer_add_param('thetamax_Sm', phyto(SMALL)%thetamax, 0.04)                     ! g Chl g C-1
+    call g_tracer_add_param('thetamin', topaz%thetamin, 0.001)                              ! g Chl g C-1
+    call g_tracer_add_param('thetamin_nolim', topaz%thetamin_nolim, 0.01)                   ! g Chl g C-1
+    call g_tracer_add_param('zeta', topaz%zeta, 0.1)                                        ! dimensionless
     !
     ! Diazotrophs are assumed to be inhibited by nitrate after Holl and Montoya 
     ! (2005;  Interactions between nitrate uptake and nitrogen fixation in 
     ! continuous cultures of the marine diazotroph trichodesmium cyanobacteria); 
     ! J. Phycol, 41, 1178-1183).
     !
-    call g_tracer_add_param('k_n_inhib_Di', topaz%k_n_inhib_Di, 7.0e-6)                 ! mol NO3 kg-1
+    call g_tracer_add_param('k_n_inhib_Di', topaz%k_n_inhib_Di, 7.0e-6)                     ! mol NO3 kg-1
     !
     ! Diazotrophs are also assumed to be inhibited by oxygen after Stewart and Pearson (1970;
     ! Effects of aerobic and anaerobic conditions on growth and metabolism of blue-green
@@ -1458,14 +1771,14 @@ contains
     ! nitrogenase by oxygen in marine cyanobacteria controls the global nitrogen and 
     ! oxygen cycles. Biogeosciences Discussions, 2, 261-273).
     !
-    call g_tracer_add_param('o2_inhib_Di_pow', topaz%o2_inhib_Di_pow, 4.0)                     ! mol O2-1 m3
-    call g_tracer_add_param('o2_inhib_Di_sat', topaz%o2_inhib_Di_sat, 3.0e-4)                   ! mol O2 kg-1
+    call g_tracer_add_param('o2_inhib_Di_pow', topaz%o2_inhib_Di_pow, 4.0)                  ! mol O2-1 m3
+    call g_tracer_add_param('o2_inhib_Di_sat', topaz%o2_inhib_Di_sat, 3.0e-4)               ! mol O2 kg-1
     !
     ! Chl:C response rate constant for phytoplankton calibrated to 1 d-1
     ! after Owens et al (1980, Diel Periodicity in cellular Chlorophyll
     ! content of marine diatoms, Mar. Biol, 59, 71-77).
     !
-    call g_tracer_add_param('gamma_irr_mem', topaz%gamma_irr_mem, 1.0 / sperd)               ! s-1
+    call g_tracer_add_param('gamma_irr_mem', topaz%gamma_irr_mem, 1.0 / sperd)              ! s-1
     !
     !-----------------------------------------------------------------------
     ! Grazing
@@ -1479,7 +1792,7 @@ contains
     !
     ! Rate constant for remineralization of heterotrophic biomass
     ! 
-    call g_tracer_add_param('gamma_nhet', topaz%gamma_nhet, 1.0 / (30.0 * sperd))                 ! s-1
+    call g_tracer_add_param('gamma_nhet', topaz%gamma_nhet, 1.0 / (30.0 * sperd))           ! s-1
     !
     ! Dissolution of sio2 was set as a temperature-dependent
     ! fraction of grazed material to be roughly in line with
@@ -1489,39 +1802,39 @@ contains
     !
     ! Half saturation oxygen concentration for oxic remineralization rate.
     !
-    call g_tracer_add_param('k_o2', topaz%k_o2, 20.0e-6)                            ! mol O2 kg-1
+    call g_tracer_add_param('k_o2', topaz%k_o2, 20.0e-6)                                    ! mol O2 kg-1
     !
     ! Temperature-dependence of fractional detritus production
     ! from the global synthesis of Dunne et al. (submitted)
     !
-    call g_tracer_add_param('kappa_remin', topaz%kappa_remin, -0.032)                      ! deg C-1
+    call g_tracer_add_param('kappa_remin', topaz%kappa_remin, -0.032)                       ! deg C-1
     !
     ! T=0 phytoplankton specific grazing rate from the global
     ! synthesis of Dunne et al. (2005)
     !
-    call g_tracer_add_param('lambda0', topaz%lambda0, 0.19 / sperd)                    ! s-1
+    call g_tracer_add_param('lambda0', topaz%lambda0, 0.19 / sperd)                         ! s-1
     !
     ! Minimum oxygen concentration for oxic remineralization.
     ! this is necessary for both numerical stability and to
     ! qeue the switch to denitrification
     !
-    call g_tracer_add_param('o2_min', topaz%o2_min, 1.0 * 1.0e-06)                    ! mol O2 kg-1
+    call g_tracer_add_param('o2_min', topaz%o2_min, 1.0 * 1.0e-06)                          ! mol O2 kg-1
     !
     ! Pivot phytoplankton concentration for grazing-based
     ! variation in ecosystem structure from the global
     ! synthesis of Dunne et al. (submitted)
     !
-    call g_tracer_add_param('P_star', topaz%P_star, 1.9e-6 * 16.0 / 106.0)          ! mol N kg-1
+    call g_tracer_add_param('P_star', topaz%P_star, 1.9e-6 * 16.0 / 106.0)                  ! mol N kg-1
     !
     ! Minimum phytoplankton concentration or grazing.  This is
     ! necessary for numerical stability.
     ! 
-    call g_tracer_add_param('phyto_min', topaz%phyto_min, 1.0e-10)                      ! mol N kg-1
+    call g_tracer_add_param('phyto_min', topaz%phyto_min, 1.0e-10)                          ! mol N kg-1
     !
     ! Fraction of phytoplankton grazing and dom consumption eventually going to NH4
     ! that is temporarily stored in heterotrophic biomass
     ! 
-    call g_tracer_add_param('phi_nhet', topaz%phi_nhet, 0.75)                           ! dimensionless
+    call g_tracer_add_param('phi_nhet', topaz%phi_nhet, 0.50)                               ! dimensionless
     !
     ! SiO2 dissolution is set to globally dissolve 50% after Nelson et al. (1995) 
     ! through grazing.  The temperature functionality is set to a combination of
@@ -1535,14 +1848,14 @@ contains
     ! of ~0.64 observed in the Southern Ocean by Bzrezinski et al., 2001, retaining
     ! a ~0.5 global average after Nelson et al. (1995).
     !
-    call g_tracer_add_param('q_si_2_n_diss', topaz%q_si_2_n_diss, 3.0)          ! mol mol Si mol N
+    call g_tracer_add_param('q_si_2_n_diss', topaz%q_si_2_n_diss, 3.0)                      ! mol mol Si mol N
     !
     ! Organic matter protection by mineral - after Klaas and
     ! Archer (2002)
     !
-    call g_tracer_add_param('rpcaco3', topaz%rpcaco3, 0.070/12*16/106.0*100)           ! mol N mol Ca-1
-    call g_tracer_add_param('rplith',  topaz%rplith,  0.065/12*16/106.0)                ! mol N g lith-1
-    call g_tracer_add_param('rpsio2',  topaz%rpsio2,  0.026/12*16/106.0*60)             ! mol N mol Si-1
+    call g_tracer_add_param('rpcaco3', topaz%rpcaco3, 0.070/12*16/106.0*100)                ! mol N mol Ca-1
+    call g_tracer_add_param('rplith',  topaz%rplith,  0.065/12*16/106.0)                    ! mol N g lith-1
+    call g_tracer_add_param('rpsio2',  topaz%rpsio2,  0.026/12*16/106.0*60)                 ! mol N mol Si-1
     !
     !-----------------------------------------------------------------------
     ! Remineralization length scales
@@ -1555,11 +1868,14 @@ contains
     ! that gives a value of exp(-1) at 228 m from 75 m for an e-folding scale
     ! of 188 m.
     !
-!## jgj NOTE: gamma_ndet, gamma_cadet, gamma_sidet are tagged to wsink (currently 20/sperd)
-!!    call g_tracer_add_param('gamma_ndet',  topaz%gamma_ndet, 20.0 / sperd / 188.0 )  ! s-1
-    call g_tracer_add_param('gamma_ndet',  topaz%gamma_ndet, topaz%wsink / 188.0 )  ! s-1
-
-    ! Cadet dissolution rate constant: Most deep traps show little correlation
+    call g_tracer_add_param('gamma_ndet',  topaz%gamma_ndet, topaz%wsink / 188.0 )          ! s-1
+    !
+    ! Cadet_arag dissolution length scale fit to Betzer et al 1984 data from
+    ! 20n - 46n, 170e attenuation of aragonite flux between 900-2200 m of 47.51%
+    !
+    call g_tracer_add_param('gamma_cadet_arag',  topaz%gamma_cadet_arag, topaz%wsink / 760.0)        ! s-1
+    !
+    ! Cadet_Calc dissolution rate constant: Most deep traps show little correlation
     ! with depth, suggesting little water column dissolution in much of the
     ! ocean.  Values were calibrated to get the observed 67% transfer efficiency at
     ! Ocean Weather Station PAPA in the North Pacific between 1000-3800 m
@@ -1568,29 +1884,12 @@ contains
     ! GLODAP and converted to a dissolution rate constant assuming a sinking
     ! velocity of 20 m d-1.
     !
-!!    call g_tracer_add_param('gamma_cadet',  topaz%gamma_cadet, 20.0 / sperd / 1343.0) ! s-1
-    call g_tracer_add_param('gamma_cadet',  topaz%gamma_cadet, topaz%wsink / 1343.0) ! s-1
+    call g_tracer_add_param('gamma_cadet_calc',  topaz%gamma_cadet_calc, topaz%wsink / 1343.0)        ! s-1
     !
     ! Sidet dissolution rate constant assuming a dissolution length scale of 2000 m
-    ! consistent with Gnanadesikan (2000) and assuming a sinking velocity of 20 m d-1.
+    ! consistent with Gnanadesikan (2000).
     !
-!!    call g_tracer_add_param('gamma_sidet',  topaz%gamma_sidet, 20.0 / sperd / 2000.0 ) ! s-1
-    call g_tracer_add_param('gamma_sidet',  topaz%gamma_sidet, topaz%wsink / 2000.0 ) ! s-1
-    !
-    !-----------------------------------------------------------------------
-    ! CaCO3 dissolution
-    !-----------------------------------------------------------------------
-    !
-    ! Coefficients for calcite solubility taken from Sayles, F. L. (1985, CaCO3
-    ! solubility in marine sediments: evidence for equilibrium and non-equilibrium
-    ! behavior, Geochim. Cosmochim. Acta, 49, 877-888)
-    !
-    call g_tracer_add_param('ksp_caco3',  topaz%ksp_caco3, 4.95e-7)   ! mol2 kg-2
-    call g_tracer_add_param('k_caco3_pres',  topaz%k_caco3_pres, 1.0e-17 )                      ! mol2 m-4 s-2
-    !
-    ! Redissolution of previously-deposited CaCO3 sediments
-    !
-    call g_tracer_add_param('gamma_cased_dis',  topaz%gamma_cased_dis, 1.0e-3 / spery)               ! s-1
+    call g_tracer_add_param('gamma_sidet',  topaz%gamma_sidet, topaz%wsink / 2000.0 )       ! s-1
     !
     !-----------------------------------------------------------------------
     ! Dissolved Organic Material
@@ -1612,21 +1911,21 @@ contains
     ! Warning: phi_sdon + phi_ldon should be < 1.0.
     !
     !
-!    call g_tracer_add_param('gamma_sdon',  topaz%gamma_sdon, 1.0 / (18.0 *365.0 * sperd))    ! s-1
-!    call g_tracer_add_param('gamma_sdop',  topaz%gamma_sdop, 1.0 / (4.0 *365.0 * sperd))     ! s-1
+!    call g_tracer_add_param('gamma_sdon',  topaz%gamma_sdon, 1.0 / (18.0 *365.0 * sperd))   ! s-1
+!    call g_tracer_add_param('gamma_sdop',  topaz%gamma_sdop, 1.0 / (4.0 *365.0 * sperd))    ! s-1
 !## jgj NOTE: to match mom4p1/gold
-    call g_tracer_add_param('gamma_sdon',  topaz%gamma_sdon, 1.0 / (18.0 * spery))    ! s-1
-    call g_tracer_add_param('gamma_sdop',  topaz%gamma_sdop, 1.0 / (4.0 * spery))     ! s-1
-    call g_tracer_add_param('phi_sdon'  ,  topaz%phi_sdon, 0.02)                           ! dimensionless
-    call g_tracer_add_param('phi_sdop'  ,  topaz%phi_sdop, 0.04)                           ! dimensionless
+    call g_tracer_add_param('gamma_sdon',  topaz%gamma_sdon, 1.0 / (18.0 * spery))          ! s-1
+    call g_tracer_add_param('gamma_sdop',  topaz%gamma_sdop, 1.0 / (4.0 * spery))           ! s-1
+    call g_tracer_add_param('phi_sdon'  ,  topaz%phi_sdon, 0.02)                            ! dimensionless
+    call g_tracer_add_param('phi_sdop'  ,  topaz%phi_sdop, 0.04)                            ! dimensionless
     !
     ! The remineralization rate constant for labile DOP (bio_tau_ldon)
     ! was set to 3 months after Archer et al. (1997, GBC, 11, 435-452).
     ! The fraction going to labile DOC was inspired by data-model
     ! comparisons to Libby and Wheeler (1997, Deep-Sea Res. I, 44, 345-361)
     !
-    call g_tracer_add_param('gamma_ldon',  topaz%gamma_ldon, 1.0 / (90.0 * sperd))           ! s-1
-    call g_tracer_add_param('phi_ldon'  ,  topaz%phi_ldon, 0.06)                           ! dimensionless
+    call g_tracer_add_param('gamma_ldon',  topaz%gamma_ldon, 1.0 / (90.0 * sperd))          ! s-1
+    call g_tracer_add_param('phi_ldon'  ,  topaz%phi_ldon, 0.06)                            ! dimensionless
     !
     !-----------------------------------------------------------------------
     ! Miscellaneous
@@ -1644,8 +1943,8 @@ contains
     ! bacteria: a possible mechanism for the formulation of the primary nitrite
     ! maximum, J. Mar. Res., 39, 227-238).
     !
-    call g_tracer_add_param('gamma_nitrif',  topaz%gamma_nitrif, 1.0 / (30.0 * sperd))           ! s-1
-    call g_tracer_add_param('irr_inhibit',  topaz%irr_inhibit, 2.0)                            ! m2 W-1
+    call g_tracer_add_param('gamma_nitrif',  topaz%gamma_nitrif, 1.0 / (30.0 * sperd))      ! s-1
+    call g_tracer_add_param('irr_inhibit',  topaz%irr_inhibit, 2.0)                         ! m2 W-1
     !
     ! Scavenging rate coefficient for lithogenic material relative to large
     ! phytoplankton concentration via large phytoplankton grazing.
@@ -1656,14 +1955,15 @@ contains
     ! This was set to a small but non-zero to prevent lithogenic
     ! material from accumulating in the deep ocean.
     !
-    !call g_tracer_add_param('k_lith',  topaz%k_lith, 10.0/spery )              ! s-1
+    !call g_tracer_add_param('k_lith',  topaz%k_lith, 10.0/spery )                           ! s-1
 !## jgj NOTE: to match mom4p1/gold
-    call g_tracer_add_param('k_lith',  topaz%k_lith, 1e-6/sperd )              ! s-1
+    call g_tracer_add_param('k_lith',  topaz%k_lith, 1e-6/sperd )                           ! s-1
+    call g_tracer_add_param('z_sed',  topaz%z_sed, 0.1 )                                    ! m
 
     !
     ! Constant for productivity mask
     !
-    call g_tracer_add_param('bio_tau',  topaz%bio_tau, 30.0 * sperd)                   ! s
+    call g_tracer_add_param('bio_tau',  topaz%bio_tau, 30.0 * sperd)                        ! s
 
     call g_tracer_add_param('r_bio_tau',  topaz%r_bio_tau,1.0 / topaz%bio_tau)
 
@@ -1672,6 +1972,8 @@ contains
     !===========
     !Block Ends: g_tracer_add_param
     !===========
+
+
 
   end subroutine user_add_params
 
@@ -1692,13 +1994,14 @@ contains
     call g_tracer_start_param_list(package_name)
     !
     call g_tracer_add_param('htotal_in', topaz%htotal_in, 1.0e-08)
-
-    ! Sinking velocity of detritus - 20 m d-1 consistent with a characteristic sinking
-    ! velocity of 100 m d-1 of marine aggregates and a disaggregation rate constant
-    ! of 5 d-1 (Clegg and Whitfield, 1992; Dunne, 1999)
     !
-    !## jgj NOTE: mom4p1 default is currently 10.0 / sperd
-    call g_tracer_add_param('wsink',  topaz%wsink,20.0 / sperd) ! m s-1
+    ! Sinking velocity of detritus: a value of 20 m d-1 is consistent with a characteristic sinking
+    ! velocity of 100 m d-1 of marine aggregates and a disaggregation rate constant
+    ! of 5 d-1 in the surface ocean (Clegg and Whitfield, 1992; Dunne, 1999).  Alternatively, 100 m d-1 
+    ! is more in line with the deep water synthesis of Berelson (2002; Particle settling rates increase
+    ! with depth in the ocean, DSR-II, 49, 237-252).
+    !
+    call g_tracer_add_param('wsink',  topaz%wsink, 100.0 / sperd)                             ! m s-1
 
     call g_tracer_add_param('ice_restart_file'   , topaz%ice_restart_file   , 'ice_topaz.res.nc')
     call g_tracer_add_param('ocean_restart_file' , topaz%ocean_restart_file , 'ocean_topaz.res.nc' )
@@ -1706,11 +2009,9 @@ contains
     !
     call g_tracer_end_param_list(package_name)
 
-
     ! Set Restart files
     call g_tracer_set_files(ice_restart_file    = topaz%ice_restart_file,&
          ocean_restart_file  = topaz%ocean_restart_file )
-
 
     !All tracer fields shall be registered for diag output.
 
@@ -1734,138 +2035,148 @@ contains
     !       ALK (Total carbonate alkalinity)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'alk',               &
-         longname   = 'Alkalinity', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_runoff    = .true.,          &
-         flux_param     = (/ 1.0e-03 /),   &
-         flux_bottom    = .true.           )
+         name       = 'alk',         &
+         longname   = 'Alkalinity',  &
+         units      = 'mol/kg',      &
+         prog       = .true.,        &
+         flux_runoff= .true.,        &
+         flux_param = (/ 1.0e-03 /), &
+         flux_bottom= .true.         )
     !
-    !       Cadet (Sinking detrital/particulate CaCO3)
+    !       Cadet_arag (Sinking detrital/particulate Aragonite CaCO3)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'cadet',          &
-         longname   = 'Detrital CaCO3', &
+         name       = 'cadet_arag',         &
+         longname   = 'Detrital Aragonite', &
+         units      = 'mol/kg',             &
+         prog       = .true.,               &
+         sink_rate  = topaz%wsink,          &
+         btm_reservoir = .true.             )
+    !
+    !       Cadet_Calc (Sinking detrital/particulate Calcite CaCO3)
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'cadet_calc',       &
+         longname   = 'Detrital Calcite', &
          units      = 'mol/kg',           &
          prog       = .true.,             &
          sink_rate  = topaz%wsink,        &
-         btm_reservoir = .true. )
+         btm_reservoir = .true.           )
     !
     !       DIC (Dissolved inorganic carbon)
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'dic',               &
-         longname   = 'Dissolved Inorganic Carbon', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_gas       = .true.,                      &
-         flux_gas_name  = 'co2_flux',                  &
-         flux_gas_molwt = WTMCO2,                      &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
-         flux_gas_restart_file  = 'ocean_topaz_airsea_flux.res.nc',  &
-         flux_runoff    = .true.,          &
-         flux_param     = (/12.011e-03  /),&
-         flux_bottom    = .true.,          &
-         init_value     = 0.001)
+    call g_tracer_add(tracer_list,package_name,                       &
+         name       = 'dic',                                           &
+         longname   = 'Dissolved Inorganic Carbon',                    &
+         units      = 'mol/kg',                                        &
+         prog       = .true.,                                          &
+         flux_gas   = .true.,                                          &
+         flux_gas_name  = 'co2_flux',                                  &
+         flux_gas_molwt = WTMCO2,                                      &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
+         flux_gas_restart_file  = 'ocean_topaz_airsea_flux.res.nc',    &
+         flux_runoff= .true.,                                          &
+         flux_param = (/12.011e-03  /),                                &
+         flux_bottom= .true.,                                          &
+         init_value = 0.001                                            )
     !
     !       Dissolved Fe (assumed to be all available to phytoplankton)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'fed',             &
-         longname   = 'Dissolved Iron',  & 
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_runoff    = .true.,          &
-         flux_wetdep    = .true.,          &
-         flux_drydep    = .true.,          &
-         flux_param     = (/ 55.847e-03 /),&
-         flux_bottom    = .true. )
+         name       = 'fed',            &
+         longname   = 'Dissolved Iron', & 
+         units      = 'mol/kg',         &
+         prog       = .true.,           &
+         flux_runoff= .true.,           &
+         flux_wetdep= .true.,           &
+         flux_drydep= .true.,           &
+         flux_param = (/ 55.847e-03 /), &
+         flux_bottom= .true.            )
     !
     !    Fedet (Sinking detrital/particulate iron)   
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'fedet',         &
          longname   = 'Detrital Iron', &
-         units      = 'mol/kg',          &
-         prog       = .true.,            &
-         sink_rate  = topaz%wsink,       &
-         btm_reservoir = .true. )
+         units      = 'mol/kg',        &
+         prog       = .true.,          &
+         sink_rate  = topaz%wsink,     &
+         btm_reservoir = .true.        )
     !
     !       Diazotroph Fe (Iron in N2-fixing phytoplankton for variable Fe:N ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'fedi',            &
          longname   = 'Diazotroph Iron', &
-         units      = 'mol/kg',            &
-         prog       = .true.               )
+         units      = 'mol/kg',          &
+         prog       = .true.             )
     !
     !       Large Fe (Iron in large phytoplankton to allow for variable Fe:N ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'felg',       &
          longname   = 'Large Iron', &
-         units      = 'mol/kg',       &
-         prog       = .true.          )
+         units      = 'mol/kg',     &
+         prog       = .true.        )
     !
     !       Small Fe(Iron in small phytoplankton to allow for variable Fe:N ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'fesm',       &
          longname   = 'Small Iron', &
-         units      = 'mol/kg',       &
-         prog       = .true.          )
+         units      = 'mol/kg',     &
+         prog       = .true.        )
     !
     !       LDON (Labile organic nitrogen; assumed to have a fixed, Redfield, Ketchum
     !       and Richards (1963) C:N:P ratio)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'ldon',               &
-         longname   = 'labile DON', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_runoff    = .true.,          &
-         flux_param     = (/ 14.0067e-03 /) )
+         name       = 'ldon',           &
+         longname   = 'labile DON',     &
+         units      = 'mol/kg',         &
+         prog       = .true.,           &
+         flux_runoff= .true.,           &
+         flux_param = (/ 14.0067e-03 /) )
     !
     !       LITH (Lithogenic aluminosilicate particles)
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'lith',               &
+    call g_tracer_add(tracer_list,package_name,     &
+         name       = 'lith',                       &
          longname   = 'Lithogenic Aluminosilicate', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_runoff    = .true.,          &
-         flux_wetdep    = .true.,          &
-         flux_drydep    = .true.,          &
-         flux_param     = (/ 1.0e-03 /) )
+         units      = 'mol/kg',                     &
+         prog       = .true.,                       &
+         flux_runoff= .true.,                       &
+         flux_wetdep= .true.,                       &
+         flux_drydep= .true.,                       &
+         flux_param = (/ 1.0e-03 /)                 )
     !
     !     LITHdet (Detrital Lithogenic aluminosilicate particles)  
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'lithdet', &
-         longname   = 'lithdet', &
+         name       = 'lithdet',   &
+         longname   = 'Detrital Lith',   &
          units      = 'mol/kg',    &
          prog       = .true.,      &
          sink_rate  = topaz%wsink, &
-         btm_reservoir = .true. )
+         btm_reservoir = .true.    )
     !
     !    Ndet (Sinking detrital/particulate Nitrogen)   
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'ndet', &
-         longname   = 'ndet', &
-         units      = 'mol/kg', &
-         prog       = .true.,   &
-         sink_rate  = topaz%wsink,        &
-         flux_bottom    = .true.)
+         name       = 'ndet',      &
+         longname   = 'Detrital Nitrogen',      &
+         units      = 'mol/kg',    &
+         prog       = .true.,      &
+         sink_rate  = topaz%wsink, &
+         btm_reservoir = .true.    )
     !
     !    NDi (assumed to be facultative N2-fixers, with a variable N:P ratio
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'ndi',                 &
          longname   = 'Diazotroph Nitrogen', &
-         units      = 'mol/kg',                &
-         prog       = .true.                   )
+         units      = 'mol/kg',              &
+         prog       = .true.                 )
 
     !
     !       Heterotrophic N (assumed to be the sum of heterotrphic bacteria,
@@ -1873,170 +2184,173 @@ contains
     !            storage reservoir for nutrients and carbon; assumed to have 
     !            a fixed C:N:P ratio)
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nhet',                  &
-         longname   = 'Heterotrophic Nitrogen',&
-         units      = 'mol/kg',                  &
-         prog       = .true.                     )
+    call g_tracer_add(tracer_list,package_name, &
+         name       = 'nhet',                   &
+         longname   = 'Heterotrophic Nitrogen', &
+         units      = 'mol/kg',                 &
+         prog       = .true.                    )
     !
     !    NLg (assumed to be a dynamic combination of diatoms and other 
     !         eukaryotes all effectively greater than 5 um in diameter,
     !         and having a fixed C:N ratio)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'nlg',             &
-         longname   = 'Large Nitrogen',  &
-         units      = 'mol/kg',            &
-         prog       = .true.               )
+         name       = 'nlg',            &
+         longname   = 'Large Nitrogen', &
+         units      = 'mol/kg',         &
+         prog       = .true.            )
     !
     !       NH4
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'nh4',             &
          longname   = 'Ammonia',         &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_runoff    = .true.,          &
-         flux_wetdep    = .true.,          &
-         flux_drydep    = .true.,          &
-         flux_param     = (/ 14.0067e-03 /) )
+         units      = 'mol/kg',          &
+         prog       = .true.,            &
+         flux_runoff= .true.,            &
+         flux_wetdep= .true.,            &
+         flux_drydep= .true.,            &
+         flux_param = (/ 14.0067e-03 /), &
+         flux_bottom= .true.             )
     !
     !       NO3
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'no3',             &
          longname   = 'Nitrate',         &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_runoff    = .true.,          &
-         flux_wetdep    = .true.,          &
-         flux_drydep    = .true.,          &
-         flux_param     = (/ 14.0067e-03 /),  &
-         flux_bottom    = .true. )
+         units      = 'mol/kg',          &
+         prog       = .true.,            &
+         flux_runoff= .true.,            &
+         flux_wetdep= .true.,            &
+         flux_drydep= .true.,            &
+         flux_param = (/ 14.0067e-03 /), &
+         flux_bottom= .true.             )
     !
     !       NSm (Nitrogen in picoplankton and nanoplankton - effectively less
     !            than 5 um in diameter and having a fixed C:N:P ratio))
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'nsm',           &
-         longname   = 'Small Nitrogen',&
-         units      = 'mol/kg',          &
-         prog       = .true.             )
+         name       = 'nsm',            &
+         longname   = 'Small Nitrogen', &
+         units      = 'mol/kg',         &
+         prog       = .true.            )
     !
     !       O2
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'o2',               &
-         longname   = 'Oxygen', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_gas       = .true.,                      &
-         flux_gas_name  = 'o2_flux',                  &
-         flux_gas_molwt = WTMO2,                      &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
-         flux_gas_restart_file  = 'ocean_topaz_airsea_flux.res.nc' )
-
+    call g_tracer_add(tracer_list,package_name,                        &
+         name       = 'o2',                                            &
+         longname   = 'Oxygen',                                        &
+         units      = 'mol/kg',                                        &
+         prog       = .true.,                                          &
+         flux_gas   = .true.,                                          &
+         flux_gas_name  = 'o2_flux',                                   &
+         flux_gas_molwt = WTMO2,                                       &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
+         flux_gas_restart_file  = 'ocean_topaz_airsea_flux.res.nc',    &
+         flux_bottom= .true.             )
     !
     !    Pdet (Sinking detrital/particulate Phosphorus)
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'pdet',      &
-         longname   = 'Detrital Phosphorus Phosphorus',&
-         units      = 'mol/kg',      &
-         prog       = .true.,        &
-         sink_rate  = topaz%wsink,   &
-         flux_bottom    = .true.     )
+    call g_tracer_add(tracer_list,package_name,         &
+         name       = 'pdet',                           &
+         longname   = 'Detrital Phosphorus', &
+         units      = 'mol/kg',                         &
+         prog       = .true.,                           &
+         sink_rate  = topaz%wsink,                      &
+         btm_reservoir = .true.    )
     !
     !    PDi (Phosphorus in diaz. phytoplankton for variable N:P ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'pdi',            &
-         longname   = 'Diaz Phosphorus',&
-         units      = 'mol/kg',           &
-         prog       = .true.              )
+         name       = 'pdi',             &
+         longname   = 'Diaz Phosphorus', &
+         units      = 'mol/kg',          &
+         prog       = .true.             )
     !
     !    PLg (Phosphorus in large phytoplankton for variable N:P ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'plg',             &
-         longname   = 'Large Phosphorus',&
-         units      = 'mol/kg',            &
-         prog       = .true.               )
+         name       = 'plg',              &
+         longname   = 'Large Phosphorus', &
+         units      = 'mol/kg',           &
+         prog       = .true.              )
     !
     !       PO4
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'po4',       &
          longname   = 'Phosphate', &
-         units      = 'mol/kg',      &
-         prog       = .true.,        &
-         flux_bottom    = .true.     )
+         units      = 'mol/kg',    &
+         prog       = .true.,      &
+         flux_bottom= .true.       )
     !
     !    PSm (Phosphorus in small phytoplankton for variable N:P ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'psm',             &
-         longname   = 'Small Phosphorus',&
-         units      = 'mol/kg',            &
-         prog       = .true.               )
+         name       = 'psm',              &
+         longname   = 'Small Phosphorus', &
+         units      = 'mol/kg',           &
+         prog       = .true.              )
     !
     !       SDON (Semilabile dissolved organic nitrogen for variable N:P ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'sdon',           &
          longname   = 'Semilabile DON', &
-         units      = 'mol/kg',           &
-         prog       = .true.              )
+         units      = 'mol/kg',         &
+         prog       = .true.            )
     !
     !       SDOP (Semilabile dissolved organic phosphorus for variable N:P ratios)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'sdop',           &
          longname   = 'Semilabile DOP', &
-         units      = 'mol/kg',           &
-         prog       = .true.              )
+         units      = 'mol/kg',         &
+         prog       = .true.            )
     !
     !       Sidet (Sinking detrital/particulate Silicon)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'sidet', &
+         name       = 'sidet',            &
          longname   = 'Detrital Silicon', &
-         units      = 'mol/kg',  &
-         prog       = .true.,    &
-         sink_rate  = topaz%wsink )
+         units      = 'mol/kg',           &
+         prog       = .true.,             &
+         sink_rate  = topaz%wsink,        &
+         btm_reservoir = .true.    )
     !
     !    SiLg (Silicon in large phytoplankton for variable Si:N ratios
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'silg',          &
          longname   = 'Large Silicon', &
-         units      = 'mol/kg',          &
-         prog       = .true.             )
+         units      = 'mol/kg',        &
+         prog       = .true.           )
     !
     !       SiO4
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'sio4',     &
          longname   = 'Silicate', &
-         units      = 'mol/kg',     &
-         prog       = .true.        )
-
-    !
-    !       Passive tracer for testing purposes
-    !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'topaz_passive',            &
-         longname   = 'Topaz Passive Tracer', &
-         units      = 'mol/kg',            &
-         const_init_value = 1.0,&
-         prog       = .true.               )
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'topaz_sinking_passive',            &
-         longname   = 'Topaz Passive Sinking Tracer', &
-         units      = 'mol/kg',            &
-         const_init_value = 1.0,&
-         sink_rate  = topaz%wsink,&
-         prog       = .true.               )
+         units      = 'mol/kg',   &
+         prog       = .true.,     &
+         flux_bottom= .true.      )
+!
+!    !
+!    !       Passive tracer for testing purposes
+!    !
+!    call g_tracer_add(tracer_list,package_name,&
+!         name       = 'topaz_passive',        &
+!         longname   = 'Topaz Passive Tracer', &
+!         units      = 'mol/kg',               &
+!         const_init_value = 1.0,              &
+!         prog       = .true.                  )
+!    call g_tracer_add(tracer_list,package_name,       &
+!         name       = 'topaz_sinking_passive',        &
+!         longname   = 'Topaz Passive Sinking Tracer', &
+!         units      = 'mol/kg',                       &
+!         const_init_value = 1.0,                      &
+!         sink_rate  = topaz%wsink,                    &
+!         prog       = .true.                          )
 
     !===========================================================
     !Diagnostic Tracers
@@ -2045,63 +2359,92 @@ contains
     !    Cased (CaCO3 in sediments)   
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'cased',         &
+         name       = 'cased',          &
          longname   = 'Sediment CaCO3', &
-         units      = 'mmol m-2',        &
-         prog       = .false.)
+         units      = 'mol m-3',       &
+         prog       = .false.           )
     !
     !       Chl (Chlorophyll)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'chl',         &
          longname   = 'Chlorophyll', &
-         units      = 'ug kg-1',        &
-         prog       = .false.,         &
-         init_value = 0.08          )
+         units      = 'ug kg-1',     &
+         prog       = .false.,       &
+         init_value = 0.08           )
     !
-    !      fcadet_btm (CaCO3 flux to sediments)
+    !       CO3_ion (Carbonate ion)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'fcadet_btm',             &
-         longname   = 'CaCO3 flux to Sediments',&
-         units      = 'mmol m-2 s-1',            &
-         prog       = .false.              )
-
-    !nnz: The following are diag tracers in GOLD but not in MOM!
+         name       = 'co3_ion',       &
+         longname   = 'Carbonate ion', &
+         units      = 'mol/kg',        &
+         prog       = .false.          )
+    !
+    !      cadet_arag_btf (Aragonite flux to sediments)
+    !
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'cadet_arag_btf',              &
+         longname   = 'Aragonite flux to Sediments', &
+         units      = 'mol m-2 s-1',                 &
+         prog       = .false.                        )
+    !
+    !      cadet_calc_btf (Calcite flux to sediments)
+    !
+    call g_tracer_add(tracer_list,package_name,    &
+         name       = 'cadet_calc_btf',            &
+         longname   = 'Calcite flux to Sediments', &
+         units      = 'mol m-2 s-1',               &
+         prog       = .false.                      )
+    !
+    !      lithdet_btf (Lithogenic flux to sediments)
+    !
+    call g_tracer_add(tracer_list,package_name, &
+         name       = 'lithdet_btf',            &
+         longname   = 'Lith flux to Sediments', &
+         units      = 'g m-2 s-1',              &
+         prog       = .false.                   )
+    !
+    !      ndet_btf (N flux to sediments)
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'ndet_btf',            &
+         longname   = 'N flux to Sediments', &
+         units      = 'mol m-2 s-1',         &
+         prog       = .false.                )
+    !
+    !      pdet_btf (P flux to sediments)
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'pdet_btf',            &
+         longname   = 'P flux to Sediments', &
+         units      = 'mol m-2 s-1',         &
+         prog       = .false.                )
+    !
+    !      sidet_btf (SiO2 flux to sediments)
+    !
+    call g_tracer_add(tracer_list,package_name, &
+         name       = 'sidet_btf',              &
+         longname   = 'SiO2 flux to Sediments', &
+         units      = 'mol m-2 s-1',            &
+         prog       = .false.                   )
     !
     !       htotal (H+ ion concentration)
     !
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'htotal',    &
-         longname   = 'H+ ion concentration',    &
-         units      = 'mol/kg',   &
-         prog       = .false.,         &
-         init_value = topaz%htotal_in)
-
-    !
-    !       Irr_inst (Irradiance instantaneous)
-    !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'irr_inst',        &
-         longname   = 'Irradiance instantaneous', &
-         units      = 'Watts/m^2',    &
-         prog       = .false.)
+         name       = 'htotal',               &
+         longname   = 'H+ ion concentration', &
+         units      = 'mol/kg',               &
+         prog       = .false.,                &
+         init_value = topaz%htotal_in         )
     !
     !       Irr_mem (Irradiance Memory)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'irr_mem',           &
          longname   = 'Irradiance memory', &
-         units      = 'Watts/m^2',           &
-         prog       = .false.)
-    !
-    !       CO3_ion (Carbonate ion)
-    !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'co3_ion',    &
-         longname   = 'Carbonate ion',    &
-         units      = 'mol/kg',   &
-         prog       = .false. )
+         units      = 'Watts/m^2',         &
+         prog       = .false.              )
 
 
   end subroutine user_add_tracers
@@ -2150,7 +2493,7 @@ contains
   !   This subroutine is the place for specific tracer manipulations.
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_TOPAZ_update_from_bottom(tracer_list,dt, tau) 
+  !   call generic_TOPAZ_update_from_bottom(tracer_list,dt, tau, model_time) 
   !  </TEMPLATE>
   !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
   !   Pointer to the head of generic tracer list.
@@ -2162,41 +2505,90 @@ contains
   !   Time step index to be used for %field
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_TOPAZ_update_from_bottom(tracer_list, dt, tau)
+  subroutine generic_TOPAZ_update_from_bottom(tracer_list, dt, tau, model_time)
     type(g_tracer_type), pointer :: tracer_list
     real,               intent(in) :: dt
     integer,            intent(in) :: tau
+    type(time_type),    intent(in) :: model_time
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau
+    logical :: used
     real, dimension(:,:,:),pointer :: grid_tmask
-    real, dimension(:,:,:,:),ALLOCATABLE :: temp_field
+    real, dimension(:,:,:,:),pointer :: temp_field
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask) 
 
     !---------------------------------------------------------------------
-    ! Get bottom flux of Cadet, Fedet and Lithdet and reset bottom flux boundary condition
+    ! Get bottom fluxes and reset bottom flux boundary condition - Fedet and Lithdet are lost through
+    ! the bottom, while the rest are not.
     !---------------------------------------------------------------------
 
-    call g_tracer_get_values(tracer_list,'cadet'  ,'btm_reservoir', topaz%fcadet_btm,isd,jsd)
-    topaz%fcadet_btm = topaz%fcadet_btm /dt
+    call g_tracer_get_values(tracer_list,'cadet_arag'  ,'btm_reservoir', topaz%fcadet_arag_btm,isd,jsd)
+    topaz%fcadet_arag_btm = topaz%fcadet_arag_btm /dt
+    call g_tracer_get_pointer(tracer_list,'cadet_arag_btf','field',temp_field)
+    temp_field(:,:,1,tau) = topaz%fcadet_arag_btm(:,:)
+    call g_tracer_set_values(tracer_list,'cadet_arag','btm_reservoir',0.0)
+    if (topaz%id_fcadet_arag_btm .gt. 0)           &
+         used = send_data(topaz%id_fcadet_arag_btm,    topaz%fcadet_arag_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
-    allocate(temp_field(isd:ied,jsd:jed,nk,ntau))
-    call g_tracer_get_values(tracer_list,'fcadet_btm'  ,'field', temp_field,isd,jsd)
-
-    temp_field(:,:,1,tau) = topaz%fcadet_btm(:,:)
-
-    call g_tracer_set_values(tracer_list,'fcadet_btm'  ,'field', temp_field,isd,jsd)
-    deallocate(temp_field)
+    call g_tracer_get_values(tracer_list,'cadet_calc'  ,'btm_reservoir', topaz%fcadet_calc_btm,isd,jsd)
+    topaz%fcadet_calc_btm = topaz%fcadet_calc_btm /dt
+    call g_tracer_get_pointer(tracer_list,'cadet_calc_btf','field',temp_field)
+    temp_field(:,:,1,tau) = topaz%fcadet_calc_btm(:,:)
+    call g_tracer_set_values(tracer_list,'cadet_calc','btm_reservoir',0.0)
+    if (topaz%id_fcadet_calc_btm .gt. 0)           &
+         used = send_data(topaz%id_fcadet_calc_btm,    topaz%fcadet_calc_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
     call g_tracer_get_values(tracer_list,'fedet'  ,'btm_reservoir', topaz%ffedet_btm,isd,jsd)
     topaz%ffedet_btm = topaz%ffedet_btm /dt
+    call g_tracer_set_values(tracer_list,'fedet','btm_reservoir',0.0)
+    if (topaz%id_ffedet_btm .gt. 0)           &
+         used = send_data(topaz%id_ffedet_btm,    topaz%ffedet_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
     call g_tracer_get_values(tracer_list,'lithdet','btm_reservoir', topaz%flithdet_btm,isd,jsd)
     topaz%flithdet_btm = topaz%flithdet_btm /dt
-
-
-    call g_tracer_set_values(tracer_list,'cadet','btm_reservoir',0.0)
-    call g_tracer_set_values(tracer_list,'fedet','btm_reservoir',0.0)
     call g_tracer_set_values(tracer_list,'lithdet','btm_reservoir',0.0)
+    call g_tracer_get_pointer(tracer_list,'lithdet_btf','field',temp_field)
+    temp_field(:,:,1,tau) = topaz%flithdet_btm(:,:)
+    if (topaz%id_flithdet_btm .gt. 0)           &
+         used = send_data(topaz%id_flithdet_btm,    topaz%flithdet_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+
+    call g_tracer_get_values(tracer_list,'ndet'  ,'btm_reservoir', topaz%fndet_btm,isd,jsd)
+    topaz%fndet_btm = topaz%fndet_btm /dt
+    call g_tracer_get_pointer(tracer_list,'ndet_btf','field',temp_field)
+    temp_field(:,:,1,tau) = topaz%fndet_btm(:,:)
+    call g_tracer_set_values(tracer_list,'ndet','btm_reservoir',0.0)
+    if (topaz%id_fndet_btm .gt. 0)           &
+         used = send_data(topaz%id_fndet_btm,    topaz%fndet_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+
+    call g_tracer_get_values(tracer_list,'pdet'  ,'btm_reservoir', topaz%fpdet_btm,isd,jsd)
+    topaz%fpdet_btm = topaz%fpdet_btm /dt
+    call g_tracer_get_pointer(tracer_list,'pdet_btf','field',temp_field)
+    temp_field(:,:,1,tau) = topaz%fpdet_btm(:,:)
+    call g_tracer_set_values(tracer_list,'pdet','btm_reservoir',0.0)
+    if (topaz%id_fpdet_btm .gt. 0)           &
+         used = send_data(topaz%id_fpdet_btm,    topaz%fpdet_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+
+    call g_tracer_get_values(tracer_list,'sidet'  ,'btm_reservoir', topaz%fsidet_btm,isd,jsd)
+    topaz%fsidet_btm = topaz%fsidet_btm /dt
+    call g_tracer_get_pointer(tracer_list,'sidet_btf','field',temp_field)
+    temp_field(:,:,1,tau) = topaz%fsidet_btm(:,:)
+    call g_tracer_set_values(tracer_list,'sidet','btm_reservoir',0.0)
+    if (topaz%id_fsidet_btm .gt. 0)           &
+         used = send_data(topaz%id_fsidet_btm,    topaz%fsidet_btm,          &
+         model_time, rmask = grid_tmask(:,:,1),& 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
   end subroutine generic_TOPAZ_update_from_bottom
 
@@ -2268,7 +2660,9 @@ contains
     real, dimension(:,:,:) ,pointer :: grid_tmask
     integer, dimension(:,:),pointer :: mask_coast,grid_kmt
 
-    integer :: used,nb
+    logical :: used
+    integer :: nb
+    real :: r_dt
     real :: feprime
     real :: graz_lg_terms
     real :: jgraz_n
@@ -2279,11 +2673,14 @@ contains
     real :: P_C_m
     real :: p_lim_nhet
     real :: r_assem,  r_photo,   r_uptake
+    real :: thetamin_term
+    real :: TK, PRESS, PKSPA, PKSPC
     real :: tmp_hblt, tmp_Irrad, tmp_irrad_ML,tmp_opacity
     real, dimension(:), Allocatable :: tmp_irr_band 
 
     real,dimension(NUM_PHYTO) :: p_2_n_max
 
+    r_dt = 1.0 / dt
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
@@ -2351,72 +2748,64 @@ contains
     ! Get positive tracer concentrations
     !---------------------------------------------------------------------
 
-    call g_tracer_get_values(tracer_list,'cadet'  ,'field',topaz%f_cadet    ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'cadet_arag' ,'field',topaz%f_cadet_arag ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'cadet_calc' ,'field',topaz%f_cadet_calc ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'fed'    ,'field',topaz%f_fed      ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'fedet'  ,'field',topaz%f_fedet    ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'ldon'   ,'field',topaz%f_ldon     ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'lith'   ,'field',topaz%f_lith     ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'lithdet','field',topaz%f_lithdet  ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'ndet'   ,'field',topaz%f_ndet     ,isd,jsd,ntau=tau,positive=.true.)
-    call g_tracer_get_values(tracer_list,'ndi'    ,'field',topaz%f_n(:,:,:,DIAZO) ,isd,jsd,ntau=tau,positive=.true.)
-    call g_tracer_get_values(tracer_list,'nlg'    ,'field',topaz%f_n(:,:,:,LARGE) ,isd,jsd,ntau=tau,positive=.true.)
-    call g_tracer_get_values(tracer_list,'nsm'    ,'field',topaz%f_n(:,:,:,SMALL) ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'nh4'    ,'field',topaz%f_nh4      ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'nhet'   ,'field',topaz%f_nhet     ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'no3'    ,'field',topaz%f_no3      ,isd,jsd,ntau=tau,positive=.true.)
-    call g_tracer_get_values(tracer_list,'o2'     ,'field',topaz%f_o2      ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'o2'     ,'field',topaz%f_o2       ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'pdet'   ,'field',topaz%f_pdet     ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'po4'    ,'field',topaz%f_po4      ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sdon'   ,'field',topaz%f_sdon     ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'sdop'   ,'field',topaz%f_sdop     ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sidet'  ,'field',topaz%f_sidet    ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sio4'   ,'field',topaz%f_sio4     ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'silg'   ,'field',topaz%f_silg     ,isd,jsd,ntau=tau,positive=.true.)
 
-    call g_tracer_get_values(tracer_list,'sdop'   ,'field',topaz%f_sdop     ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'fedi'   ,'field',topaz%f_fedi     ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'felg'   ,'field',topaz%f_felg     ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'fesm'   ,'field',topaz%f_fesm     ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'pdi'    ,'field',topaz%f_pdi      ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'plg'    ,'field',topaz%f_plg      ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'psm'    ,'field',topaz%f_psm      ,isd,jsd,ntau=tau)
+    call g_tracer_get_values(tracer_list,'fedi'   ,'field',phyto(DIAZO)%f_fe(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'felg'   ,'field',phyto(LARGE)%f_fe(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'fesm'   ,'field',phyto(SMALL)%f_fe(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'ndi'    ,'field',phyto(DIAZO)%f_n(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'nlg'    ,'field',phyto(LARGE)%f_n(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'nsm'    ,'field',phyto(SMALL)%f_n(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'pdi'    ,'field',phyto(DIAZO)%f_p(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'plg'    ,'field',phyto(LARGE)%f_p(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'psm'    ,'field',phyto(SMALL)%f_p(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
 
-    call g_tracer_get_values(tracer_list,'co3_ion','field',topaz%f_co3_ion  ,isd,jsd,ntau=1,positive=.true.)
     call g_tracer_get_values(tracer_list,'cased'  ,'field',topaz%f_cased    ,isd,jsd,ntau=1)
-    call g_tracer_get_values(tracer_list,'fcadet_btm','field',topaz%f_fcadet_btm,isd,jsd,ntau=1)
-    call g_tracer_get_values(tracer_list,'irr_inst','field',topaz%f_irr_inst ,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'co3_ion','field',topaz%f_co3_ion  ,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'cadet_arag_btf','field',topaz%f_cadet_arag_btf,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'cadet_calc_btf','field',topaz%f_cadet_calc_btf,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'lithdet_btf','field',topaz%f_lithdet_btf,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'ndet_btf','field',topaz%f_ndet_btf,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'pdet_btf','field',topaz%f_pdet_btf,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'sidet_btf','field',topaz%f_sidet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'irr_mem' ,'field',topaz%f_irr_mem  ,isd,jsd,ntau=1)
 
-    topaz%irr_mix = topaz%f_irr_inst
     topaz%zt = 0.0
 
     n=DIAZO
-    p_2_n_max(n) = phyto(DIAZO)%p_2_n_assem * (1.0 - phyto(n)%r_other_min -                 &
-         phyto(n)%r_nfix) + topaz%p_2_n_RKR * phyto(n)%r_other_min
+    p_2_n_max(n) = phyto(DIAZO)%p_2_n_assem * (1.0 - phyto(n)%r_other_min - phyto(n)%r_nfix) +      &
+       topaz%p_2_n_RKR * phyto(n)%r_other_min
     do n = 2, NUM_PHYTO   
-       p_2_n_max(n) = phyto(n)%p_2_n_assem * (1.0 - phyto(n)%r_other_min) +                  &
-            topaz%p_2_n_RKR * phyto(n)%r_other_min
+       p_2_n_max(n) = phyto(n)%p_2_n_assem * (1.0 - phyto(n)%r_other_min) +                         &
+          topaz%p_2_n_RKR * phyto(n)%r_other_min
     enddo
 
 
     do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec  
-
-       phyto(DIAZO)%q_fe_2_n(i,j,k) = min(phyto(DIAZO)%fe_2_n_max, max(0.0,              &
-            topaz%f_fedi(i,j,k) / max(epsln,topaz%f_n(i,j,k,DIAZO))))
-
-       phyto(LARGE)%q_fe_2_n(i,j,k) = min(phyto(LARGE)%fe_2_n_max,max(0.0,               &
-            topaz%f_felg(i,j,k) / max(epsln,topaz%f_n(i,j,k,LARGE))))
-
-       phyto(SMALL)%q_fe_2_n(i,j,k) = min(phyto(SMALL)%fe_2_n_max,max(0.0,               &
-            topaz%f_fesm(i,j,k) / max(epsln,topaz%f_n(i,j,k,SMALL))))
-
-       phyto(DIAZO)%q_p_2_n(i,j,k) = min(p_2_n_max(DIAZO), max(0.0,                      &
-            topaz%f_pdi(i,j,k) / max(epsln,topaz%f_n(i,j,k,DIAZO))))
-
-       phyto(LARGE)%q_p_2_n(i,j,k) = min(p_2_n_max(LARGE), max(0.0,                      &
-            topaz%f_plg(i,j,k) / max(epsln,topaz%f_n(i,j,k,LARGE))))
-
-       phyto(SMALL)%q_p_2_n(i,j,k) = min(p_2_n_max(SMALL), max(0.0,                      &
-            topaz%f_psm(i,j,k) / max(epsln,topaz%f_n(i,j,k,SMALL))))
+       do n= 1, NUM_PHYTO   !{
+          phyto(n)%q_fe_2_n(i,j,k) = min(phyto(n)%fe_2_n_max, max(0.0, phyto(n)%f_fe(i,j,k) /       &
+             max(epsln,phyto(n)%f_n(i,j,k))))
+          phyto(n)%q_p_2_n(i,j,k) = min(p_2_n_max(n), max(0.0, phyto(n)%f_p(i,j,k) /                &
+             max(epsln,phyto(n)%f_n(i,j,k))))
+       enddo !} n
        !
        !
        !---------------------------------------------------------------------
@@ -2433,8 +2822,8 @@ contains
        !-----------------------------------------------------------------------
        !
        do n= 2, NUM_PHYTO   !{
-          phyto(n)%no3lim(i,j,k) = topaz%f_no3(i,j,k) / ((phyto(SMALL)%k_no3 + topaz%f_no3(i,j,k)) * (1.0 +     &
-               topaz%f_nh4(i,j,k) / phyto(SMALL)%k_nh4))
+          phyto(n)%no3lim(i,j,k) = topaz%f_no3(i,j,k) / ((phyto(SMALL)%k_no3 + topaz%f_no3(i,j,k)) *&
+             (1.0 + topaz%f_nh4(i,j,k) / phyto(SMALL)%k_nh4))
           phyto(n)%nh4lim(i,j,k) = topaz%f_nh4(i,j,k) / (phyto(SMALL)%k_nh4 + topaz%f_nh4(i,j,k))
        enddo !} n
        !
@@ -2456,8 +2845,9 @@ contains
           !-----------------------------------------------------------------------
           !
           phyto(n)%def_p(i,j,k) = phyto(n)%q_p_2_n(i,j,k) / p_2_n_max(n)
-          phyto(n)%def_fe(i,j,k) = phyto(n)%q_fe_2_n(i,j,k)**2.0 / (phyto(n)%k_fe_2_n**2.0 +  &
-               phyto(n)%q_fe_2_n(i,j,k)**2.0)
+          phyto(n)%def_fe(i,j,k) = phyto(n)%q_fe_2_n(i,j,k) * phyto(n)%q_fe_2_n(i,j,k) /            &
+             (phyto(n)%k_fe_2_n * phyto(n)%k_fe_2_n +                                               &
+             phyto(n)%q_fe_2_n(i,j,k) * phyto(n)%q_fe_2_n(i,j,k))
        enddo !} n
     enddo;  enddo ;  enddo 
 
@@ -2470,8 +2860,8 @@ contains
              n=DIAZO
              phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%po4lim(i,j,k),phyto(n)%felim(i,j,k))
              do n= 2, NUM_PHYTO   !{
-                phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k) +                       &
-                     phyto(n)%nh4lim(i,j,k), phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))
+                phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),   &
+                   phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))
              enddo !} n
           enddo;  enddo ;  enddo !} i,j,k
        else  !{ p:n is static but fe:n is dynamic
@@ -2490,7 +2880,7 @@ contains
              n=DIAZO
              phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%felim(i,j,k), phyto(n)%def_p(i,j,k))
              do n= 2, NUM_PHYTO   !{
-                phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),&
+                phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),   &
                      phyto(n)%felim(i,j,k),phyto(n)%def_p(i,j,k))
              enddo !} n
           enddo;  enddo ;  enddo !} i,j,k
@@ -2499,7 +2889,7 @@ contains
              n=DIAZO
              phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%def_fe(i,j,k), phyto(n)%def_p(i,j,k))
              do n= 2, NUM_PHYTO   !{
-                phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),&
+                phyto(n)%liebig_lim(i,j,k) = min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),   &
                      phyto(n)%def_fe(i,j,k),phyto(n)%def_p(i,j,k))
              enddo !} n
           enddo;  enddo ;  enddo !} i,j,k
@@ -2539,8 +2929,8 @@ contains
              ! at the bottom of layer k.
              tmp_irr_band(nb) = tmp_irr_band(nb) * exp(-tmp_opacity * dzt(i,j,k))
           enddo !}
-          topaz%f_irr_inst(i,j,k) = tmp_Irrad
-          topaz%irr_mix(i,j,k) = tmp_Irrad
+          topaz%irr_inst(i,j,k) = tmp_Irrad * grid_tmask(i,j,k)
+          topaz%irr_mix(i,j,k) = tmp_Irrad * grid_tmask(i,j,k)
           if ((k == 1) .or. (tmp_hblt .lt. hblt_depth(i,j))) then !{
              kblt = kblt+1
              tmp_irrad_ML = tmp_irrad_ML + topaz%irr_mix(i,j,k) * dzt(i,j,k)
@@ -2565,8 +2955,8 @@ contains
        ! Phytoplankton photoadaptation timescale
        !-----------------------------------------------------------------------
        !
-       topaz%f_irr_mem(i,j,k) = topaz%f_irr_mem(i,j,k) + (topaz%irr_mix(i,j,k) - &
-            topaz%f_irr_mem(i,j,k)) * min(1.0,topaz%gamma_irr_mem * dt)
+       topaz%f_irr_mem(i,j,k) = (topaz%f_irr_mem(i,j,k) + (topaz%irr_mix(i,j,k) -                   &
+          topaz%f_irr_mem(i,j,k)) * min(1.0,topaz%gamma_irr_mem * dt)) * grid_tmask(i,j,k)
     enddo; enddo ; enddo !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -2592,7 +2982,9 @@ contains
     ! 3) Values of the maximum Chl:C ratio (thetamax) are increased and
     !    values of alpha decreased to account for the additional iron
     !    term in the theta equation.
-    ! 4) A thetamin value is also incorporated to set a minimum level of
+    ! 4) A thetamin_nolim value is also incorporated to set a minimum level of
+    !    chlorophyll per carbon at high light, high nutrients
+    ! 4) A thetamin value is also incorporated to set an absolute minimum level of
     !    chlorophyll per carbon
     !
     ! While major nutrient limitation is handled through Michaelis Menten
@@ -2640,14 +3032,15 @@ contains
        topaz%f_chl(i,j,k) = 0.0
        do n = 1, NUM_PHYTO   !{
           P_C_m = phyto(n)%liebig_lim(i,j,k) * phyto(n)%P_C_max * topaz%expkT(i,j,k) + epsln
-          phyto(n)%theta(i,j,k) = (phyto(n)%thetamax - topaz%thetamin) / (1.0 +               &
-               (phyto(n)%thetamax - topaz%thetamin) * phyto(n)%alpha *                           &
-               topaz%f_irr_mem(i,j,k) * 0.5 / P_C_m) + topaz%thetamin *                    &
-               phyto(n)%liebig_lim(i,j,k)
-          topaz%f_chl(i,j,k) = topaz%f_chl(i,j,k) + topaz%c_2_n * 12.0e6 *        &
-               phyto(n)%theta(i,j,k) * topaz%f_n(i,j,k,n)
-          phyto(n)%irrlim(i,j,k) = (1.0 - exp(-phyto(n)%alpha * topaz%f_irr_inst(i,j,k) *    &
-               phyto(n)%theta(i,j,k) / P_C_m))
+          thetamin_term = max(0.0, topaz%thetamin_nolim - topaz%thetamin) *                         &
+             phyto(n)%liebig_lim(i,j,k) + topaz%thetamin
+          phyto(n)%theta(i,j,k) = (phyto(n)%thetamax - thetamin_term) / (1.0 +                      &
+             (phyto(n)%thetamax - thetamin_term) * phyto(n)%alpha * topaz%f_irr_mem(i,j,k) * 0.5 /  &
+             P_C_m) + thetamin_term
+          topaz%f_chl(i,j,k) = topaz%f_chl(i,j,k) + topaz%c_2_n * 12.0e6 * phyto(n)%theta(i,j,k) *  &
+             phyto(n)%f_n(i,j,k)
+          phyto(n)%irrlim(i,j,k) = (1.0 - exp(-phyto(n)%alpha * topaz%irr_inst(i,j,k) *             &
+             phyto(n)%theta(i,j,k) / P_C_m))
           phyto(n)%mu(i,j,k) = P_C_m / (1.0 + topaz%zeta) * phyto(n)%irrlim(i,j,k)
        enddo !} n
     enddo;  enddo ; enddo !} i,j,k
@@ -2688,29 +3081,29 @@ contains
        ! Phycol, 41, 1178-1183).
        !
        n=DIAZO
-       jprod_di_tot2nterm=phyto(n)%mu(i,j,k) * topaz%f_n(i,j,k,n) * (1.0 -                          &
-            topaz%f_o2(i,j,k)**topaz%o2_inhib_Di_pow / (topaz%f_o2(i,j,k)**topaz%o2_inhib_Di_pow +          &
-            topaz%o2_inhib_Di_sat**topaz%o2_inhib_Di_pow)) / (topaz%f_no3(i,j,k) + topaz%f_nh4(i,j,k) +       &
-            topaz%k_n_inhib_Di)
+       jprod_di_tot2nterm=phyto(n)%mu(i,j,k) * phyto(n)%f_n(i,j,k) * (1.0 -                         &
+          topaz%f_o2(i,j,k)**topaz%o2_inhib_Di_pow / (topaz%f_o2(i,j,k)**topaz%o2_inhib_Di_pow +  &
+          topaz%o2_inhib_Di_sat**topaz%o2_inhib_Di_pow)) / (topaz%f_no3(i,j,k) +                  &
+          topaz%f_nh4(i,j,k) + topaz%k_n_inhib_Di)
        phyto(n)%jprod_n2(i,j,k) = jprod_di_tot2nterm * topaz%k_n_inhib_Di      
        phyto(n)%jprod_nh4(i,j,k) = jprod_di_tot2nterm * topaz%f_nh4(i,j,k)
        phyto(n)%jprod_no3(i,j,k) = jprod_di_tot2nterm * topaz%f_no3(i,j,k)
        do n = 2, NUM_PHYTO
-          phyto(n)%jprod_no3(i,j,k) = phyto(n)%mu(i,j,k) * topaz%f_n(i,j,k,n) *                      &
-               phyto(n)%no3lim(i,j,k) / (phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k) + epsln)
-          phyto(n)%jprod_nh4(i,j,k) = phyto(n)%mu(i,j,k) * topaz%f_n(i,j,k,n) *                      &
-               phyto(n)%nh4lim(i,j,k) / (phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k) + epsln)
+          phyto(n)%jprod_no3(i,j,k) = phyto(n)%mu(i,j,k) * phyto(n)%f_n(i,j,k) *                    &
+             phyto(n)%no3lim(i,j,k) / (phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k) + epsln)
+          phyto(n)%jprod_nh4(i,j,k) = phyto(n)%mu(i,j,k) * phyto(n)%f_n(i,j,k) *                    &
+             phyto(n)%nh4lim(i,j,k) / (phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k) + epsln)
        enddo !} n
     enddo; enddo ; enddo !} i,j,k
 
     if (topaz%p_2_n_static) then  !{
        do k = 1, nk  ;    do j = jsc, jec ;      do i = isc, iec   !{
           n=DIAZO
-          phyto(n)%jprod_po4(i,j,k) = (phyto(n)%jprod_n2(i,j,k) + phyto(n)%jprod_nh4(i,j,k) + &
-               phyto(n)%jprod_no3(i,j,k)) * phyto(n)%p_2_n_static
+          phyto(n)%jprod_po4(i,j,k) = (phyto(n)%jprod_n2(i,j,k) + phyto(n)%jprod_nh4(i,j,k) +       &
+             phyto(n)%jprod_no3(i,j,k)) * phyto(n)%p_2_n_static
           do n = 1, NUM_PHYTO
-             phyto(n)%jprod_po4(i,j,k) = (phyto(n)%jprod_no3(i,j,k) +                          &
-                  phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%p_2_n_static
+             phyto(n)%jprod_po4(i,j,k) = (phyto(n)%jprod_no3(i,j,k) + phyto(n)%jprod_nh4(i,j,k)) *  &
+                phyto(n)%p_2_n_static
           enddo !} n
        enddo; enddo ; enddo !} i,j,k
     else
@@ -2752,84 +3145,84 @@ contains
 
           n=DIAZO
           r_photo = phyto(n)%plast_2_chl * phyto(n)%theta(i,j,k)
-          r_uptake = (1.0 - min(phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))) *             &
-               phyto(n)%r_uptake_max
+          r_uptake = (1.0 - min(phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))) *                   &
+             phyto(n)%r_uptake_max
           !
           ! diaz phytoplankton are assumed to take up only as much PO4 for assembly as they need
           ! based on their overall nutrient limited growth rate, thereby assuming that they cannot
           ! store extra PO4.
           !
-          r_assem = min(1.0 - phyto(n)%r_nfix - phyto(n)%r_other_min - r_photo - r_uptake,    &
-               (1.0 - phyto(n)%r_other_min) * phyto(n)%liebig_lim(i,j,k))
-          phyto(n)%q_p_2_n_opt(i,j,k) = phyto(n)%p_2_n_assem * r_assem + topaz%p_2_n_uptake * &
-               r_uptake + topaz%p_2_n_photo * r_photo + topaz%p_2_n_RKR * (1.0 -                 &
-               phyto(n)%r_nfix - r_photo - r_uptake - r_assem)
-          phyto(n)%jprod_po4(i,j,k) = min(phyto(n)%po4lim(i,j,k) * phyto(n)%P_C_max *         &
-               topaz%expkT(i,j,k) * topaz%f_n(i,j,k,n), phyto(n)%jprod_n2(i,j,k) + phyto(n)%jprod_no3(i,j,k) +&
-               phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%q_p_2_n_opt(i,j,k)
+          r_assem = min(1.0 - phyto(n)%r_nfix - phyto(n)%r_other_min - r_photo - r_uptake,          &
+             (1.0 - phyto(n)%r_other_min) * phyto(n)%liebig_lim(i,j,k))
+          phyto(n)%q_p_2_n_opt(i,j,k) = phyto(n)%p_2_n_assem * r_assem + topaz%p_2_n_uptake *       &
+             r_uptake + topaz%p_2_n_photo * r_photo + topaz%p_2_n_RKR * (1.0 - phyto(n)%r_nfix -    &
+             r_photo - r_uptake - r_assem)
+          phyto(n)%jprod_po4(i,j,k) = min(phyto(n)%po4lim(i,j,k) * phyto(n)%P_C_max *               &
+             topaz%expkT(i,j,k) * phyto(n)%f_n(i,j,k), phyto(n)%jprod_n2(i,j,k) +                   &
+             phyto(n)%jprod_no3(i,j,k) + phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%q_p_2_n_opt(i,j,k)
           n=LARGE
           r_photo = phyto(n)%plast_2_chl * phyto(n)%theta(i,j,k)
-          r_uptake = (1.0 - min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),              &
+          r_uptake = (1.0 - min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),                    &
                phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))) * phyto(n)%r_uptake_max
           !
           ! large phytoplankton are assumed to take up only as much PO4 for assembly as they need
           ! based on their overall PO4 nutrient limited growth rate, thereby assuming that they can
           ! store extra PO4.
           !
-          r_assem = min(1.0 - phyto(n)%r_other_min - r_photo - r_uptake,                      &
-               (1.0 - phyto(n)%r_other_min) * phyto(n)%po4lim(i,j,k))
-          phyto(n)%q_p_2_n_opt(i,j,k) = phyto(n)%p_2_n_assem * r_assem +                      &
-               topaz%p_2_n_uptake * r_uptake + topaz%p_2_n_photo * r_photo + topaz%p_2_n_RKR *   &
-               (1.0 -r_photo - r_uptake - r_assem)
-          phyto(n)%jprod_po4(i,j,k) = min(phyto(n)%po4lim(i,j,k) * phyto(n)%P_C_max *         &
-               topaz%expkT(i,j,k) * topaz%f_n(i,j,k,n),phyto(n)%jprod_no3(i,j,k) +                            &
-               phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%q_p_2_n_opt(i,j,k)
+          r_assem = min(1.0 - phyto(n)%r_other_min - r_photo - r_uptake,                            &
+             (1.0 - phyto(n)%r_other_min) * phyto(n)%po4lim(i,j,k))
+          phyto(n)%q_p_2_n_opt(i,j,k) = phyto(n)%p_2_n_assem * r_assem +                            &
+             topaz%p_2_n_uptake * r_uptake + topaz%p_2_n_photo * r_photo + topaz%p_2_n_RKR *        &
+             (1.0 -r_photo - r_uptake - r_assem)
+          phyto(n)%jprod_po4(i,j,k) = min(phyto(n)%po4lim(i,j,k) * phyto(n)%P_C_max *               &
+             topaz%expkT(i,j,k) * phyto(n)%f_n(i,j,k),phyto(n)%jprod_no3(i,j,k) +                   &
+             phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%q_p_2_n_opt(i,j,k)
           n=SMALL
           r_photo = phyto(n)%plast_2_chl * phyto(n)%theta(i,j,k)
-          r_uptake = (1.0 - min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),              &
-               phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))) * phyto(n)%r_uptake_max
+          r_uptake = (1.0 - min(phyto(n)%no3lim(i,j,k) + phyto(n)%nh4lim(i,j,k),                    &
+             phyto(n)%po4lim(i,j,k), phyto(n)%felim(i,j,k))) * phyto(n)%r_uptake_max
           !
           ! small phytoplankton are assumed to take up only as much PO4 for assembly as they need
           ! based on their overall nutrient limited growth rate, thereby assuming that they cannot
           ! store extra PO4.
           !
-          r_assem = min(1.0 - phyto(n)%r_other_min - r_photo - r_uptake,                      &
-               (1.0 - phyto(n)%r_other_min) * phyto(n)%liebig_lim(i,j,k))
-          phyto(n)%q_p_2_n_opt(i,j,k) = phyto(n)%p_2_n_assem * r_assem +                      &
-               topaz%p_2_n_uptake * r_uptake + topaz%p_2_n_photo * r_photo + topaz%p_2_n_RKR *   &
-               (1.0 - r_photo - r_uptake - r_assem)
-          phyto(n)%jprod_po4(i,j,k) = min(phyto(n)%po4lim(i,j,k) * phyto(n)%P_C_max *         &
-               topaz%expkT(i,j,k) * topaz%f_n(i,j,k,n), phyto(n)%jprod_no3(i,j,k) +                           &
-               phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%q_p_2_n_opt(i,j,k)
+          r_assem = min(1.0 - phyto(n)%r_other_min - r_photo - r_uptake,                            &
+             (1.0 - phyto(n)%r_other_min) * phyto(n)%liebig_lim(i,j,k))
+          phyto(n)%q_p_2_n_opt(i,j,k) = phyto(n)%p_2_n_assem * r_assem +                            &
+             topaz%p_2_n_uptake * r_uptake + topaz%p_2_n_photo * r_photo + topaz%p_2_n_RKR *        &
+             (1.0 - r_photo - r_uptake - r_assem)
+          phyto(n)%jprod_po4(i,j,k) = min(phyto(n)%po4lim(i,j,k) * phyto(n)%P_C_max *               &
+             topaz%expkT(i,j,k) * phyto(n)%f_n(i,j,k), phyto(n)%jprod_no3(i,j,k) +                  &
+             phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%q_p_2_n_opt(i,j,k)
        enddo; enddo ; enddo !} i,j,k
     endif
 
     if (topaz%fe_2_n_static) then  !{
        do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-          phyto(DIAZO)%jprod_fe(i,j,k) = (phyto(DIAZO)%jprod_n2(i,j,k) +                      &
-               phyto(DIAZO)%jprod_nh4(i,j,k) + phyto(DIAZO)%jprod_no3(i,j,k)) *                  &
-               phyto(DIAZO)%fe_2_n_static
+          phyto(DIAZO)%jprod_fe(i,j,k) = (phyto(DIAZO)%jprod_n2(i,j,k) +                            &
+             phyto(DIAZO)%jprod_nh4(i,j,k) + phyto(DIAZO)%jprod_no3(i,j,k)) *                       &
+             phyto(DIAZO)%fe_2_n_static
           do n = 2, NUM_PHYTO  !{
-             phyto(n)%jprod_Fe(i,j,k) = (phyto(n)%jprod_no3(i,j,k) +                           &
-                  phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%fe_2_n_static
+             phyto(n)%jprod_Fe(i,j,k) = (phyto(n)%jprod_no3(i,j,k) +                                &
+                phyto(n)%jprod_nh4(i,j,k)) * phyto(n)%fe_2_n_static
           enddo
        enddo; enddo ; enddo !} i,j,k
     else
        do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
           do n = 1, NUM_PHYTO  !{
-             phyto(n)%jprod_Fe(i,j,k) = phyto(n)%P_C_max * topaz%expkT(i,j,k) * topaz%f_n(i,j,k,n) *        &
-                  phyto(n)%felim(i,j,k) * (phyto(n)%fe_2_n_max - phyto(n)%q_fe_2_n(i,j,k))
+             phyto(n)%jprod_Fe(i,j,k) = phyto(n)%P_C_max * topaz%expkT(i,j,k) *                     &
+                phyto(n)%f_n(i,j,k) * phyto(n)%felim(i,j,k) * (phyto(n)%fe_2_n_max -                &
+                phyto(n)%q_fe_2_n(i,j,k))
           enddo   !} n
        enddo; enddo ; enddo !} i,j,k
     endif
 
     if (topaz%si_2_n_static) then  !{
        do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec   !{
-          topaz%nLg_diatoms(i,j,k) = topaz%f_n(i,j,k,LARGE) * phyto(LARGE)%silim(i,j,k)
+          topaz%nLg_diatoms(i,j,k) = phyto(LARGE)%f_n(i,j,k) * phyto(LARGE)%silim(i,j,k)
           topaz%q_si_2_n_Lg_diatoms(i,j,k) = phyto(LARGE)%si_2_n_static
-          phyto(LARGE)%jprod_sio4(i,j,k) = (phyto(LARGE)%jprod_no3(i,j,k) +                   &
-               phyto(LARGE)%jprod_nh4(i,j,k)) * phyto(LARGE)%silim(i,j,k) *                      &
-               phyto(LARGE)%si_2_n_static
+          phyto(LARGE)%jprod_sio4(i,j,k) = (phyto(LARGE)%jprod_no3(i,j,k) +                         &
+             phyto(LARGE)%jprod_nh4(i,j,k)) * phyto(LARGE)%silim(i,j,k) * phyto(LARGE)%si_2_n_static
        enddo; enddo ; enddo !} i,j,k
     else
        do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
@@ -2839,12 +3232,12 @@ contains
           ! dinoflagellates, phaeocystis, etc.  SiO4 uptake is limited by the maximum quota
           ! as for PO4 and Fed.
           !
-          topaz%nLg_diatoms(i,j,k) = topaz%f_n(i,j,k,LARGE) * phyto(LARGE)%silim(i,j,k)
-          topaz%q_si_2_n_Lg_diatoms(i,j,k) = min(phyto(LARGE)%si_2_n_max, topaz%f_silg(i,j,k) /            &
-               (topaz%nLg_diatoms(i,j,k) + epsln))
+          topaz%nLg_diatoms(i,j,k) = phyto(LARGE)%f_n(i,j,k) * phyto(LARGE)%silim(i,j,k)
+          topaz%q_si_2_n_Lg_diatoms(i,j,k) = min(phyto(LARGE)%si_2_n_max, topaz%f_silg(i,j,k) /     &
+             (topaz%nLg_diatoms(i,j,k) + epsln))
           phyto(LARGE)%jprod_sio4(i,j,k) = phyto(LARGE)%P_C_max * topaz%expkT(i,j,k) *              &
-               topaz%nLg_diatoms(i,j,k) * phyto(LARGE)%silim(i,j,k) * max(0.0,                   &
-               phyto(LARGE)%si_2_n_max - topaz%q_si_2_n_Lg_diatoms(i,j,k))
+             topaz%nLg_diatoms(i,j,k) * phyto(LARGE)%silim(i,j,k) * max(0.0,                        &
+             phyto(LARGE)%si_2_n_max - topaz%q_si_2_n_Lg_diatoms(i,j,k))
        enddo; enddo ; enddo !} i,j,k
     endif
 
@@ -2879,17 +3272,18 @@ contains
     !-----------------------------------------------------------------------
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       graz_Lg_terms = topaz%lambda0 * topaz%expkT(i,j,k) * ((topaz%f_n(i,j,k,DIAZO) + topaz%f_n(i,j,k,LARGE)) / &
-            topaz%P_star)**(1.0/3.0) * (topaz%f_n(i,j,k,DIAZO) + topaz%f_n(i,j,k,LARGE)) /                    &
-            (topaz%f_n(i,j,k,DIAZO) + topaz%f_n(i,j,k,LARGE) + topaz%phyto_min) /                             &
-            (topaz%f_n(i,j,k,DIAZO)**2 + topaz%f_n(i,j,k,LARGE)**2 + epsln)**(0.5)
-       phyto(DIAZO)%jgraz_n(i,j,k) = min( 1.0 / dt , graz_Lg_terms * topaz%f_n(i,j,k,DIAZO)) *    &
-            topaz%f_n(i,j,k,DIAZO)
-       phyto(LARGE)%jgraz_n(i,j,k) = min( 1.0 / dt , graz_Lg_terms * topaz%f_n(i,j,k,LARGE)) *    &
-            topaz%f_n(i,j,k,LARGE)
-       phyto(SMALL)%jgraz_n(i,j,k) = min( 1.0 / dt , topaz%lambda0 * topaz%expkT(i,j,k) *        &
-            topaz%f_n(i,j,k,SMALL) ** 2.0 / (topaz%P_star * (topaz%f_n(i,j,k,SMALL) + topaz%phyto_min))) *    &
-            topaz%f_n(i,j,k,SMALL)
+       graz_Lg_terms = topaz%lambda0 * topaz%expkT(i,j,k) * ((phyto(DIAZO)%f_n(i,j,k) +             &
+          phyto(LARGE)%f_n(i,j,k)) / topaz%P_star)**(1.0/3.0) * (phyto(DIAZO)%f_n(i,j,k) +          &
+          phyto(LARGE)%f_n(i,j,k)) / (phyto(DIAZO)%f_n(i,j,k) + phyto(LARGE)%f_n(i,j,k) +           &
+          topaz%phyto_min) / sqrt(phyto(DIAZO)%f_n(i,j,k) * phyto(DIAZO)%f_n(i,j,k) +               &
+          phyto(LARGE)%f_n(i,j,k) * phyto(LARGE)%f_n(i,j,k) + epsln)
+       phyto(DIAZO)%jgraz_n(i,j,k) = min( r_dt , graz_Lg_terms * phyto(DIAZO)%f_n(i,j,k)) *         &
+          phyto(DIAZO)%f_n(i,j,k)
+       phyto(LARGE)%jgraz_n(i,j,k) = min( r_dt , graz_Lg_terms * phyto(LARGE)%f_n(i,j,k)) *         &
+          phyto(LARGE)%f_n(i,j,k)
+       phyto(SMALL)%jgraz_n(i,j,k) = min( r_dt , topaz%lambda0 * topaz%expkT(i,j,k) *               &
+          phyto(SMALL)%f_n(i,j,k) * phyto(SMALL)%f_n(i,j,k) / (topaz%P_star *                       &
+          (phyto(SMALL)%f_n(i,j,k) + topaz%phyto_min))) * phyto(SMALL)%f_n(i,j,k)
     enddo; enddo ; enddo !} i,j,k
 
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
@@ -2899,8 +3293,8 @@ contains
           jgraz_n = jgraz_n + phyto(n)%jgraz_n(i,j,k)
           jgraz_p = jgraz_p + phyto(n)%q_p_2_n(i,j,k) * phyto(n)%jgraz_n(i,j,k)
        enddo   !} n
-       topaz%jprod_ndet(i,j,k) = (phyto(SMALL)%fdet0 * (phyto(SMALL)%jgraz_n(i,j,k) +         &
-            phyto(DIAZO)%jgraz_n(i,j,k)) + phyto(LARGE)%fdet0 * phyto(LARGE)%jgraz_n(i,j,k)) *  &
+       topaz%jprod_ndet(i,j,k) = (phyto(SMALL)%fdet0 * (phyto(SMALL)%jgraz_n(i,j,k) +               &
+          phyto(DIAZO)%jgraz_n(i,j,k)) + phyto(LARGE)%fdet0 * phyto(LARGE)%jgraz_n(i,j,k)) *        &
             (1.0 - topaz%phi_sdon - topaz%phi_ldon) * exp(topaz%kappa_remin * Temp(i,j,k))
        topaz%frac_det_prod(i,j,k) = topaz%jprod_ndet(i,j,k) / (jgraz_n + epsln)
        p_lim_nhet = min(1.0, jgraz_p / (jgraz_n + epsln) / topaz%p_2_n_RKR)
@@ -2908,21 +3302,21 @@ contains
        topaz%jsdon(i,j,k) = topaz%phi_sdon * jgraz_n
        topaz%jsdop(i,j,k) = topaz%phi_sdop * jgraz_p
        topaz%jldon(i,j,k) = topaz%phi_ldon * jgraz_n * p_lim_nhet
-       topaz%jprod_nhet(i,j,k) = (jgraz_n - topaz%jprod_ndet(i,j,k) - topaz%jsdon(i,j,k) -    &
-            topaz%jldon(i,j,k)) * topaz%phi_nhet * p_lim_nhet
-       topaz%jnh4_graz(i,j,k) = jgraz_n - topaz%jprod_ndet(i,j,k) - topaz%jsdon(i,j,k) -      &
-            topaz%jldon(i,j,k) - topaz%jprod_nhet(i,j,k)
-       topaz%jpo4_graz(i,j,k) = jgraz_p - topaz%jprod_pdet(i,j,k) - topaz%jsdop(i,j,k) -      &
-            (topaz%jldon(i,j,k) + topaz%jprod_nhet(i,j,k)) * topaz%p_2_n_RKR
+       topaz%jprod_nhet(i,j,k) = (jgraz_n - topaz%jprod_ndet(i,j,k) - topaz%jsdon(i,j,k) -          &
+          topaz%jldon(i,j,k)) * topaz%phi_nhet * p_lim_nhet
+       topaz%jnh4_graz(i,j,k) = jgraz_n - topaz%jprod_ndet(i,j,k) - topaz%jsdon(i,j,k) -            &
+          topaz%jldon(i,j,k) - topaz%jprod_nhet(i,j,k)
+       topaz%jpo4_graz(i,j,k) = jgraz_p - topaz%jprod_pdet(i,j,k) - topaz%jsdop(i,j,k) -            &
+          (topaz%jldon(i,j,k) + topaz%jprod_nhet(i,j,k)) * topaz%p_2_n_RKR
        topaz%jnhet(i,j,k) = topaz%gamma_nhet *topaz%expkT(i,j,k) * topaz%f_nhet(i,j,k) 
-       topaz%jnitrif(i,j,k) = topaz%gamma_nitrif * topaz%expkT(i,j,k) * topaz%f_nh4(i,j,k) *              &
-            phyto(SMALL)%nh4lim(i,j,k) * (1.0 - topaz%f_irr_mem(i,j,k) /                  &
-            (topaz%irr_inhibit + topaz%f_irr_mem(i,j,k)))
+       topaz%jnitrif(i,j,k) = topaz%gamma_nitrif * topaz%expkT(i,j,k) * topaz%f_nh4(i,j,k) *        &
+          phyto(SMALL)%nh4lim(i,j,k) * (1.0 - topaz%f_irr_mem(i,j,k) /                              &
+          (topaz%irr_inhibit + topaz%f_irr_mem(i,j,k)))
        !
        ! Lithogenic material is assumed to get converted into the sinking particulate phase
        ! through incorporation into mesozooplankton fecal pellets with an efficiency of phi_lith.
        !
-       topaz%jprod_lithdet(i,j,k) = (phyto(LARGE)%jgraz_n(i,j,k) / (topaz%f_n(i,j,k,LARGE) +        &
+       topaz%jprod_lithdet(i,j,k) = (phyto(LARGE)%jgraz_n(i,j,k) / (phyto(LARGE)%f_n(i,j,k) +       &
             epsln) * topaz%phi_lith + topaz%k_lith) * topaz%f_lith(i,j,k)
     enddo; enddo ; enddo !} i,j,k
 
@@ -2937,41 +3331,50 @@ contains
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        !
        !---------------------------------------------------------------------
-       ! CaCO3 solubility taken from Sayles, F. L. (1985, CaCO3 solubility in marine 
-       ! sediments: evidence for equilibrium and non-equilibrium behavior, Geochim. 
-       ! Cosmochim. Acta, 49, 877-888) in which:
-       !
-       !   co3_solubility = ksp_caco3*exp(-deltaV / R / T * press / 10) / 
-       !                                              (Ca_ave * S / S_ave / rho / rho)
-       !
-       ! where deltaV = -41.2 cm^3/mol, R = 82.057 cm^3 mol-1 degree K-1, Ca_ave = 
-       ! 0.010233, S_ave = 35 and rho = 1.025 to give the accumulated constants: 
-       ! -deltaV/(R*10) = 0.05021, S_ave/Ca_ave = 3420.31 and unit conversion for rho^2 of 1e-6.
+       ! CaCO3 solubility taken from the UNESCO 87 recommendation (Mucci for 1-atm solubility with a
+       ! fudge factor, times Millero's pressure dependence) gives a result
+       ! that splits the difference between the low-end 
+       ! solublities (Mucci/Morse) and the high-end solubilities (Ingle/
+       ! Plath).  Following unesco, this calculation has a fudge factor built
+       ! in that will give 4.5e-7 at 2c, 35 psu, 1-atm.  This is because 
+       ! the UNESCO group couldn't decide between the low solubility 
+       ! of Mucci (4.3 e-7) and the higher solubility of Plath (4.7e-7) and so 
+       ! they just split the difference and called it good.
+       ! The salinity normalization for Ca++ breaks down below S = 5.
        !---------------------------------------------------------------------
        !
-
-       topaz%co3_solubility(i,j,k) = max(topaz%ksp_caco3 * exp ( 0.05021 / (Temp(i,j,k) +    &
-            273.15) * topaz%zt(i,j,k)) * 3.42031e-3 * topaz%Rho_0 * topaz%Rho_0 / max(epsln,          &
-            Salt(i,j,k)),epsln)
+       TK = Temp(i,j,k) + 273.15
+       PRESS = 0.1016 * topaz%zt(i,j,k) + 1.013
+       PKSPA = 171.945 + 0.077993 * TK - 2903.293 / TK - 71.595 * log10(TK) - (-0.068393 + 1.7276e-3 * &
+          TK + 88.135 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.10018 * max(epsln, Salt(i,j,k)) -      &
+          5.9415e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 2.8 - 0.5304 * Temp(i,j,k)) *   &
+          (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
+          (PRESS - 1.013) / (382.92 * TK)
+       topaz%co3_sol_arag(i,j,k) = 10**(-PKSPA) / (2.937d-4 * max(5.0, Salt(i,j,k)))
+       PKSPC = 171.9065 + 0.077993 * TK - 2839.319 / TK - 71.595 * log10(TK) - (-0.77712 + 2.8426e-3 * &
+          TK + 178.34 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.07711 * max(epsln, Salt(i,j,k)) -      &
+          4.1249e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 0.5304 * Temp(i,j,k)) *         &
+          (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
+          (PRESS - 1.013) / (382.92 * TK)
+       topaz%co3_sol_calc(i,j,k) = 10**(-PKSPC) / (2.937d-4 * max(5.0, Salt(i,j,k)))
     enddo; enddo ; enddo !} i,j,k
 
     if (topaz%ca_2_n_static) then  !{
        do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-          topaz%jprod_cadet(i,j,k) = (phyto(DIAZO)%jgraz_n(i,j,k) +                           &
-               phyto(LARGE)%jgraz_n(i,j,k) + phyto(SMALL)%jgraz_n(i,j,k)) *                      &
-               topaz%ca_2_n_het_static
+          topaz%jprod_cadet_arag(i,j,k) = epsln
+          topaz%jprod_cadet_calc(i,j,k) = (phyto(DIAZO)%jgraz_n(i,j,k) + phyto(LARGE)%jgraz_n(i,j,k) + &
+             phyto(SMALL)%jgraz_n(i,j,k)) * topaz%ca_2_n_het_static + epsln
        enddo; enddo ; enddo !} i,j,k
     else
        do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-          ! CaCO3 production is assumed to be proportional to both calcite supersaturation and
-          ! mesozooplankton grazing where a relative transfer efficiency of 0.1 is assumed for the 
-          ! Diazotroph and Small to microzooplankton to mesozooplankton.  This was done to agree with
-          ! observations of a tropical maximum in the Ca:Corg ratio (Sarmiento et al., 2002; 
-          ! Jin et al., 2006)
-          topaz%jprod_cadet(i,j,k) = (phyto(LARGE)%jgraz_n(i,j,k) + 0.01 *                    &
-               (phyto(DIAZO)%jgraz_n(i,j,k) + phyto(SMALL)%jgraz_n(i,j,k))) * topaz%ca_2_n_het * &
-               min(topaz%caco3_sat_max, max(0.0,topaz%f_co3_ion(i,j,k) / topaz%co3_solubility(i,j,k) -  &
-               1.0))
+          ! Aragonite and Calcite CaCO3 production is assumed to be proportional to both calcite supersaturation and
+          ! microzooplankton grazing after the calcite formulation of Dunne et al. (in prep)
+          topaz%jprod_cadet_arag(i,j,k) = phyto(LARGE)%jgraz_n(i,j,k) * topaz%ca_2_n_arag *         &
+             min(topaz%caco3_sat_max, max(0.0,topaz%f_co3_ion(i,j,k) /                              &
+             topaz%co3_sol_arag(i,j,k) - 1.0)) + epsln
+          topaz%jprod_cadet_calc(i,j,k) = phyto(SMALL)%jgraz_n(i,j,k) * topaz%ca_2_n_calc *         &
+             exp(-0.0539 * Temp(i,j,k)) * min(topaz%caco3_sat_max, max(0.0, topaz%f_co3_ion(i,j,k) /&
+             topaz%co3_sol_calc(i,j,k) - 1.0)) + epsln
        enddo; enddo ; enddo !} i,j,k
     endif
     !
@@ -2995,10 +3398,10 @@ contains
        enddo   !} n
        topaz%jprod_fedet(i,j,k) = topaz%frac_det_prod(i,j,k) * jgraz_fe
        topaz%jfe_graz(i,j,k) = jgraz_fe - topaz%jprod_fedet(i,j,k)
-       phyto(LARGE)%jgraz_sio2(i,j,k) = phyto(LARGE)%jgraz_n(i,j,k) *                        &
-            topaz%f_siLg(i,j,k) / (topaz%f_n(i,j,k,LARGE) + epsln)
-       topaz%jdiss_sio2(i,j,k) = phyto(LARGE)%jgraz_sio2(i,j,k) *                            &
-            exp(-topaz%q_si_2_n_Lg_diatoms(i,j,k) / (topaz%q_si_2_n_diss * topaz%expkT(i,j,k)))
+       phyto(LARGE)%jgraz_sio2(i,j,k) = phyto(LARGE)%jgraz_n(i,j,k) * topaz%f_siLg(i,j,k) /         &
+          (phyto(LARGE)%f_n(i,j,k) + epsln)
+       topaz%jdiss_sio2(i,j,k) = phyto(LARGE)%jgraz_sio2(i,j,k) *                                   &
+          exp(-topaz%q_si_2_n_Lg_diatoms(i,j,k) / (topaz%q_si_2_n_diss * topaz%expkT(i,j,k)))
     enddo; enddo ; enddo !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3007,10 +3410,12 @@ contains
     !
     !
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec  !{
-       topaz%jcadet(i,j,k) = topaz%gamma_cadet * (1.0 - min(1.0, topaz%f_co3_ion(i,j,k) /           &
-            topaz%co3_solubility(i,j,k))) * topaz%f_cadet(i,j,k)
+       topaz%jcadet_arag(i,j,k) = topaz%gamma_cadet_arag * max(0.0, 1.0 - topaz%f_co3_ion(i,j,k) /  &
+          topaz%co3_sol_arag(i,j,k)) * topaz%f_cadet_arag(i,j,k)
+       topaz%jcadet_calc(i,j,k) = topaz%gamma_cadet_calc * max(0.0, 1.0 - topaz%f_co3_ion(i,j,k) /  &
+          topaz%co3_sol_calc(i,j,k)) * topaz%f_cadet_calc(i,j,k)
        topaz%jsidet(i,j,k) = topaz%gamma_sidet * topaz%f_sidet(i,j,k)
-       topaz%jdenit_wc(i,j,k) = 0.0
+       topaz%jno3denit_wc(i,j,k) = 0.0
        !
        !---------------------------------------------------------------------
        ! Remineralization of unprotected organic material and
@@ -3022,19 +3427,22 @@ contains
        !---------------------------------------------------------------------
        !
        if (topaz%f_o2(i,j,k) .gt. topaz%o2_min) then  !{
-          topaz%jndet(i,j,k) = topaz%gamma_ndet * topaz%f_o2(i,j,k) / (topaz%k_o2 + topaz%f_o2(i,j,k)) *  &
-               max(0.0, topaz%f_ndet(i,j,k) - (topaz%rpcaco3 * topaz%f_cadet(i,j,k) + topaz%rplith *           &
-               topaz%f_lithdet(i,j,k) + topaz%rpsio2 * topaz%f_sidet(i,j,k)))
+          topaz%jndet(i,j,k) = topaz%gamma_ndet * topaz%f_o2(i,j,k) / (topaz%k_o2 +                 &
+             topaz%f_o2(i,j,k)) * max(0.0, topaz%f_ndet(i,j,k) - (topaz%rpcaco3 *                   &
+             (topaz%f_cadet_arag(i,j,k)+topaz%f_cadet_calc(i,j,k)) +                                &
+             topaz%rplith * topaz%f_lithdet(i,j,k) + topaz%rpsio2 * topaz%f_sidet(i,j,k)))
        else !}{
           !
           !---------------------------------------------------------------------
-          !   Under suboxic conditions
+          !   Under suboxic conditions, including NO3 limitation
           !---------------------------------------------------------------------
           !
-          topaz%jndet(i,j,k) = topaz%gamma_ndet * topaz%o2_min / (topaz%k_o2 + topaz%o2_min) *&
-               max(0.0, topaz%f_ndet(i,j,k) - (topaz%rpcaco3 * topaz%f_cadet(i,j,k) + topaz%rplith *           &
-               topaz%f_lithdet(i,j,k) + topaz%rpsio2 * topaz%f_sidet(i,j,k)))
-          topaz%jdenit_wc(i,j,k) = topaz%jndet(i,j,k) * topaz%n_2_n_denit
+          topaz%jndet(i,j,k) = topaz%gamma_ndet * topaz%o2_min / (topaz%k_o2 + topaz%o2_min) *      &
+             topaz%f_no3(i,j,k) / (phyto(SMALL)%k_no3 + topaz%f_no3(i,j,k)) *                       &
+             max(0.0, topaz%f_ndet(i,j,k) - (topaz%rpcaco3 * (topaz%f_cadet_arag(i,j,k) +           &
+             topaz%f_cadet_calc(i,j,k)) + topaz%rplith * topaz%f_lithdet(i,j,k) + topaz%rpsio2 *    &
+             topaz%f_sidet(i,j,k)))
+          topaz%jno3denit_wc(i,j,k) = topaz%jndet(i,j,k) * topaz%n_2_n_denit
        endif !}
        !
        !---------------------------------------------------------------------
@@ -3050,21 +3458,33 @@ contains
        !
        !---------------------------------------------------------------------
        ! Calculate free and inorganically associated iron concentration for scavenging
+       ! based on chemical equilibrium with ligand bound iron using the following
+       ! three equations:
+       ! kfe_eq_lig = [Feprime] * [L] / [FeL]
+       ! [Fed] = [Feprime] + [FeL]
+       ! [Ltotal] = [L] + [FeL] = felig_bkg + felig_2_don * (ldon+sdon) 
+       !
+       ! These equations are solved for Feprime using the quadratic formula:
+       ! (-b +- sqrt(b^2 - 4ac))/(2a) where:
+       ! a = kfe_eq_lig
+       ! b = 1.0 + kfe_eq_lig * (felig_bkg + felig_2_don * (ldon + sdon) - fed)
+       ! c = -1
        !---------------------------------------------------------------------
        !
-       feprime = 1.0 + topaz%kfe_eq_lig * (topaz%felig_bkg + topaz%felig_2_don *             &
-            (topaz%f_ldon(i,j,k) + topaz%f_sdon(i,j,k)) - topaz%f_fed(i,j,k))
-       feprime = (-feprime + (feprime * feprime + 4.0 * topaz%kfe_eq_lig *                   &
-            topaz%f_fed(i,j,k))**(0.5)) / (2.0 * topaz%kfe_eq_lig)
+       feprime = 1.0 + topaz%kfe_eq_lig * (topaz%felig_bkg + topaz%felig_2_don *                    &
+          (topaz%f_ldon(i,j,k) + topaz%f_sdon(i,j,k)) - topaz%f_fed(i,j,k))
+       feprime = (-feprime + sqrt(feprime * feprime + 4.0 * topaz%kfe_eq_lig *                      &
+          topaz%f_fed(i,j,k))) / (2.0 * topaz%kfe_eq_lig)
        !
        !---------------------------------------------------------------------
        ! The absolute first order rate constant is never allowed to be greater than
        ! 1/dt for numerical stability.
        !---------------------------------------------------------------------
        !
-       topaz%jfe_ads(i,j,k) = min(1.0/dt, topaz%kfe_org * (topaz%f_ndet(i,j,k) * topaz%mass_2_n + &
-            topaz%kfe_bal * (topaz%f_sidet(i,j,k) * 60.0 + topaz%f_cadet(i,j,k) * 100.0 + topaz%f_lithdet(i,j,k))) * &
-            topaz%Rho_0 * topaz%wsink + topaz%kfe_2nd_order * feprime) * feprime
+       topaz%jfe_ads(i,j,k) = min(r_dt, topaz%kfe_org * (topaz%f_ndet(i,j,k) * topaz%mass_2_n +     &
+          topaz%kfe_bal * (topaz%f_sidet(i,j,k) * 60.0 + (topaz%f_cadet_arag(i,j,k) +               &
+          topaz%f_cadet_calc(i,j,k)) * 100 + topaz%f_lithdet(i,j,k))) * topaz%Rho_0 * topaz%wsink + &
+          topaz%kfe_2nd_order * feprime) * feprime
        topaz%jfe_des(i,j,k)=topaz%kfe_des * topaz%f_fedet(i,j,k)
        !
        !---------------------------------------------------------------------
@@ -3073,12 +3493,14 @@ contains
        !---------------------------------------------------------------------
        !
        if (topaz%fe_ballast_assoc) then  !{
-          topaz%jfedet(i,j,k) = (topaz%jndet(i,j,k) * topaz%mass_2_n + topaz%jsidet(i,j,k) *  &
-               60.0 + topaz%jcadet(i,j,k) * 100.0) / (topaz%f_ndet(i,j,k) * topaz%mass_2_n +            &
-               topaz%f_sidet(i,j,k) * 60.0 + topaz%f_cadet(i,j,k) * 100.0 + topaz%f_lith(i,j,k) + epsln) *            &
-               topaz%f_fedet(i,j,k)
+          topaz%jfedet(i,j,k) = (topaz%jndet(i,j,k) * topaz%mass_2_n + topaz%jsidet(i,j,k) * 60.0 + &
+             (topaz%jcadet_arag(i,j,k) + topaz%jcadet_calc(i,j,k)) * 100.0) /                       &
+             (topaz%f_ndet(i,j,k) * topaz%mass_2_n + topaz%f_sidet(i,j,k) * 60.0 +                  &
+             (topaz%f_cadet_arag(i,j,k) + topaz%f_cadet_calc(i,j,k)) * 100.0 +                      &
+             topaz%f_lithdet(i,j,k) + epsln) * topaz%f_fedet(i,j,k)
        else !}{
-          topaz%jfedet(i,j,k) = topaz%jndet(i,j,k) / (topaz%f_ndet(i,j,k) + epsln) * topaz%f_fedet(i,j,k)
+          topaz%jfedet(i,j,k) = topaz%jndet(i,j,k) / (topaz%f_ndet(i,j,k) + epsln) *                &
+             topaz%f_fedet(i,j,k)
        endif !}
        !
        !---------------------------------------------------------------------
@@ -3089,8 +3511,8 @@ contains
        ! Apply sediment flux to all ocean cells adjacent or corner to land
        !---------------------------------------------------------------------
        !
-       topaz%jfe_coast(i,j,k) = topaz%fe_coast * mask_coast(i,j) *                     &
-            grid_tmask(i,j,k) / sqrt(grid_dat(i,j))
+       topaz%jfe_coast(i,j,k) = topaz%fe_coast * mask_coast(i,j) * grid_tmask(i,j,k) /              &
+            sqrt(grid_dat(i,j))
     enddo; enddo ; enddo  !} i,j,k
 
     !
@@ -3105,19 +3527,34 @@ contains
           !
           !---------------------------------------------------------------------
           ! Subtract sedimentary denitrification after Middelburg et al. 1996,
-          ! GBC, 10, 661-673
+          ! GBC, 10, 661-673 with additional limitation terms to disallow the consumption
+          ! of both more ndet than the incoming flux (wsink*ndet) and more no3 that is available in the
+          ! lowest 1 m (no3*rho*1m/dt).  The original algorithm was edited to add a maximum flux input
+          ! value in order toavoid extrapolatin gthe polynomial into unobserved space which would 
+          ! otherwise give low denitrification rates at very high bottom fluxes.
           !---------------------------------------------------------------------
           !
-          if (topaz%f_ndet(i,j,k) .gt. 0.0 .and. topaz%wsink .gt. 0.0) then !{
-             ! convert flux to umol C cm-2 d-1
-             log_btm_flx = log10(topaz%f_ndet(i,j,k) * topaz%Rho_0 * topaz%wsink * topaz%c_2_n *      &
-                  sperd * 100.0)
-             topaz%fdenit_sed(i,j) = min(topaz%f_ndet(i,j,k) * topaz%Rho_0 * topaz%wsink,             &
-                  10**(-0.9543 + 0.7662 * log_btm_flx - 0.235 * log_btm_flx**2.0) /               &
-                  (topaz%c_2_n * sperd * 100.0)) * topaz%n_2_n_denit * topaz%f_no3(i,j,k) /              &
-                  (phyto(SMALL)%k_no3 + topaz%f_no3(i,j,k))
+          if (topaz%f_ndet_btf(i,j,1) .gt. 0.0) then !{
+          !
+          ! Convert previous sediment N inventory into a total flux equivalent assuming a
+          ! 10 cm thick sediment layer and  convert flux to umol C cm-2 d-1 and add max value.
+             log_btm_flx = log10(min(43.0,topaz%f_ndet_btf(i,j,1) * topaz%c_2_n * sperd * 100.0))
+             topaz%fno3denit_sed(i,j) = min(topaz%f_no3(i,j,k) * topaz%Rho_0 * r_dt,                &
+                min(topaz%f_ndet_btf(i,j,1) * topaz%n_2_n_denit, 10**(-0.9543 + 0.7662 *            &
+                log_btm_flx - 0.235 * log_btm_flx * log_btm_flx) / (topaz%c_2_n * sperd * 100.0) *  &
+                topaz%n_2_n_denit * topaz%f_no3(i,j,k) / (phyto(SMALL)%k_no3 + topaz%f_no3(i,j,k))))
+             if (topaz%f_o2(i,j,k) .gt. topaz%o2_min) then  !{
+                topaz%fnoxic_sed(i,j) = max(0.0, min(topaz%f_o2(i,j,k) * topaz%Rho_0 * r_dt,        &
+                  topaz%f_ndet_btf(i,j,1) - topaz%fno3denit_sed(i,j) / topaz%n_2_n_denit))
+             else
+                topaz%fnoxic_sed(i,j) = 0.0
+             endif !}
+             topaz%fnfeso4red_sed(i,j) = max(0.0, topaz%f_ndet_btf(i,j,1) - topaz%fnoxic_sed(i,j) - &
+                topaz%fno3denit_sed(i,j) / topaz%n_2_n_denit)
           else
-             topaz%fdenit_sed(i,j) = 0.0
+             topaz%fnfeso4red_sed(i,j) = 0.0
+             topaz%fno3denit_sed(i,j) = 0.0
+             topaz%fnoxic_sed(i,j) = 0.0
           endif !}
           !
           !---------------------------------------------------------------------
@@ -3125,59 +3562,70 @@ contains
           ! supply
           !---------------------------------------------------------------------
           !
-          topaz%ffe_sed(i,j) = topaz%fe_2_n_sed * topaz%f_ndet(i,j,k) * topaz%Rho_0 * topaz%wsink
+          topaz%ffe_sed(i,j) = topaz%fe_2_n_sed * topaz%f_ndet_btf(i,j,1)
           !
           !---------------------------------------------------------------------
-          ! Determine the flux of CaCO3 retained in sediment using the metamodel calibrated to the
-          ! Hales (2003) steady state model of CaCO3 burial where spery*100 converts from
-          ! mol m-2 s-1 to g m-2 y-1
+          ! Determine the flux of CaCO3 retained in sediment using the Dunne et al (in prep)
+          ! metamodel calibrated to the Hales (2003) steady state model of CaCO3 burial
+          ! using bottom water omega and organic-based dissolution and ultimate burial of
+          ! sediment CaCO3 assuming a 10 cm mixed layer advecting downward at lithogenic
+          ! and CaCO3-based sediment accumulation rate assuming a density of 2.7 g cm-3,
+          ! a porosity of 0.7 and molecular weight of 100 to give: 
+          ! 2.7e6*(1-0.7)/100 = 8.1e3 mol m-3.  At steady state, burial
+          ! efficiency (f = fcased_burial/f_cadet_calc_btf) reduces to:
+          !
+          !  f = min(f_cadet_calc_btf,0.165 * f_ndet_btf * topaz%c_2_n) / (0.1244 / spery * max(0.0,
+          !      1.0 - f_co3_ion / co3_sol_calc + 4.38 * f_ndet_btf * c_2_n * spery)**2.91 *
+          !      (f_lithdet * spery + f_cadet_calc_btf * 100.0 * spery)**-2.55 + f_cadet_calc_btf)
+          !
+          ! which can be used to generate a useful initial condition.
+          ! For numerical stability, the redissolution rate is limited to only consume less than
+          ! half of the sediment calcite in a time step.
+          ! For bulk consistency with the mechanisms of Hales (2003), the ability of organic
+          ! flux to instantaneously consume calcite is limited to half the calcite flux. 
           !---------------------------------------------------------------------
           !
-          topaz%fcaco3_sed(i,j) = topaz%f_fcadet_btm(i,j,1) * min(1.0, max(0.01,        &
-               (topaz%f_fcadet_btm(i,j,1) * spery * 100.0) / (16.0 +                       &
-               (topaz%f_fcadet_btm(i,j,1) * spery * 100.0)) *                              &
-               (topaz%f_co3_ion(i,j,k) / topaz%co3_solubility(i,j,k) * 1.418)**3.96 + 0.027 *           &
-               log(max(0.1, topaz%f_lithdet(i,j,k) * topaz%wsink * spery * 100.0)) - 0.072))
-          !
-          !---------------------------------------------------------------------
-          ! Allow slow dissolution and ultimate burial of sediment CaCO3 assuming a 10 cm mixed
-          ! layer advecting downward at lithogenic and CaCO3-based sediment accumulation rate
-          ! assuming a density of 2.7 g cm-3 and a porosity of 0.7 - 2.7e6*(1-0.7)=8.1e5.
-          !---------------------------------------------------------------------
-          !
-          topaz%fcaco3_redis(i,j) = topaz%f_cased(i,j,1) * max(0.0, 1.0 -               &
-               topaz%f_co3_ion(i,j,k) / topaz%co3_solubility(i,j,k)) * topaz%gamma_cased_dis * 0.1
-          topaz%fcaco3_burial(i,j) = topaz%f_cased(i,j,1) *                       &
-               (topaz%f_lithdet(i,j,k) * topaz%wsink + topaz%fcaco3_sed(i,j) * 100.0) / 8.1e5
-
-          topaz%f_cased(i,j,1) = max(0.0,topaz%f_cased(i,j,1) +       &
-               (topaz%fcaco3_redis(i,j) - topaz%fcaco3_burial(i,j)) * 10.0 * dt)
+          topaz%fcased_redis(i,j) = max(0.0, min(0.5 * topaz%f_cased(i,j,1) * r_dt, min(0.5 *       &
+             topaz%f_cadet_calc_btf(i,j,1), 0.165 * topaz%f_ndet_btf(i,j,1) * topaz%c_2_n) +        &
+             0.1244 / spery * max(0.0, 1.0 - topaz%f_co3_ion(i,j,k) / topaz%co3_sol_calc(i,j,k) +   &
+             4.38 * topaz%f_ndet_btf(i,j,1) * topaz%c_2_n * spery)**(2.91) *                        &
+             max(1.0, topaz%f_lithdet_btf(i,j,1) * spery + topaz%f_cadet_calc_btf(i,j,1) * 100.0 *  &
+             spery)**(-2.55) * topaz%f_cased(i,j,1)))
+          topaz%fcased_burial(i,j) = max(0.0, topaz%f_cadet_calc_btf(i,j,1) * topaz%f_cased(i,j,1) /&
+             8.1e3)
+          topaz%f_cased(i,j,1) = topaz%f_cased(i,j,1) + (topaz%f_cadet_calc_btf(i,j,1) -            &
+             topaz%fcased_redis(i,j) - topaz%fcased_burial(i,j)) / topaz%z_sed * dt *               &
+             grid_tmask(i,j,k)
           !
           !-----------------------------------------------------------------------
           !     Calculate external bottom fluxes for tracer_vertdiff
           !-----------------------------------------------------------------------
           !
-          topaz%b_alk(i,j) = - (topaz%f_fcadet_btm(i,j,1) - topaz%fcaco3_sed(i,j)) -  &
-               topaz%fcaco3_redis(i,j) + topaz%fdenit_sed(i,j)
-
-          topaz%b_dic(i,j) = - (topaz%f_fcadet_btm(i,j,1) - topaz%fcaco3_sed(i,j)) -  &
-               topaz%fcaco3_redis(i,j) - topaz%fdenit_sed(i,j) / topaz%n_2_n_denit * topaz%c_2_n    
-
+          topaz%b_alk(i,j) = - 2.0 * (topaz%fcased_redis(i,j) + topaz%f_cadet_arag_btf(i,j,1)) -    &
+             topaz%f_ndet_btf(i,j,1) + topaz%alk_2_n_denit * topaz%fno3denit_sed(i,j)
+          topaz%b_dic(i,j) = - topaz%fcased_redis(i,j) - topaz%f_cadet_arag_btf(i,j,1) -            &
+             topaz%f_ndet_btf(i,j,1) * topaz%c_2_n
           topaz%b_fed(i,j) = - topaz%ffe_sed(i,j)
-          topaz%b_ndet(i,j)= topaz%fdenit_sed(i,j) / topaz%n_2_n_denit
-          topaz%b_no3(i,j) = topaz%fdenit_sed(i,j)
-          topaz%b_pdet(i,j)= topaz%b_ndet(i,j) * topaz%f_pdet(i,j,k) / (topaz%f_ndet(i,j,k) + epsln)
-          topaz%b_po4(i,j) = - topaz%b_pdet(i,j)
+          topaz%b_nh4(i,j) = - topaz%f_ndet_btf(i,j,1)
+          topaz%b_no3(i,j) = topaz%fno3denit_sed(i,j)
+          topaz%b_o2(i,j)  = topaz%o2_2_nh4 * (topaz%fnoxic_sed(i,j) + topaz%fnfeso4red_sed(i,j))
+          topaz%b_po4(i,j) = - topaz%f_pdet_btf(i,j,1)
+          topaz%b_sio4(i,j)= - topaz%f_sidet_btf(i,j,1)
        endif !}
     enddo; enddo  !} i, j
+
+    do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       topaz%f_cased(i,j,k) = 0.0
+    enddo; enddo ; enddo  !} i,j,k
 
     call g_tracer_set_values(tracer_list,'alk',  'btf', topaz%b_alk ,isd,jsd)
     call g_tracer_set_values(tracer_list,'dic',  'btf', topaz%b_dic ,isd,jsd)
     call g_tracer_set_values(tracer_list,'fed',  'btf', topaz%b_fed ,isd,jsd)
-    call g_tracer_set_values(tracer_list,'ndet', 'btf', topaz%b_ndet,isd,jsd)
+    call g_tracer_set_values(tracer_list,'nh4',  'btf', topaz%b_nh4 ,isd,jsd)
     call g_tracer_set_values(tracer_list,'no3',  'btf', topaz%b_no3 ,isd,jsd)
-    call g_tracer_set_values(tracer_list,'pdet', 'btf', topaz%b_pdet,isd,jsd)
+    call g_tracer_set_values(tracer_list,'o2',   'btf', topaz%b_o2  ,isd,jsd)
     call g_tracer_set_values(tracer_list,'po4',  'btf', topaz%b_po4 ,isd,jsd)
+    call g_tracer_set_values(tracer_list,'sio4', 'btf', topaz%b_sio4,isd,jsd)
 
     !
     !-----------------------------------------------------------------------
@@ -3191,7 +3639,8 @@ contains
     !
 
     call g_tracer_get_pointer(tracer_list,'alk'    ,'field',topaz%p_alk    )
-    call g_tracer_get_pointer(tracer_list,'cadet'  ,'field',topaz%p_cadet  )
+    call g_tracer_get_pointer(tracer_list,'cadet_arag'  ,'field',topaz%p_cadet_arag  )
+    call g_tracer_get_pointer(tracer_list,'cadet_calc'  ,'field',topaz%p_cadet_calc  )
     call g_tracer_get_pointer(tracer_list,'dic'    ,'field',topaz%p_dic    )
     call g_tracer_get_pointer(tracer_list,'fed'    ,'field',topaz%p_fed    )
     call g_tracer_get_pointer(tracer_list,'fedi'   ,'field',topaz%p_fedi   )
@@ -3220,6 +3669,10 @@ contains
     call g_tracer_get_pointer(tracer_list,'silg'   ,'field',topaz%p_silg   )
     call g_tracer_get_pointer(tracer_list,'sio4'   ,'field',topaz%p_sio4   )
 
+    if (topaz%id_no3_in_source .gt. 0)       &
+       used = send_data(topaz%id_no3_in_source,         topaz%f_no3,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !
     !-----------------------------------------------------------------------
     !     Phytoplankton Nitrogen and Phosphorus
@@ -3229,37 +3682,34 @@ contains
        !
        ! Diazotrophic Phytoplankton Nitrogen
        !
-       topaz%p_ndi(i,j,k,tau) = topaz%p_ndi(i,j,k,tau) + (phyto(DIAZO)%jprod_n2(i,j,k) + &
-            phyto(DIAZO)%jprod_no3(i,j,k) + phyto(DIAZO)%jprod_nh4(i,j,k) -                     &
-            phyto(DIAZO)%jgraz_n(i,j,k)) * dt
+       topaz%p_ndi(i,j,k,tau) = topaz%p_ndi(i,j,k,tau) + (phyto(DIAZO)%jprod_n2(i,j,k) +            &
+          phyto(DIAZO)%jprod_no3(i,j,k) + phyto(DIAZO)%jprod_nh4(i,j,k) -                           &
+          phyto(DIAZO)%jgraz_n(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Large Phytoplankton Nitrogen
        !
-       topaz%p_nlg(i,j,k,tau) = topaz%p_nlg(i,j,k,tau) + (phyto(LARGE)%jprod_no3(i,j,k) +&
-            phyto(LARGE)%jprod_nh4(i,j,k) - phyto(LARGE)%jgraz_n(i,j,k)) * dt
+       topaz%p_nlg(i,j,k,tau) = topaz%p_nlg(i,j,k,tau) + (phyto(LARGE)%jprod_no3(i,j,k) +           &
+          phyto(LARGE)%jprod_nh4(i,j,k) - phyto(LARGE)%jgraz_n(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Small Phytoplankton Nitrogen
        !
-       topaz%p_nsm(i,j,k,tau) = topaz%p_nsm(i,j,k,tau) + (phyto(SMALL)%jprod_no3(i,j,k) +&
-            phyto(SMALL)%jprod_nh4(i,j,k) - phyto(SMALL)%jgraz_n(i,j,k)) * dt
+       topaz%p_nsm(i,j,k,tau) = topaz%p_nsm(i,j,k,tau) + (phyto(SMALL)%jprod_no3(i,j,k) +           &
+          phyto(SMALL)%jprod_nh4(i,j,k) - phyto(SMALL)%jgraz_n(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Diazotrophic Phytoplankton Phosphorus
        !
-       topaz%p_pdi(i,j,k,tau) = topaz%p_pdi(i,j,k,tau) +                                 &
-            (phyto(DIAZO)%jprod_po4(i,j,k) - phyto(DIAZO)%jgraz_n(i,j,k) *                      &
-            phyto(DIAZO)%q_p_2_n(i,j,k)) * dt
+       topaz%p_pdi(i,j,k,tau) = topaz%p_pdi(i,j,k,tau) + (phyto(DIAZO)%jprod_po4(i,j,k) -           &
+          phyto(DIAZO)%jgraz_n(i,j,k) * phyto(DIAZO)%q_p_2_n(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Large Phytoplankton Phosphorus
        !
-       topaz%p_plg(i,j,k,tau) = topaz%p_plg(i,j,k,tau) +                                 &
-            (phyto(LARGE)%jprod_po4(i,j,k) - phyto(LARGE)%jgraz_n(i,j,k) *                      &
-            phyto(LARGE)%q_p_2_n(i,j,k)) * dt
+       topaz%p_plg(i,j,k,tau) = topaz%p_plg(i,j,k,tau) + (phyto(LARGE)%jprod_po4(i,j,k) -           &
+          phyto(LARGE)%jgraz_n(i,j,k) * phyto(LARGE)%q_p_2_n(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Small Phytoplankton Phosphorus
        !
-       topaz%p_psm(i,j,k,tau) = topaz%p_psm(i,j,k,tau) +                                 &
-            (phyto(SMALL)%jprod_po4(i,j,k) - phyto(SMALL)%jgraz_n(i,j,k) *                      &
-            phyto(SMALL)%q_p_2_n(i,j,k)) * dt
+       topaz%p_psm(i,j,k,tau) = topaz%p_psm(i,j,k,tau) + (phyto(SMALL)%jprod_po4(i,j,k) -           &
+          phyto(SMALL)%jgraz_n(i,j,k) * phyto(SMALL)%q_p_2_n(i,j,k)) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3270,22 +3720,22 @@ contains
        !
        ! Large Phytoplankton Silicon
        !
-       topaz%p_silg(i,j,k,tau) = topaz%p_silg(i,j,k,tau) +       &
-            (phyto(LARGE)%jprod_sio4(i,j,k) - phyto(LARGE)%jgraz_sio2(i,j,k)) * dt
+       topaz%p_silg(i,j,k,tau) = topaz%p_silg(i,j,k,tau) + (phyto(LARGE)%jprod_sio4(i,j,k) -        &
+          phyto(LARGE)%jgraz_sio2(i,j,k)) * dt * grid_tmask(i,j,k)
        ! Diazotrophic Phytoplankton Iron
        !
-       topaz%p_fedi(i,j,k,tau) = topaz%p_fedi(i,j,k,tau) +       &
-            (phyto(DIAZO)%jprod_fe(i,j,k) - phyto(DIAZO)%jgraz_fe(i,j,k)) * dt
+       topaz%p_fedi(i,j,k,tau) = topaz%p_fedi(i,j,k,tau) + (phyto(DIAZO)%jprod_fe(i,j,k) -          &
+          phyto(DIAZO)%jgraz_fe(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Large Phytoplankton Iron
        !
-       topaz%p_felg(i,j,k,tau) = topaz%p_felg(i,j,k,tau) +       &
-            (phyto(LARGE)%jprod_fe(i,j,k) - phyto(LARGE)%jgraz_fe(i,j,k)) * dt
+       topaz%p_felg(i,j,k,tau) = topaz%p_felg(i,j,k,tau) + (phyto(LARGE)%jprod_fe(i,j,k) -          &
+          phyto(LARGE)%jgraz_fe(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Small Phytoplankton Iron
        !
-       topaz%p_fesm(i,j,k,tau) = topaz%p_fesm(i,j,k,tau) +       &
-            (phyto(SMALL)%jprod_fe(i,j,k) - phyto(SMALL)%jgraz_fe(i,j,k)) * dt
+       topaz%p_fesm(i,j,k,tau) = topaz%p_fesm(i,j,k,tau) + (phyto(SMALL)%jprod_fe(i,j,k) -          &
+          phyto(SMALL)%jgraz_fe(i,j,k)) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3293,8 +3743,8 @@ contains
     !-----------------------------------------------------------------------
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       topaz%p_nhet(i,j,k,tau) = topaz%p_nhet(i,j,k,tau) +    &
-            (topaz%jprod_nhet(i,j,k) -  topaz%jnhet(i,j,k)) * dt
+       topaz%p_nhet(i,j,k,tau) = topaz%p_nhet(i,j,k,tau) + (topaz%jprod_nhet(i,j,k) -               &
+          topaz%jnhet(i,j,k)) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3302,11 +3752,9 @@ contains
     !-----------------------------------------------------------------------
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       topaz%jno3(i,j,k) =  topaz%jnitrif(i,j,k) - phyto(DIAZO)%jprod_no3(i,j,k) -          &
-            phyto(LARGE)%jprod_no3(i,j,k) - phyto(SMALL)%jprod_no3(i,j,k) -                    &
-            topaz%jdenit_wc(i,j,k)
-       topaz%p_no3(i,j,k,tau) = topaz%p_no3(i,j,k,tau) +         &
-            topaz%jno3(i,j,k) * dt
+       topaz%jno3(i,j,k) =  topaz%jnitrif(i,j,k) - phyto(DIAZO)%jprod_no3(i,j,k) -                  &
+          phyto(LARGE)%jprod_no3(i,j,k) - phyto(SMALL)%jprod_no3(i,j,k) - topaz%jno3denit_wc(i,j,k)
+       topaz%p_no3(i,j,k,tau) = topaz%p_no3(i,j,k,tau) + topaz%jno3(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
 
     !
@@ -3318,34 +3766,33 @@ contains
        !
        ! NH4
        !
-       topaz%jnh4(i,j,k) = topaz%jnh4_graz(i,j,k) + topaz%jnhet(i,j,k) + topaz%gamma_ldon *  &
-            topaz%f_ldon(i,j,k) + topaz%gamma_sdon * topaz%f_sdon(i,j,k) + topaz%jndet(i,j,k)-                &
-            phyto(DIAZO)%jprod_nh4(i,j,k) - phyto(LARGE)%jprod_nh4(i,j,k) -                     &
-            phyto(SMALL)%jprod_nh4(i,j,k) - topaz%jnitrif(i,j,k)
-       topaz%p_nh4(i,j,k,tau) = topaz%p_nh4(i,j,k,tau) +         &
-            topaz%jnh4(i,j,k) * dt
+       topaz%jnh4(i,j,k) = topaz%jnh4_graz(i,j,k) + topaz%jnhet(i,j,k) + topaz%gamma_ldon *         &
+          topaz%f_ldon(i,j,k) + topaz%gamma_sdon * topaz%f_sdon(i,j,k) + topaz%jndet(i,j,k)-        &
+          phyto(DIAZO)%jprod_nh4(i,j,k) - phyto(LARGE)%jprod_nh4(i,j,k) -                           &
+          phyto(SMALL)%jprod_nh4(i,j,k) - topaz%jnitrif(i,j,k)
+       topaz%p_nh4(i,j,k,tau) = topaz%p_nh4(i,j,k,tau) + topaz%jnh4(i,j,k) * dt * grid_tmask(i,j,k)
        !
        ! PO4
        !
-       topaz%jpo4(i,j,k) =  topaz%jpo4_graz(i,j,k) + (topaz%jnhet(i,j,k) + topaz%gamma_ldon *&
-            topaz%f_ldon(i,j,k)) * topaz%p_2_n_RKR + topaz%gamma_sdop * topaz%f_sdop(i,j,k) +    &
-            topaz%jpdet(i,j,k) - phyto(DIAZO)%jprod_po4(i,j,k) - phyto(LARGE)%jprod_po4(i,j,k) -&
-            phyto(SMALL)%jprod_po4(i,j,k)
-       topaz%p_po4(i,j,k,tau) = topaz%p_po4(i,j,k,tau) +         &
-            topaz%jpo4(i,j,k) * dt
+       topaz%jpo4(i,j,k) =  topaz%jpo4_graz(i,j,k) + (topaz%jnhet(i,j,k) + topaz%gamma_ldon *       &
+          topaz%f_ldon(i,j,k)) * topaz%p_2_n_RKR + topaz%gamma_sdop * topaz%f_sdop(i,j,k) +         &
+          topaz%jpdet(i,j,k) - phyto(DIAZO)%jprod_po4(i,j,k) - phyto(LARGE)%jprod_po4(i,j,k) -      &
+          phyto(SMALL)%jprod_po4(i,j,k)
+       topaz%p_po4(i,j,k,tau) = topaz%p_po4(i,j,k,tau) + topaz%jpo4(i,j,k) * dt * grid_tmask(i,j,k)
        !
        ! SiO4
        !
-       topaz%p_sio4(i,j,k,tau) = topaz%p_sio4(i,j,k,tau) +       &
-            (topaz%jsidet(i,j,k) - phyto(LARGE)%jprod_sio4(i,j,k) + topaz%jdiss_sio2(i,j,k)) * dt
+       topaz%jsio4(i,j,k) = topaz%jsidet(i,j,k) - phyto(LARGE)%jprod_sio4(i,j,k) +                  &
+          topaz%jdiss_sio2(i,j,k)
+       topaz%p_sio4(i,j,k,tau) = topaz%p_sio4(i,j,k,tau) + topaz%jsio4(i,j,k) * dt *                &
+          grid_tmask(i,j,k)
        !
        ! Fed
        !
-       topaz%p_fed(i,j,k,tau) = topaz%p_fed(i,j,k,tau) +         &
-            (topaz%jfe_graz(i,j,k) -        &
-            phyto(DIAZO)%jprod_Fe(i,j,k) - phyto(LARGE)%jprod_Fe(i,j,k) -         &
-            phyto(SMALL)%jprod_Fe(i,j,k) - topaz%jfe_ads(i,j,k) + topaz%jfe_des(i,j,k) +        &
-            topaz%jfedet(i,j,k) + topaz%jfe_coast(i,j,k)) * dt
+       topaz%jfed(i,j,k) = topaz%jfe_graz(i,j,k) - phyto(DIAZO)%jprod_Fe(i,j,k) -                   &
+          phyto(LARGE)%jprod_Fe(i,j,k) - phyto(SMALL)%jprod_Fe(i,j,k) - topaz%jfe_ads(i,j,k) +      &
+          topaz%jfe_des(i,j,k) + topaz%jfedet(i,j,k) + topaz%jfe_coast(i,j,k)
+       topaz%p_fed(i,j,k,tau) = topaz%p_fed(i,j,k,tau) + topaz%jfed(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3354,36 +3801,40 @@ contains
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
-       ! Cadet
+       ! Cadet_Arag
        !
-       topaz%p_cadet(i,j,k,tau) = topaz%p_cadet(i,j,k,tau) + (topaz%jprod_cadet(i,j,k) - &
-            topaz%jcadet(i,j,k)) * dt
+       topaz%p_cadet_arag(i,j,k,tau) = topaz%p_cadet_arag(i,j,k,tau) +                              &
+          (topaz%jprod_cadet_arag(i,j,k) - topaz%jcadet_arag(i,j,k)) * dt * grid_tmask(i,j,k)
+       !
+       ! Cadet_Calc
+       !
+       topaz%p_cadet_calc(i,j,k,tau) = topaz%p_cadet_calc(i,j,k,tau) +                              &
+          (topaz%jprod_cadet_calc(i,j,k) - topaz%jcadet_calc(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Fedet
        !
-       topaz%p_fedet(i,j,k,tau) = topaz%p_fedet(i,j,k,tau) + (topaz%jprod_fedet(i,j,k) + &
-            topaz%jfe_ads(i,j,k) - topaz%jfe_des(i,j,k) - topaz%jfedet(i,j,k)) * dt
+       topaz%p_fedet(i,j,k,tau) = topaz%p_fedet(i,j,k,tau) + (topaz%jprod_fedet(i,j,k) +            &
+          topaz%jfe_ads(i,j,k) - topaz%jfe_des(i,j,k) - topaz%jfedet(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Lithdet
        !
-       topaz%p_lithdet(i,j,k,tau) = topaz%p_lithdet(i,j,k,tau) +                         &
-            topaz%jprod_lithdet(i,j,k) * dt
+       topaz%p_lithdet(i,j,k,tau) = topaz%p_lithdet(i,j,k,tau) + topaz%jprod_lithdet(i,j,k) * dt *  &
+          grid_tmask(i,j,k)
        !
        ! Ndet
        !
-       topaz%p_ndet(i,j,k,tau) = topaz%p_ndet(i,j,k,tau) + (topaz%jprod_ndet(i,j,k) -    &
-            topaz%jndet(i,j,k)) * dt
+       topaz%p_ndet(i,j,k,tau) = topaz%p_ndet(i,j,k,tau) + (topaz%jprod_ndet(i,j,k) -               &
+          topaz%jndet(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Pdet
        !
-       topaz%p_pdet(i,j,k,tau) = topaz%p_pdet(i,j,k,tau) + (topaz%jprod_pdet(i,j,k) -    &
-            topaz%jpdet(i,j,k)) * dt
+       topaz%p_pdet(i,j,k,tau) = topaz%p_pdet(i,j,k,tau) + (topaz%jprod_pdet(i,j,k) -               &
+          topaz%jpdet(i,j,k)) * dt * grid_tmask(i,j,k)
        !
        ! Sidet
        !
-       topaz%p_sidet(i,j,k,tau) = topaz%p_sidet(i,j,k,tau) +                             &
-            (phyto(LARGE)%jgraz_sio2(i,j,k) - topaz%jdiss_sio2(i,j,k) - topaz%jsidet(i,j,k)) *  &
-            dt
+       topaz%p_sidet(i,j,k,tau) = topaz%p_sidet(i,j,k,tau) + (phyto(LARGE)%jgraz_sio2(i,j,k) -      &
+          topaz%jdiss_sio2(i,j,k) - topaz%jsidet(i,j,k)) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3395,17 +3846,20 @@ contains
        ! Semilabile Dissolved Organic Nitrogen
        !
        topaz%jsdon(i,j,k) = topaz%jsdon(i,j,k) -  topaz%gamma_sdon * topaz%f_sdon(i,j,k)
-       topaz%p_sdon(i,j,k,tau) = topaz%p_sdon(i,j,k,tau) +  topaz%jsdon(i,j,k) * dt
+       topaz%p_sdon(i,j,k,tau) = topaz%p_sdon(i,j,k,tau) +  topaz%jsdon(i,j,k) * dt *               &
+          grid_tmask(i,j,k)
        !
        ! Semilabile Dissolved Organic Phosphorus
        !
        topaz%jsdop(i,j,k) = topaz%jsdop(i,j,k) - topaz%gamma_sdop * topaz%f_sdop(i,j,k)
-       topaz%p_sdop(i,j,k,tau) = topaz%p_sdop(i,j,k,tau) + topaz%jsdop(i,j,k) * dt
+       topaz%p_sdop(i,j,k,tau) = topaz%p_sdop(i,j,k,tau) + topaz%jsdop(i,j,k) * dt *                &
+          grid_tmask(i,j,k)
        !
        ! Labile Dissolved Organic Nitrogen
        !
        topaz%jldon(i,j,k) = topaz%jldon(i,j,k) - topaz%gamma_ldon * topaz%f_ldon(i,j,k)
-       topaz%p_ldon(i,j,k,tau) = topaz%p_ldon(i,j,k,tau) + topaz%jldon(i,j,k) * dt
+       topaz%p_ldon(i,j,k,tau) = topaz%p_ldon(i,j,k,tau) + topaz%jldon(i,j,k) * dt *                &
+          grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3417,21 +3871,21 @@ contains
     !-----------------------------------------------------------------------
     !
     do k = 1, nk ; do j =jsc, jec ; do i = isc, iec  !{
-       topaz%jo2(i,j,k) = (topaz%o2_2_no3 * (phyto(DIAZO)%jprod_no3(i,j,k) +                &
-            phyto(LARGE)%jprod_no3(i,j,k) + phyto(SMALL)%jprod_no3(i,j,k)) + topaz%o2_2_nh4 *  &
-            (phyto(DIAZO)%jprod_nh4(i,j,k) + phyto(LARGE)%jprod_nh4(i,j,k) +                   &
-            phyto(SMALL)%jprod_nh4(i,j,k) + phyto(DIAZO)%jprod_n2(i,j,k))) * grid_tmask(i,j,k)
+       topaz%jo2(i,j,k) = (topaz%o2_2_no3 * (phyto(DIAZO)%jprod_no3(i,j,k) +                        &
+          phyto(LARGE)%jprod_no3(i,j,k) + phyto(SMALL)%jprod_no3(i,j,k)) + topaz%o2_2_nh4 *         &
+          (phyto(DIAZO)%jprod_nh4(i,j,k) + phyto(LARGE)%jprod_nh4(i,j,k) +                          &
+          phyto(SMALL)%jprod_nh4(i,j,k) + phyto(DIAZO)%jprod_n2(i,j,k))) * grid_tmask(i,j,k)
        !
        !-----------------------------------------------------------------------
        ! If O2 is present
        !-----------------------------------------------------------------------
        !
        if (topaz%f_o2(i,j,k) .gt. topaz%o2_min) then  !{
-          topaz%jo2(i,j,k) = topaz%jo2(i,j,k) - topaz%o2_2_nh4 * (topaz%jnh4_graz(i,j,k)      &
-               + topaz%jnhet(i,j,k) + topaz%jndet(i,j,k) + topaz%gamma_sdon * topaz%f_sdon(i,j,k)       &
-               + topaz%gamma_ldon * topaz%f_ldon(i,j,k)) - topaz%o2_2_nitrif * topaz%jnitrif(i,j,k)
+          topaz%jo2(i,j,k) = topaz%jo2(i,j,k) - topaz%o2_2_nh4 * (topaz%jnh4_graz(i,j,k) +          &
+             topaz%jnhet(i,j,k) + topaz%jndet(i,j,k) + topaz%gamma_sdon * topaz%f_sdon(i,j,k) +     &
+             topaz%gamma_ldon * topaz%f_ldon(i,j,k)) - topaz%o2_2_nitrif * topaz%jnitrif(i,j,k)
        endif  !}
-       topaz%p_o2(i,j,k,tau) = topaz%p_o2(i,j,k,tau) + topaz%jo2(i,j,k) * dt
+       topaz%p_o2(i,j,k,tau) = topaz%p_o2(i,j,k,tau) + topaz%jo2(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3440,20 +3894,31 @@ contains
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
-       ! Alkalinity
+       ! Alkalinity (see full N equations in parameter definitions section)
+       ! CaCO3 cycling affects Alkalinity by a factor of 2.
+       ! Nitrate-based Production increases alkalinity by NO3 equivalents.
+       ! Ammonia-based Production decreases alkalinity (and reverse for remineralization) by NH4 equivalents.
+       ! N2 Production has no effect on alkalinity.
+       ! Nitrification decreases alkalinity by 2 NH4 equivalents.
+       ! Denitrification decreases alkalinity by 552/472 = 1.169 NO3 equivalents.
        !
-       ! Alkalinity + organic matter + 2 X NH4 is assumed to be conserved except for
-       ! the effects Alk in river runoff and CaCO3 sedimentation and sediment erosion.
-       ! 
-       topaz%p_alk(i,j,k,tau) = topaz%p_alk(i,j,k,tau) + (2.0 * (topaz%jcadet(i,j,k) -   &
-            topaz%jprod_cadet(i,j,k)) - topaz%jno3(i,j,k) + topaz%jnh4(i,j,k) -                 &
-            topaz%jdenit_wc(i,j,k) + phyto(DIAZO)%jprod_n2(i,j,k)) * dt
+       topaz%jalk(i,j,k) = (2.0 * (topaz%jcadet_arag(i,j,k) +         &
+          topaz%jcadet_calc(i,j,k) - topaz%jprod_cadet_arag(i,j,k) -                                &
+          topaz%jprod_cadet_calc(i,j,k)) + phyto(DIAZO)%jprod_no3(i,j,k) +                          &
+          phyto(LARGE)%jprod_no3(i,j,k) + phyto(SMALL)%jprod_no3(i,j,k) + topaz%jnh4_graz(i,j,k) +  &
+          topaz%jnhet(i,j,k) + topaz%gamma_ldon * topaz%f_ldon(i,j,k) + topaz%gamma_sdon *          &
+          topaz%f_sdon(i,j,k) + topaz%jndet(i,j,k) - phyto(DIAZO)%jprod_nh4(i,j,k) -                &
+          phyto(LARGE)%jprod_nh4(i,j,k) - phyto(SMALL)%jprod_nh4(i,j,k) -                           &
+          2.0 * topaz%jnitrif(i,j,k) - topaz%alk_2_n_denit * topaz%jno3denit_wc(i,j,k))
+       topaz%p_alk(i,j,k,tau) = topaz%p_alk(i,j,k,tau) + topaz%jalk(i,j,k) * dt * grid_tmask(i,j,k)
        !
        ! Dissolved Inorganic Carbon
        !
-       topaz%p_dic(i,j,k,tau) = topaz%p_dic(i,j,k,tau) + (topaz%c_2_n *                  &
-            (topaz%jno3(i,j,k) + topaz%jnh4(i,j,k) + topaz%jdenit_wc(i,j,k) -                   &
-            phyto(DIAZO)%jprod_n2(i,j,k)) + topaz%jcadet(i,j,k) - topaz%jprod_cadet(i,j,k)) * dt
+       topaz%jdic(i,j,k) =(topaz%c_2_n * (topaz%jno3(i,j,k) +        &
+          topaz%jnh4(i,j,k) + topaz%jno3denit_wc(i,j,k) - phyto(DIAZO)%jprod_n2(i,j,k)) +           &
+          topaz%jcadet_arag(i,j,k) + topaz%jcadet_calc(i,j,k) - topaz%jprod_cadet_arag(i,j,k) -     &
+          topaz%jprod_cadet_calc(i,j,k))
+       topaz%p_dic(i,j,k,tau) = topaz%p_dic(i,j,k,tau) + topaz%jdic(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo !} i,j,k
     !
     !-----------------------------------------------------------------------
@@ -3461,19 +3926,18 @@ contains
     !-----------------------------------------------------------------------
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-       topaz%p_lith(i,j,k,tau) = topaz%p_lith(i,j,k,tau) - topaz%jprod_lithdet(i,j,k) * dt
+       topaz%p_lith(i,j,k,tau) = topaz%p_lith(i,j,k,tau) - topaz%jprod_lithdet(i,j,k) * dt *        &
+          grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
-
 
 
     !
     !Set the diagnostics tracer fields.
     !
-    call g_tracer_set_values(tracer_list,'cased',  'field',topaz%f_cased    ,isd,jsd,ntau=tau)
-    call g_tracer_set_values(tracer_list,'chl',    'field',topaz%f_chl      ,isd,jsd,ntau=tau)
+    call g_tracer_set_values(tracer_list,'cased',  'field',topaz%f_cased    ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'chl',    'field',topaz%f_chl      ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',topaz%f_co3_ion  ,isd,jsd,ntau=1)
-    call g_tracer_set_values(tracer_list,'irr_mem' ,'field',topaz%f_irr_mem ,isd,jsd,ntau=tau)
-    call g_tracer_set_values(tracer_list,'irr_inst','field',topaz%f_irr_inst,isd,jsd,ntau=tau)
+    call g_tracer_set_values(tracer_list,'irr_mem' ,'field',topaz%f_irr_mem ,isd,jsd,ntau=1)
     !
     !-----------------------------------------------------------------------
     !       Save variables for diagnostics
@@ -3490,324 +3954,560 @@ contains
     ! nitrogen is added to represent the refractory component.
     !---------------------------------------------------------------------
     !
-    topaz%tot_layer_int_c(:,:,:) = (topaz%p_dic(:,:,:,tau) + 4.2e-5 + topaz%p_cadet(:,:,:,tau) +&
-         topaz%c_2_n * (topaz%p_ndi(:,:,:,tau) + topaz%p_nlg(:,:,:,tau) +      &
-         topaz%p_nsm(:,:,:,tau) + topaz%p_ldon(:,:,:,tau) + topaz%p_sdon(:,:,:,tau) + &
-         topaz%p_nhet(:,:,:,tau) + topaz%p_ndet(:,:,:,tau))) &
-         * rho_dzt(:,:,:)
+    topaz%tot_layer_int_c(:,:,:) = (topaz%p_dic(:,:,:,tau) + 4.2e-5 +                               &
+       topaz%p_cadet_arag(:,:,:,tau) + topaz%p_cadet_calc(:,:,:,tau) + topaz%c_2_n *                &
+       (topaz%p_ndi(:,:,:,tau) + topaz%p_nlg(:,:,:,tau) + topaz%p_nsm(:,:,:,tau) +                  &
+       topaz%p_ldon(:,:,:,tau) + topaz%p_sdon(:,:,:,tau) + topaz%p_nhet(:,:,:,tau) +                &
+       topaz%p_ndet(:,:,:,tau))) * rho_dzt(:,:,:)
 
-    topaz%tot_layer_int_fe(:,:,:) = (topaz%p_fed(:,:,:,tau) + topaz%p_fedi(:,:,:,tau) +    &
-         topaz%p_felg(:,:,:,tau) + topaz%p_fesm(:,:,:,tau) + topaz%p_fedet(:,:,:,tau)) &
-         * rho_dzt(:,:,:)
+    topaz%tot_layer_int_fe(:,:,:) = (topaz%p_fed(:,:,:,tau) + topaz%p_fedi(:,:,:,tau) +             &
+       topaz%p_felg(:,:,:,tau) + topaz%p_fesm(:,:,:,tau) + topaz%p_fedet(:,:,:,tau)) * rho_dzt(:,:,:)
 
-    topaz%tot_layer_int_n(:,:,:) = (topaz%p_no3(:,:,:,tau) + 2.0e-6 +                 &
-         topaz%p_nh4(:,:,:,tau) + topaz%p_ndi(:,:,:,tau) + topaz%p_nlg(:,:,:,tau) + &
-         topaz%p_nsm(:,:,:,tau) + topaz%p_nsm(:,:,:,tau) + topaz%p_ldon(:,:,:,tau) + &
-         topaz%p_sdon(:,:,:,tau) + topaz%p_nhet(:,:,:,tau) + topaz%p_ndet(:,:,:,tau)) &
-         * rho_dzt(:,:,:)
+    topaz%tot_layer_int_n(:,:,:) = (topaz%p_no3(:,:,:,tau) + 2.0e-6 + topaz%p_nh4(:,:,:,tau) +      &
+       topaz%p_ndi(:,:,:,tau) + topaz%p_nlg(:,:,:,tau) + topaz%p_nsm(:,:,:,tau) +                   &
+       topaz%p_nsm(:,:,:,tau) + topaz%p_ldon(:,:,:,tau) + topaz%p_sdon(:,:,:,tau) +                 &
+       topaz%p_nhet(:,:,:,tau) + topaz%p_ndet(:,:,:,tau)) * rho_dzt(:,:,:)
 
-    topaz%tot_layer_int_p(:,:,:) = (topaz%p_po4(:,:,:,tau) + topaz%p_pdi(:,:,:,tau) +      &
-         topaz%p_plg(:,:,:,tau) + topaz%p_psm(:,:,:,tau) + topaz%p_sdop(:,:,:,tau) + &
-         topaz%p_pdet(:,:,:,tau) +&
-         topaz%p_2_n_RKR * (topaz%p_nhet(:,:,:,tau) + topaz%p_ldon(:,:,:,tau))) &
-         * rho_dzt(:,:,:)
+    topaz%tot_layer_int_p(:,:,:) = (topaz%p_po4(:,:,:,tau) + topaz%p_pdi(:,:,:,tau) +               &
+       topaz%p_plg(:,:,:,tau) + topaz%p_psm(:,:,:,tau) + topaz%p_sdop(:,:,:,tau) +                  &
+       topaz%p_pdet(:,:,:,tau) + topaz%p_2_n_RKR * (topaz%p_nhet(:,:,:,tau) +                       &
+       topaz%p_ldon(:,:,:,tau))) * rho_dzt(:,:,:)
 
-    topaz%tot_layer_int_si(:,:,:) = (topaz%p_sio4(:,:,:,tau) + topaz%p_silg(:,:,:,tau) +   &
-         topaz%p_sidet(:,:,:,tau)) * rho_dzt(:,:,:)
+    topaz%tot_layer_int_si(:,:,:) = (topaz%p_sio4(:,:,:,tau) + topaz%p_silg(:,:,:,tau) +            &
+       topaz%p_sidet(:,:,:,tau)) * rho_dzt(:,:,:)
 
+!---------------------------------------------------------------------
+! Add vertical integrals for diagnostics
+!---------------------------------------------------------------------
+
+    do j = jsc, jec ; do i = isc, iec !{
+       topaz%jno3denit_wc_vert_int(i,j) = 0.0
+       topaz%nfix(i,j) = 0.0
+       topaz%c_integral(i,j) = 0.0
+       do k = 1, nk  !{
+          topaz%jno3denit_wc_vert_int(i,j) = topaz%jno3denit_wc_vert_int(i,j) +                     &
+             topaz%jno3denit_wc(i,j,k) * rho_dzt(i,j,k)
+          topaz%nfix(i,j) = topaz%nfix(i,j) + phyto(DIAZO)%jprod_n2(i,j,k) * rho_dzt(i,j,k)
+          topaz%c_integral(i,j) = topaz%c_integral(i,j) + topaz%tot_layer_int_c(i,j,k)
+       enddo  !} k
+    enddo; enddo !} i,j
+
+
+    do j = jsc, jec ; do i = isc, iec !{
+       topaz%fndet_100(i,j) = topaz%f_ndet(i,j,1) * topaz%Rho_0 * topaz%wsink
+       topaz%fpdet_100(i,j) = topaz%f_pdet(i,j,1) * topaz%Rho_0 * topaz%wsink 
+       topaz%ffedet_100(i,j) = topaz%f_fedet(i,j,1) * topaz%Rho_0 * topaz%wsink 
+       topaz%fsidet_100(i,j) = topaz%f_sidet(i,j,1) * topaz%Rho_0 * topaz%wsink
+       topaz%fcadet_arag_100(i,j) = topaz%f_cadet_arag(i,j,1) * topaz%wsink
+       topaz%fcadet_calc_100(i,j) = topaz%f_cadet_calc(i,j,1) * topaz%wsink
+       topaz%jprod_n_100(i,j) = (phyto(SMALL)%jprod_no3(i,j,1) + phyto(LARGE)%jprod_no3(i,j,1) +    &
+          phyto(SMALL)%jprod_nh4(i,j,1) + phyto(LARGE)%jprod_nh4(i,j,1) +                           &
+          phyto(DIAZO)%jprod_n2(i,j,1) + phyto(DIAZO)%jprod_nh4(i,j,1) +                            &
+          phyto(DIAZO)%jprod_no3(i,j,1)) * rho_dzt(i,j,1)
+       topaz%jprod_no3_100(i,j) = (phyto(SMALL)%jprod_no3(i,j,1) + phyto(LARGE)%jprod_no3(i,j,1) +  &
+          phyto(DIAZO)%jprod_no3(i,j,1)) * rho_dzt(i,j,1)
+       topaz%jnitrif_100(i,j) = topaz%jnitrif(i,j,1) * rho_dzt(i,j,1)
+       do n = 1, NUM_PHYTO  !{
+          phyto(n)%jgraz_n_100(i,j) = phyto(n)%jgraz_n(i,j,1) * rho_dzt(i,j,1)
+       enddo   !} n
+       do k = 2, grid_kmt(i,j)  !{
+          if (topaz%zt(i,j,k-1) .lt. 100.0) then
+             topaz%fndet_100(i,j) = topaz%f_ndet(i,j,k) * topaz%Rho_0 * topaz%wsink
+             topaz%fpdet_100(i,j) = topaz%f_pdet(i,j,k) * topaz%Rho_0 * topaz%wsink
+             topaz%ffedet_100(i,j) = topaz%f_fedet(i,j,k) * topaz%Rho_0 * topaz%wsink 
+             topaz%fsidet_100(i,j) = topaz%f_sidet(i,j,k)  *topaz%Rho_0 * topaz%wsink
+             topaz%fcadet_arag_100(i,j) = topaz%f_cadet_arag(i,j,k) * topaz%wsink
+             topaz%fcadet_calc_100(i,j) = topaz%f_cadet_calc(i,j,k) * topaz%wsink
+             topaz%jprod_n_100(i,j) = topaz%jprod_n_100(i,j) + (phyto(SMALL)%jprod_no3(i,j,k) +     &
+                phyto(LARGE)%jprod_no3(i,j,k) + phyto(SMALL)%jprod_nh4(i,j,k) +                     &
+                phyto(LARGE)%jprod_nh4(i,j,k) + phyto(DIAZO)%jprod_n2(i,j,k) +                      &
+                phyto(DIAZO)%jprod_nh4(i,j,k) + phyto(DIAZO)%jprod_no3(i,j,k)) * rho_dzt(i,j,k)
+             topaz%jprod_no3_100(i,j) = topaz%jprod_no3_100(i,j) + (phyto(SMALL)%jprod_no3(i,j,k) + &
+                phyto(LARGE)%jprod_no3(i,j,k) + phyto(DIAZO)%jprod_no3(i,j,k)) * rho_dzt(i,j,k)
+             topaz%jnitrif_100(i,j) = topaz%jnitrif_100(i,j) + topaz%jnitrif(i,j,k) * rho_dzt(i,j,k)
+             do n = 1, NUM_PHYTO  !{
+                phyto(n)%jgraz_n_100(i,j) = phyto(n)%jgraz_n_100(i,j) + phyto(n)%jgraz_n(i,j,k) *   &
+                   rho_dzt(i,j,k)
+             enddo   !} n
+          endif
+       enddo  !} k
+    enddo; enddo !} i,j
+
+!---------------------------------------------------------------------
 
     do n= 1, NUM_PHYTO
        !Beware that some of these might not be legitimate output variables
        ! e.g. The original code did not have phyto(DIAZO)%jprod_nh4
        ! However the calls to ocean_register_diag should have been done properly.
 
-       if (phyto(n)%id_def_fe .gt. 0)          &
-            used = send_data(phyto(n)%id_def_fe,     phyto(n)%def_fe,             &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_felim .gt. 0)           &
-            used = send_data(phyto(n)%id_felim,      phyto(n)%felim,              &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_irrlim .gt. 0)          &
-            used = send_data(phyto(n)%id_irrlim,     phyto(n)%irrlim,             &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_jgraz_n .gt. 0)         &
-            used = send_data(phyto(n)%id_jgraz_n,    phyto(n)%jgraz_n*rho_dzt,    &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_jgraz_fe .gt. 0)        &
-            used = send_data(phyto(n)%id_jgraz_fe,   phyto(n)%jgraz_fe*rho_dzt,   &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_jprod_fe .gt. 0)        &
-            used = send_data(phyto(n)%id_jprod_fe,   phyto(n)%jprod_fe*rho_dzt,   &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_jprod_nh4 .gt. 0)       &
-            used = send_data(phyto(n)%id_jprod_nh4,  phyto(n)%jprod_nh4*rho_dzt,  &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_jprod_no3 .gt. 0)       &
-            used = send_data(phyto(n)%id_jprod_no3,  phyto(n)%jprod_no3*rho_dzt,  &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_jprod_po4 .gt. 0)       &
-            used = send_data(phyto(n)%id_jprod_po4,  phyto(n)%jprod_po4*rho_dzt,  &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_liebig_lim .gt. 0)      &
-            used = send_data(phyto(n)%id_liebig_lim,phyto(n)%liebig_lim,          &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_mu .gt. 0)              &
-            used = send_data(phyto(n)%id_mu,        phyto(n)%mu,                  &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_nh4lim .gt. 0)          &
-            used = send_data(phyto(n)%id_nh4lim,     phyto(n)%nh4lim,             &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_no3lim .gt. 0)          &
-            used = send_data(phyto(n)%id_no3lim,     phyto(n)%no3lim,             &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_po4lim .gt. 0)          &
-            used = send_data(phyto(n)%id_po4lim,     phyto(n)%po4lim,             &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_q_fe_2_n .gt. 0)        &
-            used = send_data(phyto(n)%id_q_fe_2_n,   phyto(n)%q_fe_2_n,           &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_q_p_2_n .gt. 0)         &
-            used = send_data(phyto(n)%id_q_p_2_n,    phyto(n)%q_p_2_n,            &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_q_p_2_n_opt .gt. 0)     &
-            used = send_data(phyto(n)%id_q_p_2_n_opt, phyto(n)%q_p_2_n_opt,       &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (phyto(n)%id_theta .gt. 0)           &
-            used = send_data(phyto(n)%id_theta,      phyto(n)%theta,              &
-            model_time, rmask = grid_tmask,& 
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_chl .gt. 0)              &
+          used = send_data(phyto(n)%id_chl,        topaz%c_2_n * 12.0e6 *       &
+          phyto(n)%theta * phyto(n)%f_n,                                        &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_def_fe .gt. 0)           &
+          used = send_data(phyto(n)%id_def_fe,     phyto(n)%def_fe,             &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_felim .gt. 0)            &
+          used = send_data(phyto(n)%id_felim,      phyto(n)%felim,              &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_irrlim .gt. 0)           &
+          used = send_data(phyto(n)%id_irrlim,     phyto(n)%irrlim,             &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_jgraz_n .gt. 0)          &
+          used = send_data(phyto(n)%id_jgraz_n,    phyto(n)%jgraz_n*rho_dzt,    &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_jgraz_n_100 .gt. 0)      &
+          used = send_data(phyto(n)%id_jgraz_n_100, phyto(n)%jgraz_n_100,       &
+          model_time, rmask = grid_tmask(:,:,1),& 
+          is_in=isc, js_in=jsc ,ie_in=iec, je_in=jec)
+       if (phyto(n)%id_jgraz_fe .gt. 0)         &
+          used = send_data(phyto(n)%id_jgraz_fe,   phyto(n)%jgraz_fe*rho_dzt,   &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_jprod_fe .gt. 0)         &
+          used = send_data(phyto(n)%id_jprod_fe,   phyto(n)%jprod_fe*rho_dzt,   &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_jprod_nh4 .gt. 0)        &
+          used = send_data(phyto(n)%id_jprod_nh4,  phyto(n)%jprod_nh4*rho_dzt,  &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_jprod_no3 .gt. 0)        &
+          used = send_data(phyto(n)%id_jprod_no3,  phyto(n)%jprod_no3*rho_dzt,  &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_jprod_po4 .gt. 0)        &
+          used = send_data(phyto(n)%id_jprod_po4,  phyto(n)%jprod_po4*rho_dzt,  &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_liebig_lim .gt. 0)       &
+          used = send_data(phyto(n)%id_liebig_lim,phyto(n)%liebig_lim,          &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_mu .gt. 0)               &
+          used = send_data(phyto(n)%id_mu,         phyto(n)%mu,                 &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_nh4lim .gt. 0)           &
+          used = send_data(phyto(n)%id_nh4lim,     phyto(n)%nh4lim,             &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_no3lim .gt. 0)           &
+          used = send_data(phyto(n)%id_no3lim,     phyto(n)%no3lim,             &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_po4lim .gt. 0)           &
+          used = send_data(phyto(n)%id_po4lim,     phyto(n)%po4lim,             &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_q_fe_2_n .gt. 0)         &
+          used = send_data(phyto(n)%id_q_fe_2_n,   phyto(n)%q_fe_2_n,           &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_q_p_2_n .gt. 0)          &
+          used = send_data(phyto(n)%id_q_p_2_n,    phyto(n)%q_p_2_n,            &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_q_p_2_n_opt .gt. 0)      &
+          used = send_data(phyto(n)%id_q_p_2_n_opt, phyto(n)%q_p_2_n_opt,       &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_theta .gt. 0)            &
+          used = send_data(phyto(n)%id_theta,      phyto(n)%theta,              &
+          model_time, rmask = grid_tmask(:,:,:),& 
+          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     enddo
 
-    if (phyto(DIAZO)%id_jprod_n2 .gt. 0)      &
-         used = send_data(phyto(DIAZO)%id_jprod_n2,phyto(DIAZO)%jprod_n2*rho_dzt,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (phyto(LARGE)%id_jgraz_sio2 .gt. 0)    &
-         used = send_data(phyto(LARGE)%id_jgraz_sio2,phyto(LARGE)%jgraz_sio2*rho_dzt,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (phyto(LARGE)%id_jprod_sio4 .gt. 0)    &
-         used = send_data(phyto(LARGE)%id_jprod_sio4,phyto(LARGE)%jprod_sio4*rho_dzt,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (phyto(LARGE)%id_silim .gt. 0)         &
-         used = send_data(phyto(LARGE)%id_silim,  phyto(LARGE)%silim,          &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (phyto(DIAZO)%id_jprod_n2 .gt. 0)     &
+       used = send_data(phyto(DIAZO)%id_jprod_n2, phyto(DIAZO)%jprod_n2 * rho_dzt, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (phyto(LARGE)%id_jgraz_sio2 .gt. 0)   &
+       used = send_data(phyto(LARGE)%id_jgraz_sio2, phyto(LARGE)%jgraz_sio2 * rho_dzt, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (phyto(LARGE)%id_jprod_sio4 .gt. 0)   &
+       used = send_data(phyto(LARGE)%id_jprod_sio4, phyto(LARGE)%jprod_sio4 * rho_dzt, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (phyto(LARGE)%id_silim .gt. 0)        &
+       used = send_data(phyto(LARGE)%id_silim,  phyto(LARGE)%silim,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-    if (topaz%id_pco2surf .gt. 0)             &
-         used = send_data(topaz%id_pco2surf,      topaz%pco2_csurf,              &
-         model_time, rmask = grid_tmask(:,:,1),& 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_pco2surf .gt. 0)            &
+       used = send_data(topaz%id_pco2surf,      topaz%pco2_csurf,               &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
-    if (topaz%id_co3_solubility .gt. 0)       &
-         used = send_data(topaz%id_co3_solubility, topaz%co3_solubility,       &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_co3_sol_arag .gt. 0)        &
+       used = send_data(topaz%id_co3_sol_arag,  topaz%co3_sol_arag,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_co3_sol_calc .gt. 0)        &
+       used = send_data(topaz%id_co3_sol_calc,  topaz%co3_sol_calc,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-    if (topaz%id_tot_layer_int_c .gt. 0)  &
-         used = send_data(topaz%id_tot_layer_int_c, topaz%tot_layer_int_c,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_tot_layer_int_fe .gt. 0)  &
-         used = send_data(topaz%id_tot_layer_int_fe,topaz%tot_layer_int_fe,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_tot_layer_int_n .gt. 0)  &
-         used = send_data(topaz%id_tot_layer_int_n,topaz%tot_layer_int_n,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_tot_layer_int_p .gt. 0)  &
-         used = send_data(topaz%id_tot_layer_int_p,topaz%tot_layer_int_p,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_tot_layer_int_si .gt. 0)  &
-         used = send_data(topaz%id_tot_layer_int_si,topaz%tot_layer_int_si,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_nLg_diatoms .gt. 0)          &
-         used = send_data(topaz%id_nLg_diatoms,   topaz%nLg_diatoms,           &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jprod_cadet .gt. 0)          &
-         used = send_data(topaz%id_jprod_cadet,   topaz%jprod_cadet*rho_dzt,   &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jprod_fedet .gt. 0)          &
-         used = send_data(topaz%id_jprod_fedet,   topaz%jprod_fedet*rho_dzt,   &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jprod_lithdet .gt. 0)        &
-         used = send_data(topaz%id_jprod_lithdet, topaz%jprod_lithdet*rho_dzt, &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jprod_ndet .gt. 0)           &
-         used = send_data(topaz%id_jprod_ndet,    topaz%jprod_ndet*rho_dzt,    &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jprod_nhet .gt. 0)           &
-         used = send_data(topaz%id_jprod_nhet,    topaz%jprod_nhet*rho_dzt,    &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jprod_pdet .gt. 0)           &
-         used = send_data(topaz%id_jprod_pdet,    topaz%jprod_pdet*rho_dzt,    &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jcadet .gt. 0)               &
-         used = send_data(topaz%id_jcadet,        topaz%jcadet*rho_dzt,        &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jfe_ads .gt. 0)              &
-         used = send_data(topaz%id_jfe_ads,       topaz%jfe_ads*rho_dzt,       &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jfe_des .gt. 0)              &
-         used = send_data(topaz%id_jfe_des,       topaz%jfe_des*rho_dzt,       &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jfe_graz .gt. 0)             &
-         used = send_data(topaz%id_jfe_graz,      topaz%jfe_graz*rho_dzt,      &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jfe_coast .gt. 0)            &
-         used = send_data(topaz%id_jfe_coast, topaz%jfe_coast*rho_dzt,         &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jfedet .gt. 0)               &
-         used = send_data(topaz%id_jfedet,        topaz%jfedet*rho_dzt,        &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jldon .gt. 0)                &
-         used = send_data(topaz%id_jldon,         topaz%jldon*rho_dzt,         &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jndet .gt. 0)                &
-         used = send_data(topaz%id_jndet,         topaz%jndet*rho_dzt,         &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jnh4 .gt. 0)                 &
-         used = send_data(topaz%id_jnh4,          topaz%jnh4*rho_dzt,          &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jnh4_graz .gt. 0)            &
-         used = send_data(topaz%id_jnh4_graz,     topaz%jnh4_graz*rho_dzt,     &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jnhet .gt. 0)                &
-         used = send_data(topaz%id_jnhet,         topaz%jnhet*rho_dzt,         &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jnitrif .gt. 0)              &
-         used = send_data(topaz%id_jnitrif,       topaz%jnitrif*rho_dzt,       &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_bfe .gt. 0)             &
+       used = send_data(topaz%id_tot_bfe,       topaz%p_fedi(:,:,:,tau) +       &
+       topaz%p_felg(:,:,:,tau) + topaz%p_fesm(:,:,:,tau) + topaz%p_fedet(:,:,:,tau),&
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_bsi .gt. 0)             &
+       used = send_data(topaz%id_tot_bsi,       topaz%p_silg(:,:,:,tau) + topaz%p_sidet(:,:,:,tau), &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_doc .gt. 0)             &
+       used = send_data(topaz%id_tot_doc, 4.2e-5 +                              &
+       topaz%c_2_n * (topaz%p_ldon(:,:,:,tau) + topaz%p_sdon(:,:,:,tau)),       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_layer_int_c .gt. 0)     &
+       used = send_data(topaz%id_tot_layer_int_c, topaz%tot_layer_int_c,        &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_layer_int_fe .gt. 0)    &
+       used = send_data(topaz%id_tot_layer_int_fe,topaz%tot_layer_int_fe,       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_layer_int_n .gt. 0)     &
+       used = send_data(topaz%id_tot_layer_int_n,topaz%tot_layer_int_n,         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_layer_int_p .gt. 0)     &
+       used = send_data(topaz%id_tot_layer_int_p,topaz%tot_layer_int_p,         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_layer_int_si .gt. 0)    &
+       used = send_data(topaz%id_tot_layer_int_si,topaz%tot_layer_int_si,       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_pon .gt. 0)             &
+       used = send_data(topaz%id_tot_pon,       topaz%p_ndi(:,:,:,tau) + topaz%p_nlg(:,:,:,tau) + &
+       topaz%p_nsm(:,:,:,tau) + topaz%p_ndet(:,:,:,tau) + topaz%p_nhet(:,:,:,tau), &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_tot_pop .gt. 0)             &
+       used = send_data(topaz%id_tot_pop,       topaz%p_pdi(:,:,:,tau) + topaz%p_plg(:,:,:,tau) + &
+       topaz%p_psm(:,:,:,tau) + topaz%p_pdet(:,:,:,tau) + topaz%p_2_n_RKR *     &
+       topaz%p_nhet(:,:,:,tau),                                                 &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_nLg_diatoms .gt. 0)         &
+       used = send_data(topaz%id_nLg_diatoms,   topaz%nLg_diatoms,              &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_nLg_nondiatoms .gt. 0)      &
+       used = send_data(topaz%id_nLg_nondiatoms,phyto(LARGE)%f_n(i,j,k) - topaz%nLg_diatoms, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_cadet_arag .gt. 0)    &
+       used = send_data(topaz%id_jprod_cadet_arag, topaz%jprod_cadet_arag * rho_dzt, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_cadet_calc .gt. 0)    &
+       used = send_data(topaz%id_jprod_cadet_calc, topaz%jprod_cadet_calc * rho_dzt, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_fedet .gt. 0)         &
+       used = send_data(topaz%id_jprod_fedet,   topaz%jprod_fedet*rho_dzt,      &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_lithdet .gt. 0)       &
+       used = send_data(topaz%id_jprod_lithdet, topaz%jprod_lithdet*rho_dzt,    &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_ndet .gt. 0)          &
+       used = send_data(topaz%id_jprod_ndet,    topaz%jprod_ndet*rho_dzt,       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_nhet .gt. 0)          &
+       used = send_data(topaz%id_jprod_nhet,    topaz%jprod_nhet*rho_dzt,       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jprod_pdet .gt. 0)          &
+       used = send_data(topaz%id_jprod_pdet,    topaz%jprod_pdet*rho_dzt,       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jalk .gt. 0)                &
+       used = send_data(topaz%id_jalk,          topaz%jalk*rho_dzt,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jcadet_arag .gt. 0)         &
+       used = send_data(topaz%id_jcadet_arag,   topaz%jcadet_arag*rho_dzt,      &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jcadet_calc .gt. 0)         &
+       used = send_data(topaz%id_jcadet_calc,   topaz%jcadet_calc*rho_dzt,      &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jdic .gt. 0)                &
+       used = send_data(topaz%id_jdic,          topaz%jdic*rho_dzt,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jfe_ads .gt. 0)             &
+       used = send_data(topaz%id_jfe_ads,       topaz%jfe_ads*rho_dzt,          &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jfe_des .gt. 0)             &
+       used = send_data(topaz%id_jfe_des,       topaz%jfe_des*rho_dzt,          &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jfe_graz .gt. 0)            &
+       used = send_data(topaz%id_jfe_graz,      topaz%jfe_graz*rho_dzt,         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jfe_coast .gt. 0)           &
+       used = send_data(topaz%id_jfe_coast, topaz%jfe_coast*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jfed .gt. 0)                &
+       used = send_data(topaz%id_jfed,          topaz%jfed*rho_dzt,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jfedet .gt. 0)              &
+       used = send_data(topaz%id_jfedet,        topaz%jfedet*rho_dzt,           &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jldon .gt. 0)               &
+       used = send_data(topaz%id_jldon,         topaz%jldon*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jndet .gt. 0)               &
+       used = send_data(topaz%id_jndet,         topaz%jndet*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jnh4 .gt. 0)                &
+       used = send_data(topaz%id_jnh4,          topaz%jnh4*rho_dzt,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jnh4_graz .gt. 0)           &
+       used = send_data(topaz%id_jnh4_graz,     topaz%jnh4_graz*rho_dzt,        &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jnhet .gt. 0)               &
+       used = send_data(topaz%id_jnhet,         topaz%jnhet*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jnitrif .gt. 0)             &
+       used = send_data(topaz%id_jnitrif,       topaz%jnitrif*rho_dzt,          &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jno3 .gt. 0)                &
+       used = send_data(topaz%id_jno3,          topaz%jno3*rho_dzt,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jo2 .gt. 0)                 &
+       used = send_data(topaz%id_jo2,           topaz%jo2*rho_dzt,              &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jpdet .gt. 0)               &
+       used = send_data(topaz%id_jpdet,         topaz%jpdet*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jpo4 .gt. 0)                &
+       used = send_data(topaz%id_jpo4,          topaz%jpo4*rho_dzt,             &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jpo4_graz .gt. 0)           &
+       used = send_data(topaz%id_jpo4_graz,     topaz%jpo4_graz*rho_dzt,        &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jno3denit_wc .gt. 0)        &
+       used = send_data(topaz%id_jno3denit_wc,  topaz%jno3denit_wc*rho_dzt,     &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jdiss_sio2 .gt. 0)          &
+       used = send_data(topaz%id_jdiss_sio2,    topaz%jdiss_sio2*rho_dzt,       &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jsdon .gt. 0)               &
+       used = send_data(topaz%id_jsdon,         topaz%jsdon*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jsdop .gt. 0)               &
+       used = send_data(topaz%id_jsdop,         topaz%jsdop*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jsidet .gt. 0)              &
+       used = send_data(topaz%id_jsidet,        topaz%jsidet*rho_dzt,           &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jsio4 .gt. 0)               &
+       used = send_data(topaz%id_jsio4,         topaz%jsio4*rho_dzt,            &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_fcadet_arag .gt. 0)         &
+       used = send_data(topaz%id_fcadet_arag,   topaz%f_cadet_arag(:,:,:)*topaz%wsink, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_fcadet_calc .gt. 0)         &
+       used = send_data(topaz%id_fcadet_calc,   topaz%f_cadet_calc(:,:,:)*topaz%wsink, &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_fcased_burial .gt. 0)       &
+       used = send_data(topaz%id_fcased_burial, topaz%fcased_burial,            &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_fcased_redis .gt. 0)        &
+       used = send_data(topaz%id_fcased_redis,  topaz%fcased_redis,             &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_ffe_sed .gt. 0)             &
+       used = send_data(topaz%id_ffe_sed,       topaz%ffe_sed,                  &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_ffedet .gt. 0)              &
+       used = send_data(topaz%id_ffedet,        topaz%f_fedet(:,:,:) * topaz%Rho_0 * &
+       topaz%wsink * grid_tmask(:,:,:),                                         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_flithdet .gt. 0)            &
+       used = send_data(topaz%id_flithdet,      topaz%f_lithdet(:,:,:) * topaz%Rho_0 * &
+       topaz%wsink * grid_tmask(:,:,:),      &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_fndet .gt. 0)               &
+       used = send_data(topaz%id_fndet,         topaz%f_ndet(:,:,:) * topaz%Rho_0 * &
+       topaz%wsink * grid_tmask(:,:,:),                                         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_fnfeso4red_sed .gt. 0)      &
+       used = send_data(topaz%id_fnfeso4red_sed,topaz%fnfeso4red_sed,           &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_fno3denit_sed .gt. 0)       &
+       used = send_data(topaz%id_fno3denit_sed, topaz%fno3denit_sed,            &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_fnoxic_sed .gt. 0)          &
+       used = send_data(topaz%id_fnoxic_sed,    topaz%fnoxic_sed,               &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_fpdet .gt. 0)               &
+       used = send_data(topaz%id_fpdet,         topaz%f_pdet(:,:,:) * topaz%Rho_0 * &
+       topaz%wsink * grid_tmask(:,:,:),                                         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_fsidet .gt. 0)              &
+       used = send_data(topaz%id_fsidet,        topaz%f_sidet(:,:,:)  * topaz%Rho_0 * &
+       topaz%wsink * grid_tmask(:,:,:),                                         &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_irr_inst .gt. 0)            &
+       used = send_data(topaz%id_irr_inst,      topaz%irr_inst,                 &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_irr_mix .gt. 0)             &
+       used = send_data(topaz%id_irr_mix,       topaz%irr_mix,                  &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_nphyto_tot .gt. 0)          &
+       used = send_data(topaz%id_nphyto_tot,   (topaz%p_ndi(:,:,:,tau) +        &
+       topaz%p_nlg(:,:,:,tau) + topaz%p_nsm(:,:,:,tau)),                        &
+       model_time, rmask = grid_tmask(:,:,:),& 
+       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_sfc_chl .gt. 0)             &
+       used = send_data(topaz%id_sfc_chl,       topaz%f_chl(:,:,1),             &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_fed .gt. 0)             &
+       used = send_data(topaz%id_sfc_fed,       topaz%f_fed(:,:,1),             &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_irr .gt. 0)             &
+       used = send_data(topaz%id_sfc_irr,       topaz%irr_inst(:,:,1),          &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_irr_mem .gt. 0)         &
+       used = send_data(topaz%id_sfc_irr_mem,   topaz%f_irr_mem(:,:,1),         &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_ndi .gt. 0)             &
+       used = send_data(topaz%id_sfc_ndi,       topaz%p_ndi(:,:,1,tau),         &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_nlg .gt. 0)             &
+       used = send_data(topaz%id_sfc_nlg,       topaz%p_nlg(:,:,1,tau),         &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_no3 .gt. 0)             &
+       used = send_data(topaz%id_sfc_no3,       topaz%p_no3(:,:,1,tau),         &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_nsm .gt. 0)             &
+       used = send_data(topaz%id_sfc_nsm,       topaz%p_nsm(:,:,1,tau),         &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_po4 .gt. 0)             &
+       used = send_data(topaz%id_sfc_po4,       topaz%p_po4(:,:,1,tau),         &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_phyto_c .gt. 0)         &
+       used = send_data(topaz%id_sfc_phyto_c,   topaz%c_2_n * 12000.0 *         &
+       (topaz%p_ndi(:,:,1,tau) + topaz%p_nlg(:,:,1,tau) + topaz%p_nsm(:,:,1,tau)), &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (topaz%id_sfc_temp .gt. 0)            &
+       used = send_data(topaz%id_sfc_temp,      Temp(:,:,1),                    &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
-    if (topaz%id_jno3 .gt. 0)                 &
-         used = send_data(topaz%id_jno3,          topaz%jno3*rho_dzt,          &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jo2 .gt. 0)                  &
-         used = send_data(topaz%id_jo2,           topaz%jo2*rho_dzt,           &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jpdet .gt. 0)                &
-         used = send_data(topaz%id_jpdet,         topaz%jpdet*rho_dzt,          &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jpo4 .gt. 0)                 &
-         used = send_data(topaz%id_jpo4,          topaz%jpo4*rho_dzt,          &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jpo4_graz .gt. 0)            &
-         used = send_data(topaz%id_jpo4_graz,     topaz%jpo4_graz*rho_dzt,     &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jdenit_wc .gt. 0)            &
-         used = send_data(topaz%id_jdenit_wc,     topaz%jdenit_wc*rho_dzt,     &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jdiss_sio2 .gt. 0)           &
-         used = send_data(topaz%id_jdiss_sio2,    topaz%jdiss_sio2*rho_dzt,    &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jsdon .gt. 0)                &
-         used = send_data(topaz%id_jsdon,         topaz%jsdon*rho_dzt,         &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jsdop .gt. 0)                &
-         used = send_data(topaz%id_jsdop,         topaz%jsdop*rho_dzt,         &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_jsidet .gt. 0)               &
-         used = send_data(topaz%id_jsidet,        topaz%jsidet*rho_dzt,        &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_fcaco3 .gt. 0)               &
-         used = send_data(topaz%id_fcaco3,        topaz%p_cadet(:,:,:,tau)*topaz%wsink,          &
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_fcaco3_burial .gt. 0)        &
-         used = send_data(topaz%id_fcaco3_burial, topaz%fcaco3_burial,         &
-         model_time, rmask = grid_tmask(:,:,1),& 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    if (topaz%id_fcaco3_redis .gt. 0)         &
-         used = send_data(topaz%id_fcaco3_redis,  topaz%fcaco3_redis,          &
-         model_time, rmask = grid_tmask(:,:,1),& 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    if (topaz%id_fcaco3_sed .gt. 0)           &
-         used = send_data(topaz%id_fcaco3_sed,    topaz%fcaco3_sed,            &
-         model_time, rmask = grid_tmask(:,:,1),& 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    if (topaz%id_fdenit_sed .gt. 0)           &
-         used = send_data(topaz%id_fdenit_sed,    topaz%fdenit_sed,            &
-         model_time, rmask = grid_tmask(:,:,1),& 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    if (topaz%id_ffe_sed .gt. 0)              &
-         used = send_data(topaz%id_ffe_sed,       topaz%ffe_sed,               &
-         model_time, rmask = grid_tmask(:,:,1),& 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    if (topaz%id_flith .gt. 0)                &
-         used = send_data(topaz%id_flith,         topaz%p_lithdet(:,:,:,tau) * topaz%Rho_0 *        &
-         topaz%wsink * grid_tmask,&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_fpofe .gt. 0)                &
-         used = send_data(topaz%id_fpofe,         topaz%p_fedet(:,:,:,tau) * topaz%Rho_0 *          &
-         topaz%wsink * grid_tmask(:,:,:),&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_fpon .gt. 0)                 &
-         used = send_data(topaz%id_fpon,          topaz%p_ndet(:,:,:,tau) * topaz%Rho_0 *           &
-         topaz%wsink * grid_tmask(:,:,:),&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_fpop .gt. 0)                 &
-         used = send_data(topaz%id_fpop,          topaz%p_pdet(:,:,:,tau) * topaz%Rho_0 *           &
-         topaz%wsink * grid_tmask(:,:,:),&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (topaz%id_fsio2 .gt. 0)                &
-         used = send_data(topaz%id_fsio2,         topaz%p_sidet(:,:,:,tau)  *topaz%Rho_0 *          &
-         topaz%wsink  *grid_tmask(:,:,:),&
-         model_time, rmask = grid_tmask,& 
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (topaz%id_jno3denit_wc_vert_int .gt. 0)&
+       used = send_data(topaz%id_jno3denit_wc_vert_int, topaz%jno3denit_wc_vert_int, &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_c_integral .gt. 0)          &
+       used = send_data(topaz%id_c_integral,    topaz%c_integral,               &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_fcadet_arag_100 .gt. 0)           &
+       used = send_data(topaz%id_fcadet_arag_100, topaz%fcadet_arag_100,        &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_fcadet_calc_100 .gt. 0)           &
+       used = send_data(topaz%id_fcadet_calc_100, topaz%fcadet_calc_100,        &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_ffedet_100 .gt. 0)          &
+       used = send_data(topaz%id_ffedet_100,    topaz%ffedet_100,               &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_fndet_100 .gt. 0)           &
+       used = send_data(topaz%id_fndet_100,     topaz%fndet_100,                &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_fpdet_100 .gt. 0)           &
+       used = send_data(topaz%id_fpdet_100,     topaz%fpdet_100,                &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_fsidet_100 .gt. 0)          &
+       used = send_data(topaz%id_fsidet_100,    topaz%fsidet_100,               &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_jprod_n_100 .gt. 0)         &
+       used = send_data(topaz%id_jprod_n_100,   topaz%jprod_n_100,              &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_jprod_no3_100 .gt. 0)       &
+       used = send_data(topaz%id_jprod_no3_100, topaz%jprod_no3_100,            &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_jnitrif_100 .gt. 0)         &
+       used = send_data(topaz%id_jnitrif_100,   topaz%jnitrif_100,              &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (topaz%id_nfix .gt. 0)                &
+       used = send_data(topaz%id_nfix,          topaz%nfix,                     &
+       model_time, rmask = grid_tmask(:,:,1),& 
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
 
   end subroutine generic_TOPAZ_update_from_source
 
@@ -3998,7 +4698,14 @@ contains
             grid_tmask(i,j,1)
        sc_no_term = sqrt(660.0 / (sc_o2 + epsln)) 
 
-       o2_alpha(i,j) = o2_saturation       * sc_no_term
+!!       o2_alpha(i,j) = o2_saturation       * sc_no_term
+!!
+! jgj: See JPD email (19 Jun 2008)
+!      renormalize the alpha value for atm o2
+!      data table override for o2_flux_pcair_atm is now set to 0.21 
+!
+       o2_alpha(i,j) = (o2_saturation /0.21)   * sc_no_term
+
        o2_csurf(i,j) = o2_field(i,j,1,tau) * sc_no_term * topaz%Rho_0 !nnz: MOM has rho(i,j,1,tau)
 
 
@@ -4061,8 +4768,12 @@ contains
     !
 
     do n = 1, NUM_PHYTO
+       allocate(phyto(n)%jgraz_n_100(isd:ied,jsd:jed))     ; phyto(n)%jgraz_n_100    = 0.0
        allocate(phyto(n)%def_fe(isd:ied,jsd:jed,nk))       ; phyto(n)%def_fe         = 0.0
        allocate(phyto(n)%def_p(isd:ied,jsd:jed,nk))        ; phyto(n)%def_p          = 0.0
+       allocate(phyto(n)%f_fe(isd:ied,jsd:jed,nk))         ; phyto(n)%f_fe           = 0.0
+       allocate(phyto(n)%f_n(isd:ied,jsd:jed,nk))          ; phyto(n)%f_n            = 0.0
+       allocate(phyto(n)%f_p(isd:ied,jsd:jed,nk))          ; phyto(n)%f_p            = 0.0
        allocate(phyto(n)%felim(isd:ied,jsd:jed,nk))        ; phyto(n)%felim          = 0.0
        allocate(phyto(n)%irrlim(isd:ied,jsd:jed,nk))       ; phyto(n)%irrlim         = 0.0
        allocate(phyto(n)%jgraz_fe(isd:ied,jsd:jed,nk))     ; phyto(n)%jgraz_fe       = 0.0
@@ -4094,23 +4805,24 @@ contains
     allocate(phyto(LARGE)%jprod_sio4(isd:ied,jsd:jed,nk)) ; phyto(LARGE)%jprod_sio4 = 0.0
     allocate(phyto(LARGE)%silim(isd:ied,jsd:jed,nk))      ; phyto(LARGE)%silim      = 0.0
 
-    allocate(topaz%f_n(isd:ied,jsd:jed,nk,NUM_PHYTO)); topaz%f_n=0.0
-
-    allocate(topaz%co3_solubility(isd:ied, jsd:jed, 1:nk)); topaz%co3_solubility=0.0
-    allocate(topaz%f_o2(isd:ied, jsd:jed, 1:nk)); topaz%f_o2=0.0
+    allocate(topaz%co3_sol_arag(isd:ied, jsd:jed, 1:nk)); topaz%co3_sol_arag=0.0
+    allocate(topaz%co3_sol_calc(isd:ied, jsd:jed, 1:nk)); topaz%co3_sol_calc=0.0
     allocate(topaz%f_alk(isd:ied, jsd:jed, 1:nk)); topaz%f_alk=0.0
-    allocate(topaz%f_cadet(isd:ied, jsd:jed, 1:nk)); topaz%f_cadet=0.0
+    allocate(topaz%f_cadet_arag(isd:ied, jsd:jed, 1:nk)); topaz%f_cadet_arag=0.0
+    allocate(topaz%f_cadet_calc(isd:ied, jsd:jed, 1:nk)); topaz%f_cadet_calc=0.0
     allocate(topaz%f_cased(isd:ied, jsd:jed, 1:nk)); topaz%f_cased=0.0
-    allocate(topaz%f_dic(isd:ied, jsd:jed, 1:nk)); topaz%f_dic=0.0
-    allocate(topaz%f_fcadet_btm(isd:ied, jsd:jed, 1:nk)); topaz%f_fcadet_btm=0.0
-    allocate(topaz%f_fed(isd:ied, jsd:jed, 1:nk)); topaz%f_fed=0.0
-    allocate(topaz%f_fedi(isd:ied, jsd:jed, 1:nk)); topaz%f_fedi=0.0
-    allocate(topaz%f_felg(isd:ied, jsd:jed, 1:nk)); topaz%f_felg=0.0
-    allocate(topaz%f_fedet(isd:ied, jsd:jed, 1:nk)); topaz%f_fedet=0.0
-    allocate(topaz%f_fesm(isd:ied, jsd:jed, 1:nk)); topaz%f_fesm=0.0
     allocate(topaz%f_chl(isd:ied, jsd:jed, 1:nk)); topaz%f_chl=0.0
+    allocate(topaz%f_co3_ion(isd:ied, jsd:jed, 1:nk)); topaz%f_co3_ion=0.0
+    allocate(topaz%f_dic(isd:ied, jsd:jed, 1:nk)); topaz%f_dic=0.0
+    allocate(topaz%f_cadet_arag_btf(isd:ied, jsd:jed, 1:nk)); topaz%f_cadet_arag_btf=0.0
+    allocate(topaz%f_cadet_calc_btf(isd:ied, jsd:jed, 1:nk)); topaz%f_cadet_calc_btf=0.0
+    allocate(topaz%f_fed(isd:ied, jsd:jed, 1:nk)); topaz%f_fed=0.0
+    allocate(topaz%f_fedet(isd:ied, jsd:jed, 1:nk)); topaz%f_fedet=0.0
+    allocate(topaz%f_lithdet_btf(isd:ied, jsd:jed, 1:nk)); topaz%f_lithdet_btf=0.0
+    allocate(topaz%f_ndet_btf(isd:ied, jsd:jed, 1:nk)); topaz%f_ndet_btf=0.0
+    allocate(topaz%f_pdet_btf(isd:ied, jsd:jed, 1:nk)); topaz%f_pdet_btf=0.0
+    allocate(topaz%f_sidet_btf(isd:ied, jsd:jed, 1:nk)); topaz%f_sidet_btf=0.0
     allocate(topaz%f_htotal(isd:ied, jsd:jed, 1:nk)); topaz%f_htotal=0.0
-    allocate(topaz%f_irr_inst(isd:ied, jsd:jed, 1:nk)); topaz%f_irr_inst=0.0
     allocate(topaz%f_irr_mem(isd:ied, jsd:jed, 1:nk)); topaz%f_irr_mem=0.0
     allocate(topaz%f_ldon(isd:ied, jsd:jed, 1:nk)); topaz%f_ldon=0.0
     allocate(topaz%f_lith(isd:ied, jsd:jed, 1:nk)); topaz%f_lith=0.0
@@ -4119,12 +4831,9 @@ contains
     allocate(topaz%f_nh4(isd:ied, jsd:jed, 1:nk)); topaz%f_nh4=0.0
     allocate(topaz%f_nhet(isd:ied, jsd:jed, 1:nk)); topaz%f_nhet=0.0
     allocate(topaz%f_no3(isd:ied, jsd:jed, 1:nk)); topaz%f_no3=0.0
-    allocate(topaz%f_co3_ion(isd:ied, jsd:jed, 1:nk)); topaz%f_co3_ion=0.0
+    allocate(topaz%f_o2(isd:ied, jsd:jed, 1:nk)); topaz%f_o2=0.0
     allocate(topaz%f_pdet(isd:ied, jsd:jed, 1:nk)); topaz%f_pdet=0.0
-    allocate(topaz%f_pdi(isd:ied, jsd:jed, 1:nk)); topaz%f_pdi=0.0
-    allocate(topaz%f_plg(isd:ied, jsd:jed, 1:nk)); topaz%f_plg=0.0
     allocate(topaz%f_po4(isd:ied, jsd:jed, 1:nk)); topaz%f_po4=0.0
-    allocate(topaz%f_psm(isd:ied, jsd:jed, 1:nk)); topaz%f_psm=0.0
     allocate(topaz%f_sdon(isd:ied, jsd:jed, 1:nk)); topaz%f_sdon=0.0
     allocate(topaz%f_sdop(isd:ied, jsd:jed, 1:nk)); topaz%f_sdop=0.0
     allocate(topaz%f_sidet(isd:ied, jsd:jed, 1:nk)); topaz%f_sidet=0.0
@@ -4132,14 +4841,18 @@ contains
     allocate(topaz%f_sio4(isd:ied, jsd:jed, 1:nk)); topaz%f_sio4=0.0
     allocate(topaz%expkT(isd:ied, jsd:jed, 1:nk)); topaz%expkT=0.0
     allocate(topaz%frac_det_prod(isd:ied, jsd:jed, 1:nk)); topaz%frac_det_prod=0.0
+    allocate(topaz%irr_inst(isd:ied, jsd:jed, 1:nk)); topaz%irr_inst=0.0
     allocate(topaz%irr_mix(isd:ied, jsd:jed, 1:nk)); topaz%irr_mix=0.0
-    allocate(topaz%jcadet(isd:ied, jsd:jed, 1:nk)); topaz%jcadet=0.0
-    allocate(topaz%jdenit_wc(isd:ied, jsd:jed, 1:nk)); topaz%jdenit_wc=0.0
+    allocate(topaz%jalk(isd:ied, jsd:jed, 1:nk)); topaz%jalk=0.0
+    allocate(topaz%jcadet_arag(isd:ied, jsd:jed, 1:nk)); topaz%jcadet_arag=0.0
+    allocate(topaz%jcadet_calc(isd:ied, jsd:jed, 1:nk)); topaz%jcadet_calc=0.0
+    allocate(topaz%jdic(isd:ied, jsd:jed, 1:nk)); topaz%jdic=0.0
     allocate(topaz%jdiss_sio2(isd:ied, jsd:jed, 1:nk)); topaz%jdiss_sio2=0.0
     allocate(topaz%jfe_ads(isd:ied, jsd:jed, 1:nk)); topaz%jfe_ads=0.0
     allocate(topaz%jfe_des(isd:ied, jsd:jed, 1:nk)); topaz%jfe_des=0.0
     allocate(topaz%jfe_graz(isd:ied, jsd:jed, 1:nk)); topaz%jfe_graz=0.0
     allocate(topaz%jfe_coast(isd:ied, jsd:jed, 1:nk)); topaz%jfe_coast=0.0
+    allocate(topaz%jfed(isd:ied, jsd:jed, 1:nk)); topaz%jfed=0.0
     allocate(topaz%jfedet(isd:ied, jsd:jed, 1:nk)); topaz%jfedet=0.0
     allocate(topaz%jldon(isd:ied, jsd:jed, 1:nk)); topaz%jldon=0.0
     allocate(topaz%jndet(isd:ied, jsd:jed, 1:nk)); topaz%jndet=0.0
@@ -4148,11 +4861,13 @@ contains
     allocate(topaz%jnhet(isd:ied, jsd:jed, 1:nk)); topaz%jnhet=0.0
     allocate(topaz%jnitrif(isd:ied, jsd:jed, 1:nk)); topaz%jnitrif=0.0
     allocate(topaz%jno3(isd:ied, jsd:jed, 1:nk)); topaz%jno3=0.0
+    allocate(topaz%jno3denit_wc(isd:ied, jsd:jed, 1:nk)); topaz%jno3denit_wc=0.0
     allocate(topaz%jo2(isd:ied, jsd:jed, 1:nk)); topaz%jo2=0.0
     allocate(topaz%jpdet(isd:ied, jsd:jed, 1:nk)); topaz%jpdet=0.0
     allocate(topaz%jpo4(isd:ied, jsd:jed, 1:nk)); topaz%jpo4=0.0
     allocate(topaz%jpo4_graz(isd:ied, jsd:jed, 1:nk)); topaz%jpo4_graz=0.0
-    allocate(topaz%jprod_cadet(isd:ied, jsd:jed, 1:nk)); topaz%jprod_cadet=0.0
+    allocate(topaz%jprod_cadet_arag(isd:ied, jsd:jed, 1:nk)); topaz%jprod_cadet_arag=0.0
+    allocate(topaz%jprod_cadet_calc(isd:ied, jsd:jed, 1:nk)); topaz%jprod_cadet_calc=0.0
     allocate(topaz%jprod_lithdet(isd:ied, jsd:jed, 1:nk)); topaz%jprod_lithdet=0.0
     allocate(topaz%jprod_nhet(isd:ied, jsd:jed, 1:nk)); topaz%jprod_nhet=0.0
     allocate(topaz%jprod_fedet(isd:ied, jsd:jed, 1:nk)); topaz%jprod_fedet=0.0
@@ -4161,6 +4876,7 @@ contains
     allocate(topaz%jsdon(isd:ied, jsd:jed, 1:nk)); topaz%jsdon=0.0
     allocate(topaz%jsdop(isd:ied, jsd:jed, 1:nk)); topaz%jsdop=0.0
     allocate(topaz%jsidet(isd:ied, jsd:jed, 1:nk)); topaz%jsidet=0.0
+    allocate(topaz%jsio4(isd:ied, jsd:jed, 1:nk)); topaz%jsio4=0.0
     allocate(topaz%nLg_diatoms(isd:ied, jsd:jed, 1:nk)); topaz%nLg_diatoms=0.0
     allocate(topaz%q_si_2_n_Lg_diatoms(isd:ied, jsd:jed, 1:nk)); topaz%q_si_2_n_Lg_diatoms=0.0
     allocate(topaz%zt(isd:ied, jsd:jed, 1:nk)); topaz%zt=0.0
@@ -4171,24 +4887,42 @@ contains
     allocate(topaz%tot_layer_int_p(isd:ied, jsd:jed, 1:nk)); topaz%tot_layer_int_p=0.0
     allocate(topaz%tot_layer_int_si(isd:ied, jsd:jed, 1:nk)); topaz%tot_layer_int_si=0.0
 
-    allocate(topaz%co2_csurf(isd:ied, jsd:jed)); topaz%co2_csurf=0.0
-    allocate(topaz%co2_alpha(isd:ied, jsd:jed)); topaz%co2_alpha=0.0
-    allocate(topaz%pco2_csurf(isd:ied, jsd:jed)); topaz%pco2_csurf=0.0
-    allocate(topaz%fcaco3_sed(isd:ied, jsd:jed)); topaz%fcaco3_sed=0.0
-    allocate(topaz%fcaco3_redis(isd:ied, jsd:jed)); topaz%fcaco3_redis=0.0
-    allocate(topaz%fcaco3_burial(isd:ied, jsd:jed)); topaz%fcaco3_burial=0.0
-    allocate(topaz%fcadet_btm(isd:ied, jsd:jed)); topaz%fcadet_btm=0.0
-    allocate(topaz%fdenit_sed(isd:ied, jsd:jed)); topaz%fdenit_sed=0.0
-    allocate(topaz%ffe_sed(isd:ied, jsd:jed)); topaz%ffe_sed=0.0
-    allocate(topaz%ffedet_btm(isd:ied, jsd:jed)); topaz%ffedet_btm=0.0
-    allocate(topaz%flithdet_btm(isd:ied, jsd:jed)); topaz%flithdet_btm=0.0
     allocate(topaz%b_alk(isd:ied, jsd:jed)); topaz%b_alk=0.0
     allocate(topaz%b_dic(isd:ied, jsd:jed)); topaz%b_dic=0.0
     allocate(topaz%b_fed(isd:ied, jsd:jed)); topaz%b_fed=0.0
-    allocate(topaz%b_ndet(isd:ied, jsd:jed)); topaz%b_ndet=0.0
+    allocate(topaz%b_nh4(isd:ied, jsd:jed)); topaz%b_nh4=0.0
     allocate(topaz%b_no3(isd:ied, jsd:jed)); topaz%b_no3=0.0
-    allocate(topaz%b_pdet(isd:ied, jsd:jed)); topaz%b_pdet=0.0
+    allocate(topaz%b_o2(isd:ied, jsd:jed)); topaz%b_o2=0.0
     allocate(topaz%b_po4(isd:ied, jsd:jed)); topaz%b_po4=0.0
+    allocate(topaz%b_sio4(isd:ied, jsd:jed)); topaz%b_sio4=0.0
+    allocate(topaz%c_integral(isd:ied, jsd:jed)); topaz%c_integral=0.0
+    allocate(topaz%co2_csurf(isd:ied, jsd:jed)); topaz%co2_csurf=0.0
+    allocate(topaz%co2_alpha(isd:ied, jsd:jed)); topaz%co2_alpha=0.0
+    allocate(topaz%fcased_burial(isd:ied, jsd:jed)); topaz%fcased_burial=0.0
+    allocate(topaz%fcased_redis(isd:ied, jsd:jed)); topaz%fcased_redis=0.0
+    allocate(topaz%fcadet_arag_btm(isd:ied, jsd:jed)); topaz%fcadet_arag_btm=0.0
+    allocate(topaz%fcadet_calc_btm(isd:ied, jsd:jed)); topaz%fcadet_calc_btm=0.0
+    allocate(topaz%ffe_sed(isd:ied, jsd:jed)); topaz%ffe_sed=0.0
+    allocate(topaz%ffedet_100(isd:ied, jsd:jed)); topaz%ffedet_100=0.0
+    allocate(topaz%ffedet_btm(isd:ied, jsd:jed)); topaz%ffedet_btm=0.0
+    allocate(topaz%flithdet_btm(isd:ied, jsd:jed)); topaz%flithdet_btm=0.0
+    allocate(topaz%fnfeso4red_sed(isd:ied, jsd:jed)); topaz%fnfeso4red_sed=0.0
+    allocate(topaz%fndet_100(isd:ied, jsd:jed)); topaz%fndet_100=0.0
+    allocate(topaz%fndet_btm(isd:ied, jsd:jed)); topaz%fndet_btm=0.0
+    allocate(topaz%fno3denit_sed(isd:ied, jsd:jed)); topaz%fno3denit_sed=0.0
+    allocate(topaz%fnoxic_sed(isd:ied, jsd:jed)); topaz%fnoxic_sed=0.0
+    allocate(topaz%fpdet_100(isd:ied, jsd:jed)); topaz%fpdet_100=0.0
+    allocate(topaz%fpdet_btm(isd:ied, jsd:jed)); topaz%fpdet_btm=0.0
+    allocate(topaz%jno3denit_wc_vert_int(isd:ied, jsd:jed)); topaz%jno3denit_wc_vert_int=0.0
+    allocate(topaz%fcadet_arag_100(isd:ied, jsd:jed)); topaz%fcadet_arag_100=0.0
+    allocate(topaz%fcadet_calc_100(isd:ied, jsd:jed)); topaz%fcadet_calc_100=0.0
+    allocate(topaz%fsidet_100(isd:ied, jsd:jed)); topaz%fsidet_100=0.0
+    allocate(topaz%fsidet_btm(isd:ied, jsd:jed)); topaz%fsidet_btm=0.0
+    allocate(topaz%jnitrif_100(isd:ied, jsd:jed)); topaz%jnitrif_100=0.0
+    allocate(topaz%jprod_n_100(isd:ied, jsd:jed)); topaz%jprod_n_100=0.0
+    allocate(topaz%jprod_no3_100(isd:ied, jsd:jed)); topaz%jprod_no3_100=0.0
+    allocate(topaz%nfix(isd:ied, jsd:jed)); topaz%nfix=0.0
+    allocate(topaz%pco2_csurf(isd:ied, jsd:jed)); topaz%pco2_csurf=0.0
 
   end subroutine user_allocate_arrays
 
@@ -4202,6 +4936,8 @@ contains
     deallocate(topaz%htotalhi,topaz%htotallo)
 
     do n = 1, NUM_PHYTO
+       deallocate(phyto(n)%jgraz_n_100)
+       deallocate(phyto(n)%f_fe)
        deallocate(phyto(n)%def_fe)
        deallocate(phyto(n)%def_p)
        deallocate(phyto(n)%felim)
@@ -4214,6 +4950,8 @@ contains
        deallocate(phyto(n)%jprod_po4)
        deallocate(phyto(n)%liebig_lim)
        deallocate(phyto(n)%mu)
+       deallocate(phyto(n)%f_n)
+       deallocate(phyto(n)%f_p)
        deallocate(phyto(n)%po4lim)
        deallocate(phyto(n)%q_fe_2_n)
        deallocate(phyto(n)%q_p_2_n)
@@ -4229,54 +4967,55 @@ contains
     deallocate(phyto(LARGE)%jprod_sio4)
     deallocate(phyto(LARGE)%silim)
 
-
-    deallocate(topaz%f_n)
-
     deallocate(&
-         topaz%co3_solubility,&
-         topaz%f_o2,&
+         topaz%co3_sol_arag,&
+         topaz%co3_sol_calc,&
          topaz%f_alk,&
-         topaz%f_cadet,&
+         topaz%f_cadet_arag,&
+         topaz%f_cadet_arag_btf,&
+         topaz%f_cadet_calc,&
+         topaz%f_cadet_calc_btf,&
          topaz%f_cased,&
-         topaz%f_dic,&
-         topaz%f_fcadet_btm,&
-         topaz%f_fed,&
-         topaz%f_fedi,&
-         topaz%f_felg,&
-         topaz%f_fedet,&
-         topaz%f_fesm,&
          topaz%f_chl,&
+         topaz%f_co3_ion,&
+         topaz%f_dic,&
+         topaz%f_fed,&
+         topaz%f_fedet,&
          topaz%f_htotal,&
-         topaz%f_irr_inst,&
          topaz%f_irr_mem,&
          topaz%f_ldon,&
          topaz%f_lith,&
          topaz%f_lithdet,&
+         topaz%f_lithdet_btf,&
          topaz%f_ndet,&
+         topaz%f_ndet_btf,&
          topaz%f_nh4,&
          topaz%f_nhet,&
          topaz%f_no3,&
-         topaz%f_co3_ion,&
+         topaz%f_o2,&
          topaz%f_pdet,&
-         topaz%f_pdi,&
-         topaz%f_plg,&
+         topaz%f_pdet_btf,&
          topaz%f_po4,&
-         topaz%f_psm,&
          topaz%f_sdon,&
          topaz%f_sdop,&
          topaz%f_sidet,&
+         topaz%f_sidet_btf,&
          topaz%f_silg,&
          topaz%f_sio4,&
          topaz%expkT,&
          topaz%frac_det_prod,&
+         topaz%irr_inst,&
          topaz%irr_mix,&
-         topaz%jcadet,&
-         topaz%jdenit_wc,&
+         topaz%jalk,&
+         topaz%jcadet_arag,&
+         topaz%jcadet_calc,&
+         topaz%jdic,&
          topaz%jdiss_sio2,&
          topaz%jfe_ads,&
          topaz%jfe_des,&
          topaz%jfe_graz,&
          topaz%jfe_coast,&
+         topaz%jfed,&
          topaz%jfedet,&
          topaz%jldon,&
          topaz%jndet,&
@@ -4285,11 +5024,13 @@ contains
          topaz%jnhet,&
          topaz%jnitrif,&
          topaz%jno3,&
+         topaz%jno3denit_wc,&
          topaz%jo2,&
          topaz%jpdet,&
          topaz%jpo4,&
          topaz%jpo4_graz,&
-         topaz%jprod_cadet,&
+         topaz%jprod_cadet_arag,&
+         topaz%jprod_cadet_calc,&
          topaz%jprod_lithdet,&
          topaz%jprod_nhet,&
          topaz%jprod_fedet,&
@@ -4298,6 +5039,7 @@ contains
          topaz%jsdon,&
          topaz%jsdop,&
          topaz%jsidet,&
+         topaz%jsio4,&
          topaz%nLg_diatoms,&
          topaz%q_si_2_n_Lg_diatoms,&
          topaz%tot_layer_int_c,&
@@ -4308,22 +5050,40 @@ contains
          topaz%zt )
 
     deallocate(&
-         topaz%co2_csurf,topaz%pco2_csurf,topaz%co2_alpha,&
-         topaz%fcaco3_sed,&
-         topaz%fcaco3_redis,&
-         topaz%fcaco3_burial,&
-         topaz%fcadet_btm,&
-         topaz%fdenit_sed,&
-         topaz%ffe_sed,&
-         topaz%ffedet_btm,&
-         topaz%flithdet_btm,&
          topaz%b_alk,&
          topaz%b_dic,&
          topaz%b_fed,&
-         topaz%b_ndet,&
+         topaz%b_nh4,&
          topaz%b_no3,&
-         topaz%b_pdet,&
-         topaz%b_po4 )
+         topaz%b_o2,&
+         topaz%b_po4,&
+         topaz%b_sio4,&
+         topaz%c_integral,&
+         topaz%co2_csurf,topaz%pco2_csurf,topaz%co2_alpha,&
+         topaz%fcadet_arag_100,&
+         topaz%fcadet_arag_btm,&
+         topaz%fcadet_calc_100,&
+         topaz%fcadet_calc_btm,&
+         topaz%fcased_burial,&
+         topaz%fcased_redis,&
+         topaz%ffe_sed,&
+         topaz%ffedet_100,&
+         topaz%ffedet_btm,&
+         topaz%flithdet_btm,&
+         topaz%fnfeso4red_sed,&
+         topaz%fndet_100,&
+         topaz%fndet_btm,&
+         topaz%fno3denit_sed,&
+         topaz%fnoxic_sed,&
+         topaz%fpdet_100,&
+         topaz%fpdet_btm,&
+         topaz%fsidet_100,&
+         topaz%fsidet_btm,&
+         topaz%jnitrif_100,&
+         topaz%jno3denit_wc_vert_int,&
+         topaz%jprod_n_100,&
+         topaz%jprod_no3_100,&
+         topaz%nfix )
 
   end subroutine user_deallocate_arrays
 
