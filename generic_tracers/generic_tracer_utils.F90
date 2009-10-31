@@ -18,7 +18,8 @@
 #include <fms_platform.h>
 module g_tracer_utils
 
-  use coupler_types_mod, only: coupler_2d_bc_type, ind_flux, ind_alpha, ind_csurf
+  use coupler_types_mod, only: coupler_2d_bc_type, ind_flux, ind_deltap, ind_kw
+  use coupler_types_mod, only: ind_alpha, ind_csurf, ind_sc_no
   use FMS_coupler_util,  only: extract_coupler_values, set_coupler_values
   use atmos_ocean_fluxes_mod, only: aof_set_coupler_flux
   use mpp_mod,           only: mpp_error, NOTE, WARNING, FATAL
@@ -34,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 17.0 2009/07/21 03:18:15 fms Exp $'
-  character(len=128) :: tag = '$Name: quebec $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 17.0.2.3 2009/09/15 21:06:21 nnz Exp $'
+  character(len=128) :: tag = '$Name: quebec_200910 $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -64,8 +65,12 @@ module g_tracer_utils
   !   ! MOM keeps the field at 3 time levels, hence 4D.
   !   real, _ALLOCATABLE, dimension(:,:,:,:):: field  _NULL
   !
-  !   ! Surface flux
+  !   ! Surface flux, surface gas flux, deltap and kw
   !   real, _ALLOCATABLE, dimension(:,:)    :: stf    _NULL
+  ! 
+  !   real, _ALLOCATABLE, dimension(:,:)    :: deltap    _NULL
+  ! 
+  !   real, _ALLOCATABLE, dimension(:,:)    :: kw    _NULL
   ! 
   !   ! Bottom  flux
   !   real, _ALLOCATABLE, dimension(:,:)    :: btf    _NULL
@@ -74,25 +79,30 @@ module g_tracer_utils
   !   real, _ALLOCATABLE, dimension(:,:)    :: btm_reservoir    _NULL 
   !
   !   ! Tracer concentration in river runoff
-  !   real, _ALLOCATABLE, dimension(:,:)    :: triver _NULL 
+  !   real, _ALLOCATABLE, dimension(:,:)    :: trunoff _NULL 
   !
-  !   ! Tracer concentration in wet deposition
+  !   ! Runoff flux of tracer
+  !   real, _ALLOCATABLE, dimension(:,:)    :: runoff_tracer_flux _NULL 
+  !
+  !   ! Wet deposition flux of tracer
   !   real, _ALLOCATABLE, dimension(:,:)    :: wetdep _NULL 
   !
-  !   ! Tracer concentration in dry deposition
+  !   ! Dry deposition flux of tracer
   !   real, _ALLOCATABLE, dimension(:,:)    :: drydep _NULL 
   !
-  !   ! Tracer saturation and alpha 
+  !   ! Tracer saturation, alpha, and schmidt number 
   !   real, _ALLOCATABLE, dimension(:,:)    :: csurf  _NULL 
   !
   !   real, _ALLOCATABLE, dimension(:,:)    :: alpha  _NULL 
+  !
+  !   real, _ALLOCATABLE, dimension(:,:)    :: sc_no  _NULL 
   !
   !   ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
   !   real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
   !
   !   ! IDs for using diag_manager tools
-  !   integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_triver=-1
-  !   integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_aux=-1
+  !   integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
+  !   integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_sc_no=-1, diag_id_aux=-1
   !
   !  ! Tracer Initial concentration if constant everywhere
   !   real    :: const_init_value = 0.0
@@ -135,7 +145,7 @@ module g_tracer_utils
      real :: flux_gas_molwt
 
      ! Tracer flux names recognized by component models (OCN, LND, ICE, ATM) 
-     character(len=fm_string_len) :: flux_gas_name, flux_runoff_name, flux_wetdep_name, flux_drydep_name
+     character(len=fm_string_len) :: flux_gas_name, flux_gas_type, flux_runoff_name, flux_wetdep_name, flux_drydep_name
      real, _ALLOCATABLE, dimension(:) :: flux_param, flux_gas_param
 
      ! IN and OUT (restart) files
@@ -148,8 +158,14 @@ module g_tracer_utils
      ! MOM keeps the field at 3 time levels, hence 4D.
      real, _ALLOCATABLE, dimension(:,:,:,:):: field  _NULL
 
-     ! Surface flux
+     ! Surface flux, surface flux of gas, deltap and kw
      real, _ALLOCATABLE, dimension(:,:)    :: stf    _NULL
+
+     real, _ALLOCATABLE, dimension(:,:)    :: stf_gas    _NULL
+
+     real, _ALLOCATABLE, dimension(:,:)    :: deltap    _NULL
+
+     real, _ALLOCATABLE, dimension(:,:)    :: kw    _NULL
 
      ! Bottom  flux
      real, _ALLOCATABLE, dimension(:,:)    :: btf    _NULL
@@ -158,26 +174,31 @@ module g_tracer_utils
      real, _ALLOCATABLE, dimension(:,:)    :: btm_reservoir    _NULL 
 
      ! Tracer concentration in river runoff
-     real, _ALLOCATABLE, dimension(:,:)    :: triver _NULL 
+     real, _ALLOCATABLE, dimension(:,:)    :: trunoff _NULL 
 
-     ! Tracer concentration in wet deposition
+     ! Runoff flux of tracer
+     real, _ALLOCATABLE, dimension(:,:)    :: runoff_tracer_flux _NULL 
+
+     ! Wet deposition flux of tracer
      real, _ALLOCATABLE, dimension(:,:)    :: wetdep _NULL 
 
-     ! Tracer concentration in dry deposition
+     ! Dry deposition flux of tracer
      real, _ALLOCATABLE, dimension(:,:)    :: drydep _NULL 
 
-     ! Tracer saturation and alpha 
+     ! Tracer saturation, alpha and schmidt number 
      real, _ALLOCATABLE, dimension(:,:)    :: csurf  _NULL 
 
      real, _ALLOCATABLE, dimension(:,:)    :: alpha  _NULL 
+
+     real, _ALLOCATABLE, dimension(:,:)    :: sc_no  _NULL 
 
      ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
      real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
 
 
      ! IDs for using diag_manager tools
-     integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_triver=-1
-     integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_aux=-1
+     integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
+     integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_sc_no=-1, diag_id_aux=-1
      integer :: diag_id_btf=-1,diag_id_btm=-1
 
      ! Tracer Initial concentration if constant everywhere
@@ -318,8 +339,8 @@ module g_tracer_utils
   !   This function is overloaded to set the values of the following member variables
   !4D arrays:   'field'
   !3D arrays:   'field' , 'tendency'
-  !2D arrays:   'alpha','csurf','stf','btf','btm_reservoir','triver','drydep','wetdep'
-  !1D values:   'field','tendency','stf','btf','btm_reservoir','triver','drydep','wetdep','btm_reservoir','sink_rate'
+  !2D arrays:   'alpha','csurf','sc_no','stf','stf_gas','deltap','kw','btf','btm_reservoir','trunoff','runoff_tracer_flux','drydep','wetdep'
+  !1D values:   'field','tendency','stf','stf_gas','deltap','kw','btf','btm_reservoir','trunoff','runoff_tracer_flux','drydep','wetdep','btm_reservoir','sink_rate'
   !
   !In case of 1D values all element arrays are set to the particular value.
   !
@@ -335,7 +356,7 @@ module g_tracer_utils
   !  </IN>
   !  <IN NAME="field_name" TYPE="character(len=*)">
   !   String associated with the member array, one of the following:
-  !   'field','tendency','stf','btf','btm_reservoir','triver','drydep','wetdep','btm_reservoir','sink_rate'
+  !   'field','tendency','stf','stf_gas','deltap','kw','btf','btm_reservoir','trunoff','runoff_tracer_flux','drydep','wetdep','btm_reservoir','sink_rate'
   !   So the result of this call is tracer%field_name = array_in for the tracer called tracer_name
   !  </IN>
   !  <IN NAME="value" TYPE="real OR real(isd:,jsd:) OR real(isd:,jsd:,:) OR real(isd:,jsd:,:,:)">
@@ -585,7 +606,7 @@ contains
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
-       flux_param, flux_bottom, btm_reservoir, sink_rate, flux_gas_restart_file) 
+       flux_param, flux_bottom, btm_reservoir, sink_rate, flux_gas_restart_file, flux_gas_type) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -603,6 +624,7 @@ contains
     real, dimension(:), intent(in), optional :: flux_gas_param
     real, dimension(:), intent(in), optional :: flux_param
     character(len=*),   intent(in), optional :: flux_gas_name
+    character(len=*),   intent(in), optional :: flux_gas_type
     character(len=*),   intent(in), optional :: flux_gas_restart_file
 
     !
@@ -636,7 +658,7 @@ contains
     !Restart files for ice fluxes
     g_tracer%ice_restart_file   = trim(g_tracer_com%ice_restart_file)
 
-    !Restart files for csurf and alpha for tracers with gas flux default values
+    !Restart files for csurf, alpha and sc_no for tracers with gas flux default values
     g_tracer%flux_gas_restart_file = trim("ocean_airsea_flux.res.nc")    
 
     g_tracer%alias        = trim(name)
@@ -684,6 +706,8 @@ contains
        g_tracer%flux_gas_name=trim(g_tracer%alias) // trim("_flux")
        if(present(flux_gas_name)) g_tracer%flux_gas_name=flux_gas_name
        if(present(flux_gas_restart_file))  g_tracer%flux_gas_restart_file  = flux_gas_restart_file
+       g_tracer%flux_gas_type=trim("air_sea_gas_flux_generic")
+       if(present(flux_gas_type)) g_tracer%flux_gas_type=flux_gas_type
     endif
 
     if(present(flux_runoff))  g_tracer%flux_runoff = flux_runoff
@@ -733,10 +757,16 @@ contains
     if(g_tracer%flux_gas) then
        allocate(g_tracer%alpha(isd:ied,jsd:jed));g_tracer%alpha=0.0
        allocate(g_tracer%csurf(isd:ied,jsd:jed));g_tracer%csurf=0.0
+       allocate(g_tracer%stf_gas(isd:ied,jsd:jed)); g_tracer%stf_gas(:,:) = 0.0 
+       if(g_tracer%flux_gas_type .eq. 'air_sea_gas_flux_generic') then
+          allocate(g_tracer%sc_no(isd:ied,jsd:jed));g_tracer%sc_no=0.0
+          allocate(g_tracer%deltap(isd:ied,jsd:jed)); g_tracer%deltap(:,:) = 0.0 
+          allocate(g_tracer%kw(isd:ied,jsd:jed)); g_tracer%kw(:,:) = 0.0 
+       endif
     endif
-
     if(g_tracer%flux_runoff) then
-       allocate(g_tracer%triver(isd:ied,jsd:jed));g_tracer%triver(:,:) = 0.0 
+       allocate(g_tracer%trunoff(isd:ied,jsd:jed));g_tracer%trunoff(:,:) = 0.0 
+       allocate(g_tracer%runoff_tracer_flux(isd:ied,jsd:jed));g_tracer%runoff_tracer_flux(:,:) = 0.0 
     endif
 
     if(g_tracer%flux_wetdep) then
@@ -775,7 +805,7 @@ contains
 
     if(g_tracer%flux_gas) then
        g_tracer%flux_gas_ind  = aof_set_coupler_flux(g_tracer%flux_gas_name,                  &
-            flux_type         = 'air_sea_gas_flux',                                           &
+            flux_type         = g_tracer%flux_gas_type,                                       &
             implementation    = 'ocmip2',                                                     &
             mol_wt            = g_tracer%flux_gas_molwt,                                      &
             param             = g_tracer%flux_gas_param,                                      &
@@ -822,7 +852,7 @@ contains
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Use diag_manager register_diag_field for each of the field arrays that were _ALLOCATED for a tracer node.
-  !   These include %field,  %tendency, %stf, %btf, %triver, %alpha, %csurf, %btm_reservoir. 
+  !   These include %field,  %tendency, %stf, %stf_gas, %deltap, %kw, %btf, %trunoff, %alpha, %csurf, %sc_no, %btm_reservoir. 
   !  </DESCRIPTION>
   !  <TEMPLATE>
   !   call  g_tracer_register_diag(g_tracer)
@@ -838,73 +868,109 @@ contains
     character(len=fm_string_len) :: string
 
     g_tracer%diag_id_field = register_diag_field(g_tracer%package_name, &
-         trim(g_tracer%alias),          &
-         g_tracer_com%axes(1:3),      &
-         g_tracer_com%init_time,           &
+         trim(g_tracer%alias),         &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
          trim(g_tracer%longname),      &
          trim(g_tracer%units),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_aux")
     g_tracer%diag_id_aux = register_diag_field(g_tracer%package_name, &
-         trim(string),          &
-         g_tracer_com%axes(1:3),      &
-         g_tracer_com%init_time,           &
-         trim(string),      &
+         trim(string),                 &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         trim(string),                 &
          trim(g_tracer%units),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_stf")
     g_tracer%diag_id_stf = register_diag_field(g_tracer%package_name, &
-         trim(string),                   &
-         g_tracer_com%axes(1:2),      &
-         g_tracer_com%init_time,           &
-         trim(string),                   &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Total flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
          trim('mole/m^2/sec'),         &
+         missing_value = -1.0e+10)
+
+    string=trim(g_tracer%alias) // trim("_stf_gas")
+    g_tracer%diag_id_stf_gas = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Gas exchange flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
+         trim('mole/m^2/sec'),         &
+         missing_value = -1.0e+10)
+
+    string=trim(g_tracer%alias) // trim("_deltap")
+    g_tracer%diag_id_deltap = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Ocn minus Atm pressure of ') // trim(g_tracer%alias), &
+         trim('uatm'),                 &
+         missing_value = -1.0e+10)
+
+    string=trim(g_tracer%alias) // trim("_kw")
+    g_tracer%diag_id_kw = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Gas Exchange piston velocity for ') // trim(g_tracer%alias), &
+         trim('m/sec'),                &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_btf")
     g_tracer%diag_id_btf = register_diag_field(g_tracer%package_name, &
-         trim(string),                   &
-         g_tracer_com%axes(1:2),      &
-         g_tracer_com%init_time,           &
-         trim(string),                   &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Total flux of ') // trim(g_tracer%alias) // trim(' into Ocean Bottom'), &
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_btm_reservoir")
     g_tracer%diag_id_btm = register_diag_field(g_tracer%package_name, &
-         trim(string),                   &
-         g_tracer_com%axes(1:2),      &
-         g_tracer_com%init_time,           &
-         trim(string),                   &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Bottom reservoir of ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+10)
 
-    string=trim(g_tracer%alias) // trim("_triver")
-    g_tracer%diag_id_triver = register_diag_field(g_tracer%package_name, &
-         trim(string),                   &
-         g_tracer_com%axes(1:2),      &
-         g_tracer_com%init_time,           &
-         trim(string),                   &
+    string=trim(g_tracer%alias) // trim("_trunoff")
+    g_tracer%diag_id_trunoff = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('River concentration of ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_alpha")
     g_tracer%diag_id_alpha = register_diag_field(g_tracer%package_name, &
-         trim(string),                   &
-         g_tracer_com%axes(1:2),      &
-         g_tracer_com%init_time,           &
-         trim(string),                   &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Atmospheric saturation for ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+10)
 
     string=trim(g_tracer%alias) // trim("_csurf")
     g_tracer%diag_id_csurf = register_diag_field(g_tracer%package_name, &
-         trim(string),                   &
-         g_tracer_com%axes(1:2),      &
-         g_tracer_com%init_time,           &
-         trim(string),                   &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Ocean surface gas concentration of ') // trim(g_tracer%alias), &
+         trim(g_tracer%units),         &
+         missing_value = -1.0e+10)
+
+    string=trim(g_tracer%alias) // trim("_sc_no")
+    g_tracer%diag_id_sc_no = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Ocean surface Schmidt Number for ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+10)
 
@@ -912,7 +978,7 @@ contains
 
   ! <SUBROUTINE NAME="g_tracer_coupler_set">
   !  <OVERVIEW>
-  !   Set coupler values only for tracers that have _ALLOCATED %alpha and %csurf
+  !   Set coupler values only for tracers that have _ALLOCATED %alpha, %csurf and %sc_no
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Use coupler_util subroutine set_coupler_values() to set the coupler values
@@ -950,16 +1016,16 @@ contains
     !Go through the list of tracers 
     do  
        !
-       !Set coupler values only for tracers that have _ALLOCATED %alpha and %csurf
+       !Set coupler values only for tracers that have _ALLOCATED %alpha, %csurf and %sc_no
        !
 
        if(_ALLOCATED(g_tracer%alpha)) then
 
           if(present(value)) g_tracer%alpha=value 
 
-          call set_coupler_values(g_tracer%alpha, &
+          call set_coupler_values(g_tracer%alpha,   &
                BC_struc   = IOB_struc,              &
-               BC_index   = g_tracer%flux_gas_ind,& !nnz: Is this always the right index?
+               BC_index   = g_tracer%flux_gas_ind,  &
                BC_element = ind_alpha,              &
                ilb=g_tracer_com%isd, jlb=g_tracer_com%jsd ,&
                is=g_tracer_com%isc, ie=g_tracer_com%iec,&
@@ -971,10 +1037,24 @@ contains
 
           if(present(value)) g_tracer%csurf=value 
 
-          call set_coupler_values(g_tracer%csurf, &
+          call set_coupler_values(g_tracer%csurf,   &
                BC_struc   = IOB_struc,              &
-               BC_index   = g_tracer%flux_gas_ind,& !nnz: Is this always the right index?
+               BC_index   = g_tracer%flux_gas_ind,  &
                BC_element = ind_csurf,              &
+               ilb=g_tracer_com%isd, jlb=g_tracer_com%jsd ,&
+               is=g_tracer_com%isc, ie=g_tracer_com%iec,&
+               js=g_tracer_com%jsc, je=g_tracer_com%jec &
+               )
+       endif
+
+       if(_ALLOCATED(g_tracer%sc_no)) then
+
+          if(present(value)) g_tracer%sc_no=value 
+
+          call set_coupler_values(g_tracer%sc_no,   &
+               BC_struc   = IOB_struc,              &
+               BC_index   = g_tracer%flux_gas_ind,  &
+               BC_element = ind_sc_no,              &
                ilb=g_tracer_com%isd, jlb=g_tracer_com%jsd ,&
                is=g_tracer_com%isc, ie=g_tracer_com%iec,&
                js=g_tracer_com%jsc, je=g_tracer_com%jec &
@@ -1015,7 +1095,7 @@ contains
     type(coupler_2d_bc_type),    intent(in) :: IOB_struc
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_get'
-    real, dimension(:,:), allocatable :: temp_array,stf_array
+    real, dimension(:,:), allocatable :: temp_array,stf_array,stf_gas_array,deltap_array, kw_array
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
@@ -1023,6 +1103,9 @@ contains
     g_tracer => g_tracer_list
     allocate(temp_array(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed));temp_array=0.0
     allocate(stf_array(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed))
+    allocate(stf_gas_array(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed))
+    allocate(deltap_array(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed))
+    allocate(kw_array(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed))
 
 
     !Go through the list of tracers 
@@ -1032,22 +1115,54 @@ contains
        if(g_tracer%flux_gas) then
           temp_array=0.0
           call extract_coupler_values(BC_struc  =IOB_struc, &
-               BC_index  =g_tracer%flux_gas_ind,  & 
+               BC_index  =g_tracer%flux_gas_ind,    & 
                BC_element=ind_flux,                 &
                array_out =temp_array,               &
                conversion=-1.0,                     &
-               ilb=g_tracer_com%isd,jlb=g_tracer_com%jsd,& !nnz: I have to pass these otherwise out of bound array reference for array_out inside extract_coupler_values. Why? How come GOLD is OK? 
+               ilb=g_tracer_com%isd,jlb=g_tracer_com%jsd,& !lower bounds of array_out 
                is=g_tracer_com%isc, ie=g_tracer_com%iec,&
                js=g_tracer_com%jsc, je=g_tracer_com%jec)
           !This does temp_array=conv *BC_struc%bc(flux_gas_ind)%field(ind_flux)%values
 
           stf_array = stf_array+temp_array !flux_gas contributes to %stf
+          stf_gas_array=stf_array
+
+
+          if(g_tracer%flux_gas_type .eq. 'air_sea_gas_flux_generic') then
+             temp_array=0.0
+             deltap_array=0.0
+             call extract_coupler_values(BC_struc  =IOB_struc, &
+                  BC_index  =g_tracer%flux_gas_ind,    & 
+                  BC_element=ind_deltap,               &
+                  array_out =temp_array,               &
+                  conversion=1.0,                      &
+                  ilb=g_tracer_com%isd,jlb=g_tracer_com%jsd,& !lower bounds of array_out 
+                  is=g_tracer_com%isc, ie=g_tracer_com%iec,&
+                  js=g_tracer_com%jsc, je=g_tracer_com%jec)
+             !This does temp_array=conv *BC_struc%bc(flux_gas_ind)%field(ind_flux)%values
+             
+             deltap_array = deltap_array+temp_array
+             temp_array=0.0
+             kw_array=0.0
+             call extract_coupler_values(BC_struc  =IOB_struc, &
+                  BC_index  =g_tracer%flux_gas_ind,    & 
+                  BC_element=ind_kw,                   &
+                  array_out =temp_array,               &
+                  conversion=1.0,                      &
+                  ilb=g_tracer_com%isd,jlb=g_tracer_com%jsd,& !lower bounds of array_out
+                  is=g_tracer_com%isc, ie=g_tracer_com%iec,&
+                  js=g_tracer_com%jsc, je=g_tracer_com%jec)
+             !This does temp_array=conv *BC_struc%bc(flux_gas_ind)%field(ind_flux)%values
+             
+             kw_array = kw_array+temp_array
+          endif
+          
        endif
 
        if(g_tracer%flux_drydep) then
           temp_array=0.0
           call extract_coupler_values(BC_struc  =IOB_struc, &
-               BC_index  =g_tracer%flux_drydep_ind,&
+               BC_index  =g_tracer%flux_drydep_ind,  &
                BC_element=ind_flux,                  &
                array_out =temp_array,                &
                conversion=-1.0,                      &
@@ -1064,7 +1179,7 @@ contains
        if(g_tracer%flux_wetdep) then
           temp_array=0.0
           call extract_coupler_values(BC_struc  =IOB_struc, &
-               BC_index  =g_tracer%flux_wetdep_ind,&
+               BC_index  =g_tracer%flux_wetdep_ind,  &
                BC_element=ind_flux,                  &
                array_out =temp_array,                &
                conversion=-1.0,                      &
@@ -1081,15 +1196,15 @@ contains
        if(g_tracer%flux_runoff) then
           temp_array=0.0
           call extract_coupler_values(BC_struc  =IOB_struc, &
-               BC_index  =g_tracer%flux_runoff_ind,&
-               BC_element=ind_flux,                  &
-               array_out =temp_array,         &
+               BC_index  =g_tracer%flux_runoff_ind, &
+               BC_element=ind_flux,                 &
+               array_out =temp_array,               &
                conversion=1.0,                      &
                ilb=g_tracer_com%isd,jlb=g_tracer_com%jsd,&
                is=g_tracer_com%isc, ie=g_tracer_com%iec, &
                js=g_tracer_com%jsc, je=g_tracer_com%jec)
 
-          call g_tracer_set_values(g_tracer,g_tracer%name,'triver',temp_array,&
+          call g_tracer_set_values(g_tracer,g_tracer%name,'trunoff',temp_array,&
                g_tracer_com%isd,g_tracer_com%jsd)
        endif
 
@@ -1103,12 +1218,23 @@ contains
                g_tracer_com%isd,g_tracer_com%jsd)
        endif
 
+       if(g_tracer%flux_gas) then
+          call g_tracer_set_values(g_tracer,g_tracer%name,'stf_gas',stf_gas_array,&
+               g_tracer_com%isd,g_tracer_com%jsd)
+          if(g_tracer%flux_gas_type .eq. 'air_sea_gas_flux_generic') then
+             call g_tracer_set_values(g_tracer,g_tracer%name,'deltap',deltap_array,&
+                  g_tracer_com%isd,g_tracer_com%jsd)
+             call g_tracer_set_values(g_tracer,g_tracer%name,'kw',kw_array,&
+                  g_tracer_com%isd,g_tracer_com%jsd)
+          endif
+       endif
+
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next)) exit
        g_tracer => g_tracer%next
     enddo
 
-    deallocate(temp_array, stf_array)
+    deallocate(temp_array, stf_array, stf_gas_array, deltap_array, kw_array)
 
   end subroutine g_tracer_coupler_get
 
@@ -1313,22 +1439,32 @@ contains
          ": No tracer in the list with name="//trim(name))
 
     select case(member)
-    case ('stf') 
-       array_ptr => g_tracer%stf
-    case ('btf') 
-       array_ptr => g_tracer%btf
-    case ('btm_reservoir') 
-       array_ptr => g_tracer%btm_reservoir
-    case ('triver') 
-       array_ptr => g_tracer%triver
-    case ('drydep') 
-       array_ptr => g_tracer%drydep
-    case ('wetdep') 
-       array_ptr => g_tracer%wetdep
     case ('alpha') 
        array_ptr => g_tracer%alpha
     case ('csurf') 
        array_ptr => g_tracer%csurf
+    case ('sc_no') 
+       array_ptr => g_tracer%sc_no
+    case ('stf') 
+       array_ptr => g_tracer%stf
+    case ('stf_gas') 
+       array_ptr => g_tracer%stf_gas
+    case ('deltap') 
+       array_ptr => g_tracer%deltap
+    case ('kw') 
+       array_ptr => g_tracer%kw
+    case ('btf') 
+       array_ptr => g_tracer%btf
+    case ('btm_reservoir') 
+       array_ptr => g_tracer%btm_reservoir
+    case ('trunoff') 
+       array_ptr => g_tracer%trunoff
+    case ('runoff_tracer_flux') 
+       array_ptr => g_tracer%runoff_tracer_flux
+    case ('drydep') 
+       array_ptr => g_tracer%drydep
+    case ('wetdep') 
+       array_ptr => g_tracer%wetdep
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1422,22 +1558,32 @@ contains
          ": No tracer in the list with name="//trim(name))
 
     select case(member)
-    case ('stf') 
-       array = g_tracer%stf
-    case ('btf') 
-       array = g_tracer%btf
-    case ('btm_reservoir') 
-       array = g_tracer%btm_reservoir
-    case ('triver') 
-       array = g_tracer%triver
-    case ('drydep') 
-       array = g_tracer%drydep
-    case ('wetdep') 
-       array = g_tracer%wetdep
     case ('alpha') 
        array = g_tracer%alpha
     case ('csurf') 
        array = g_tracer%csurf
+    case ('sc_no') 
+       array = g_tracer%sc_no
+    case ('stf') 
+       array = g_tracer%stf
+    case ('stf_gas') 
+       array = g_tracer%stf_gas
+    case ('deltap') 
+       array = g_tracer%deltap
+    case ('kw') 
+       array = g_tracer%kw
+    case ('btf') 
+       array = g_tracer%btf
+    case ('btm_reservoir') 
+       array = g_tracer%btm_reservoir
+    case ('trunoff') 
+       array = g_tracer%trunoff
+    case ('runoff_tracer_flux') 
+       array = g_tracer%runoff_tracer_flux
+    case ('drydep') 
+       array = g_tracer%drydep
+    case ('wetdep') 
+       array = g_tracer%wetdep
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1539,17 +1685,27 @@ contains
 
     select case(member)
     case ('alpha') 
-       g_tracer%alpha  = array !nnz: Does this automatically copy elements?
+       g_tracer%alpha  = array 
     case ('csurf')
        g_tracer%csurf  = array
+    case ('sc_no')
+       g_tracer%sc_no  = array
     case ('stf') 
        g_tracer%stf    = array
+    case ('stf_gas') 
+       g_tracer%stf_gas= array
+    case ('deltap') 
+       g_tracer%deltap = array
+    case ('kw') 
+       g_tracer%kw     = array
     case ('btf') 
        g_tracer%btf    = array
     case ('btm_reservoir') 
-       g_tracer%btm_reservoir    = array
-    case ('triver')
-       g_tracer%triver = array
+       g_tracer%btm_reservoir = array
+    case ('trunoff')
+       g_tracer%trunoff = array
+    case ('runoff_tracer_flux')
+       g_tracer%runoff_tracer_flux = array
     case ('drydep')
        g_tracer%drydep = array
     case ('wetdep')
@@ -1656,14 +1812,24 @@ contains
        g_tracer%alpha     = value 
     case ('csurf') 
        g_tracer%csurf     = value 
+    case ('sc_no') 
+       g_tracer%sc_no     = value 
     case ('stf') 
        g_tracer%stf       = value 
+    case ('stf_gas') 
+       g_tracer%stf_gas   = value 
+    case ('deltap') 
+       g_tracer%deltap    = value 
+    case ('kw') 
+       g_tracer%kw        = value 
     case ('btf') 
        g_tracer%btf       = value 
-    case ('triver') 
-       g_tracer%triver    = value 
+    case ('trunoff') 
+       g_tracer%trunoff   = value 
+    case ('runoff_tracer_flux') 
+       g_tracer%runoff_tracer_flux = value 
     case ('btm_reservoir') 
-       g_tracer%btm_reservoir  = value 
+       g_tracer%btm_reservoir = value 
     case ('sink_rate') 
        g_tracer%sink_rate = value 
     case default 
@@ -1775,6 +1941,27 @@ contains
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
+       if (g_tracer%diag_id_stf_gas .gt. 0 .and. _ALLOCATED(g_tracer%stf_gas)) then
+          used = send_data(g_tracer%diag_id_stf_gas, g_tracer%stf_gas(:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+       endif
+
+       if (g_tracer%diag_id_deltap .gt. 0 .and. _ALLOCATED(g_tracer%deltap)) then
+          used = send_data(g_tracer%diag_id_deltap, g_tracer%deltap(:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+       endif
+
+       if (g_tracer%diag_id_kw .gt. 0 .and. _ALLOCATED(g_tracer%kw)) then
+          used = send_data(g_tracer%diag_id_kw, g_tracer%kw(:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+       endif
+
        if (g_tracer%diag_id_btf .gt. 0 .and. _ALLOCATED(g_tracer%btf)) then
           used = send_data(g_tracer%diag_id_btf, g_tracer%btf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
@@ -1789,8 +1976,8 @@ contains
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
-       if (g_tracer%diag_id_triver .gt. 0 .and. _ALLOCATED(g_tracer%triver)) then
-          used = send_data(g_tracer%diag_id_triver, g_tracer%triver(:,:), model_time,&
+       if (g_tracer%diag_id_trunoff .gt. 0 .and. _ALLOCATED(g_tracer%trunoff)) then
+          used = send_data(g_tracer%diag_id_trunoff, g_tracer%trunoff(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
@@ -1805,6 +1992,13 @@ contains
 
        if (g_tracer%diag_id_csurf .gt. 0 .and. _ALLOCATED(g_tracer%csurf)) then
           used = send_data(g_tracer%diag_id_csurf, g_tracer%csurf(:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+       endif
+
+       if (g_tracer%diag_id_sc_no .gt. 0 .and. _ALLOCATED(g_tracer%sc_no)) then
+          used = send_data(g_tracer%diag_id_sc_no, g_tracer%sc_no(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
@@ -2121,7 +2315,7 @@ contains
     !Add the contribution of K33_implicit to the diffusivity
     !
     !g_tracer%tendency should contain T_prog(n)%K33_implicit or be zero
-    !!nnz: change string tendency to something else like aux_array!
+    !!nnz: This is not really "tendency". Change name to something else like aux_array!
     do j=g_tracer_com%jsc,g_tracer_com%jec
        do i=g_tracer_com%isc,g_tracer_com%iec
           do k=1,g_tracer_com%nk

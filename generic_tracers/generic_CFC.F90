@@ -257,6 +257,7 @@ contains
          units      = 'mol/kg',            &
          prog       = .true.,              &
          flux_gas       = .true.,                      &
+         flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
          flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
 
@@ -267,6 +268,7 @@ contains
          units      = 'mol/kg',            &
          prog       = .true.,              &
          flux_gas       = .true.,                      &
+         flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
          flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
 
@@ -352,10 +354,11 @@ contains
     integer,                        intent(in) :: ilb,jlb,taum1
 
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
-    real    :: conv_fac,sal,ta,SST,alpha_11,alpha_12,sc_11,sc_12,sc_no_term
+    real    :: conv_fac,sal,ta,SST,alpha_11,alpha_12,sc_11,sc_12
     real, dimension(:,:,:)  ,pointer  :: grid_tmask
     real, dimension(:,:,:,:), pointer :: g_cfc_11_field,g_cfc_12_field
     real, dimension(:,:), ALLOCATABLE :: g_cfc_11_alpha,g_cfc_11_csurf,g_cfc_12_alpha,g_cfc_12_csurf
+    real, dimension(:,:), ALLOCATABLE :: sc_no_11,sc_no_12
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_CFC_set_boundary_values'
 
@@ -377,6 +380,8 @@ contains
     allocate(g_cfc_11_csurf(isd:ied, jsd:jed)); g_cfc_11_csurf=0.0
     allocate(g_cfc_12_alpha(isd:ied, jsd:jed)); g_cfc_12_alpha=0.0
     allocate(g_cfc_12_csurf(isd:ied, jsd:jed)); g_cfc_12_csurf=0.0
+    allocate(sc_no_11(isd:ied, jsd:jed))
+    allocate(sc_no_12(isd:ied, jsd:jed))
 
     !The atmospheric code needs soluabilities in units of mol/m3/atm
     !
@@ -418,33 +423,24 @@ contains
        !     Calculate Schmidt numbers
        !      use coefficients given by Zheng et al (1998), JGR vol 103, C1
        !---------------------------------------------------------------------
-       sc_11 = param%a1_11 + SST * (param%a2_11 + SST * (param%a3_11 + SST * param%a4_11)) * &
+       sc_no_11(i,j) = param%a1_11 + SST * (param%a2_11 + SST * (param%a3_11 + SST * param%a4_11)) * &
             grid_tmask(i,j,1)
-       sc_12 = param%a1_12 + SST * (param%a2_12 + SST * (param%a3_12 + SST * param%a4_12)) * &
+       sc_no_12(i,j) = param%a1_12 + SST * (param%a2_12 + SST * (param%a3_12 + SST * param%a4_12)) * &
             grid_tmask(i,j,1)
 
-       !sc_no_term = sqrt(660.0 / (sc_11 + epsln))*grid_tmask(i,j,1) !nnz: MOM
-       sc_no_term = sqrt(660.0 / (sc_11 + epsln)) !nnz: GOLD
+       !sc_no_term = sqrt(660.0 / (sc_11 + epsln))
+       !
+       ! In 'ocmip2_generic' atmos_ocean_fluxes.F90 coupler formulation,
+       ! the schmidt number is carried in explicitly
+       !
+       g_cfc_11_alpha(i,j) = alpha_11              
 
-       g_cfc_11_alpha(i,j) = alpha_11               * sc_no_term
+       g_cfc_11_csurf(i,j) = g_cfc_11_field(i,j,1,taum1) *  param%Rho_0
 
-       !nnz: MOM and HIM differ in formula for %csurf
-       !g_cfc_11_csurf(i,j) = g_cfc_11_field(i,j,1,taum1) * sc_no_term !nnz: GOLD 
-       !g_cfc_11_csurf(i,j) = g_cfc_11_field(i,j,1,taum1) * sc_no_term *rho(i,j,1,taum1) !nnz: MOM 
-       !!nnz:This rho in MOM seems to be O(1) rather than O(1000)! Why? 
-       
-       g_cfc_11_csurf(i,j) = g_cfc_11_field(i,j,1,taum1) * sc_no_term * param%Rho_0
+       g_cfc_12_alpha(i,j) = alpha_12              
 
-       !sc_no_term = sqrt(660.0 / (sc_12 + epsln))*grid_tmask(i,j,1) !nnz: MOM
-       sc_no_term = sqrt(660.0 / (sc_12 + epsln)) !nnz: GOLD
-
-       g_cfc_12_alpha(i,j) = alpha_12               * sc_no_term
-       !nnz: MOM and HIM differ in formula for %csurf
-       !g_cfc_12_csurf(i,j) = g_cfc_12_field(i,j,1,taum1) * sc_no_term                   !nnz: GOLD 
-       !g_cfc_12_csurf(i,j) = g_cfc_12_field(i,j,1,taum1) * sc_no_term *rho(i,j,1,taum1) !nnz: MOM
+       g_cfc_12_csurf(i,j) = g_cfc_12_field(i,j,1,taum1) *  param%Rho_0
  
-       g_cfc_12_csurf(i,j) = g_cfc_12_field(i,j,1,taum1) * sc_no_term * param%Rho_0
-
     enddo; enddo
     !=============
     !Block Ends: Calculate the boundary values
@@ -454,14 +450,14 @@ contains
     !Set %csurf and %alpha for these tracers. This will mark them for sending fluxes to coupler
     !
     call g_tracer_set_values(tracer_list,'cfc_11','alpha',g_cfc_11_alpha,isd,jsd)
-
     call g_tracer_set_values(tracer_list,'cfc_11','csurf',g_cfc_11_csurf,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc_11','sc_no',sc_no_11,isd,jsd)
 
     call g_tracer_set_values(tracer_list,'cfc_12','alpha',g_cfc_12_alpha,isd,jsd)
-
     call g_tracer_set_values(tracer_list,'cfc_12','csurf',g_cfc_12_csurf,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc_12','sc_no',sc_no_12,isd,jsd)
 
-    deallocate(g_cfc_11_alpha,g_cfc_11_csurf,g_cfc_12_alpha,g_cfc_12_csurf)
+    deallocate(g_cfc_11_alpha,g_cfc_11_csurf,g_cfc_12_alpha,g_cfc_12_csurf,sc_no_11,sc_no_12)
 
   end subroutine generic_CFC_set_boundary_values
 

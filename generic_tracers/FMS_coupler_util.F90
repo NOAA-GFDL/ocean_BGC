@@ -8,7 +8,8 @@ module FMS_coupler_util
 !   This code provides a couple of interfaces to allow more transparent and
 ! robust extraction of the various fields in the coupler types.
 use mpp_mod,           only : mpp_error, FATAL, WARNING
-use coupler_types_mod, only : coupler_2d_bc_type, ind_flux, ind_alpha, ind_csurf
+use coupler_types_mod, only : coupler_2d_bc_type, ind_flux, ind_deltap, ind_kw
+use coupler_types_mod, only : ind_alpha, ind_csurf, ind_sc_no
 
 implicit none ; private
 
@@ -27,7 +28,8 @@ subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, ilb
 ! Arguments: BC_struc - The type from which the data is being extracted.
 !  (in)      BC_index - The boundary condition number being extracted.
 !  (in)      BC_element - The element of the boundary condition being extracted.
-!            This could be ind_csurf, ind_alpha, ind_flux or ind_deposition.
+!            This could be ind_csurf, ind_alpha, ind_sc_no, ind_flux, ind_deltap,
+!            ind_kw or ind_deposition.
 !  (out)     array_out - The array being filled with the input values.
 !  (in, opt) is, ie, js, je - The i- and j- limits of array_out to be filled.
 !            These must match the size of the corresponding value array or an
@@ -40,7 +42,8 @@ subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, ilb
   integer :: i, j, is0, ie0, js0, je0, i_offset, j_offset
 
   if ((BC_element /= ind_flux) .and. (BC_element /= ind_alpha) .and. &
-      (BC_element /= ind_csurf)) then
+      (BC_element /= ind_csurf) .and. (BC_element /= ind_sc_no) .and. &
+      (BC_element /= ind_deltap) .and. (BC_element /= ind_kw)) then
     call mpp_error(FATAL,"extract_coupler_values: Unrecognized BC_element.")
   endif
 
@@ -92,7 +95,8 @@ subroutine set_coupler_values(array_in, BC_struc, BC_index, BC_element, ilb, jlb
 !  (out)     BC_struc - The type into which the data is being loaded.
 !  (in)      BC_index - The boundary condition number being extracted.
 !  (in)      BC_element - The element of the boundary condition being extracted.
-!            This could be ind_csurf, ind_alpha, ind_flux or ind_deposition.
+!            This could be ind_csurf, ind_alpha, ind_sc_no, ind_flux, ind_deltap,
+!            ind_kw or ind_deposition.
 !  (in, opt) is, ie, js, je - The i- and j- limits of array_out to be filled.
 !            These must match the size of the corresponding value array or an
 !            error message is issued.
@@ -104,7 +108,8 @@ subroutine set_coupler_values(array_in, BC_struc, BC_index, BC_element, ilb, jlb
   integer :: i, j, is0, ie0, js0, je0, i_offset, j_offset
 
   if ((BC_element /= ind_flux) .and. (BC_element /= ind_alpha) .and. &
-      (BC_element /= ind_csurf)) then
+      (BC_element /= ind_csurf) .and. (BC_element /= ind_sc_no) .and. &
+      (BC_element /= ind_deltap) .and. (BC_element /= ind_kw)) then
     call mpp_error(FATAL,"extract_coupler_values: Unrecognized BC_element.")
   endif
 

@@ -52,6 +52,11 @@ module generic_tracer
   use generic_TOPAZ,  only : generic_TOPAZ_update_from_bottom,generic_TOPAZ_update_from_coupler
   use generic_TOPAZ,  only : generic_TOPAZ_set_boundary_values, generic_TOPAZ_end, do_generic_TOPAZ
 
+  use generic_BLING,  only : generic_BLING_register
+  use generic_BLING,  only : generic_BLING_init, generic_BLING_update_from_source,generic_BLING_register_diag
+  use generic_BLING,  only : generic_BLING_update_from_bottom,generic_BLING_update_from_coupler
+  use generic_BLING,  only : generic_BLING_set_boundary_values, generic_BLING_end, do_generic_BLING
+
   implicit none ; private
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_tracer'
@@ -79,7 +84,7 @@ module generic_tracer
 
   logical, save :: do_generic_tracer = .false.
 
-  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_CFC, do_generic_TOPAZ
+  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_CFC, do_generic_TOPAZ, do_generic_BLING
 
 contains
 
@@ -105,6 +110,9 @@ contains
 
     if(do_generic_TOPAZ) &
          call generic_TOPAZ_register(tracer_list)
+
+    if(do_generic_BLING) &
+         call generic_BLING_register(tracer_list)
 
   end subroutine generic_tracer_register
 
@@ -159,7 +167,7 @@ contains
     call g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time) 
 
     !Allocate and initialize all registered generic tracers
-    if(do_generic_CFC .or. do_generic_TOPAZ) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
        g_tracer => tracer_list        
        !Go through the list of tracers 
        do  
@@ -180,6 +188,9 @@ contains
     if(do_generic_TOPAZ) &
          call generic_TOPAZ_init(tracer_list)
 
+    if(do_generic_BLING) &
+         call generic_BLING_init(tracer_list)
+
   end subroutine generic_tracer_init
 
   subroutine generic_tracer_register_diag
@@ -188,7 +199,7 @@ contains
     
     !Diagnostics register for the fields common to All generic tracers
 
-    if(do_generic_CFC .or. do_generic_TOPAZ) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -206,6 +217,8 @@ contains
     !Diagnostics register for fields particular to each tracer module
     
     if(do_generic_TOPAZ)  call generic_TOPAZ_register_diag()    
+
+    if(do_generic_BLING)  call generic_BLING_register_diag()    
     
   end subroutine generic_tracer_register_diag
 
@@ -229,13 +242,15 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_get'
     !All generic tracers
-    !Update tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
+    !Update tracer boundary values (%stf and %rtf) from coupler fluxes foreach tracer in the prog_tracer_list
     call g_tracer_coupler_get(tracer_list,IOB_struc)
 
     !Specific tracers
     !    if(do_generic_CFC)    call generic_CFC_update_from_coupler(tracer_list) !Nothing to do
 
     if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_coupler(tracer_list)
+
+    if(do_generic_BLING)  call generic_BLING_update_from_coupler(tracer_list)
 
   end subroutine generic_tracer_coupler_get
 
@@ -248,7 +263,7 @@ contains
   !  </DESCRIPTION>
   !  <TEMPLATE>
   !   call  generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
-  !                               grid_dat,sw_pen,opacity)
+  !                               grid_dat,sw_pen,opacity,river,neutralrho,grid_yt)
   !  </TEMPLATE>
   !  </IN>
   !  <IN NAME="ilb,jlb" TYPE="integer">
@@ -304,6 +319,10 @@ contains
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
          nbands,max_wavelength_band,sw_pen_band,opacity_band)
 
+    if(do_generic_BLING)  call generic_BLING_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
+         hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
+         nbands,max_wavelength_band,sw_pen_band,opacity_band)
+
     return
 
   end subroutine generic_tracer_source
@@ -337,6 +356,8 @@ contains
 
     if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_bottom(tracer_list,dt, tau, model_time)
 
+    if(do_generic_BLING)  call generic_BLING_update_from_bottom(tracer_list,dt, tau)
+
     return
 
   end subroutine generic_tracer_update_from_bottom
@@ -365,7 +386,7 @@ contains
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
-    if(do_generic_CFC .or. do_generic_TOPAZ) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -404,7 +425,7 @@ contains
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
-    if(do_generic_CFC .or. do_generic_TOPAZ) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -459,7 +480,7 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_set'
 
-    !Set coupler fluxes from tracer boundary values (%stf and %triver)for each tracer in the prog_tracer_list
+    !Set coupler fluxes from tracer boundary values (%stf and %rtf)for each tracer in the prog_tracer_list
     !User must identify these tracers (not all tracers in module need to set coupler)
     !User must provide the calculations for these boundary values.
 
@@ -468,11 +489,14 @@ contains
 
     if(do_generic_TOPAZ) &
          call generic_TOPAZ_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
+
+    if(do_generic_BLING) &
+         call generic_BLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
     !
     !Set coupler fluxes from tracer boundary values (%alpha and %csurf)
     !for each tracer in the tracer_list that has been marked by the user routine above
     !
-    if(do_generic_CFC .or. do_generic_TOPAZ) call g_tracer_coupler_set(tracer_list,IOB_struc)
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) call g_tracer_coupler_set(tracer_list,IOB_struc)
 
   end subroutine generic_tracer_coupler_set
 
@@ -508,6 +532,7 @@ contains
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_end'
     if(do_generic_CFC) call generic_CFC_end
     if(do_generic_TOPAZ)  call generic_TOPAZ_end
+    if(do_generic_BLING)  call generic_BLING_end
   end subroutine generic_tracer_end
 
   ! <SUBROUTINE NAME="generic_tracer_get_list">
