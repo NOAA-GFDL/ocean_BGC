@@ -242,7 +242,7 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_get'
     !All generic tracers
-    !Update tracer boundary values (%stf and %rtf) from coupler fluxes foreach tracer in the prog_tracer_list
+    !Update tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
     call g_tracer_coupler_get(tracer_list,IOB_struc)
 
     !Specific tracers
@@ -480,7 +480,7 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_set'
 
-    !Set coupler fluxes from tracer boundary values (%stf and %rtf)for each tracer in the prog_tracer_list
+    !Set coupler fluxes from tracer boundary values (%stf and %triver)for each tracer in the prog_tracer_list
     !User must identify these tracers (not all tracers in module need to set coupler)
     !User must provide the calculations for these boundary values.
 

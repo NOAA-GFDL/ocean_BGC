@@ -35,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 17.0.2.3 2009/09/15 21:06:21 nnz Exp $'
-  character(len=128) :: tag = '$Name: quebec_200910 $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 18.0 2010/03/02 23:54:51 fms Exp $'
+  character(len=128) :: tag = '$Name: riga $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'

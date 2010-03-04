@@ -96,8 +96,8 @@ module generic_TOPAZ
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 17.0.2.5 2009/10/08 15:15:20 nnz Exp $'
-  character(len=128) :: tag = '$Name: quebec_200910 $'
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 18.0 2010/03/02 23:54:47 fms Exp $'
+  character(len=128) :: tag = '$Name: riga $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
@@ -3358,7 +3358,7 @@ contains
           tmp_Irrad = 0.0
           do nb=1,nbands !{
              tmp_opacity = opacity_band(nb,i,j,k)
-             tmp_Irrad = tmp_Irrad + tmp_irr_band(nb) * exp(-tmp_opacity * dzt(i,j,k) * 0.5)
+             tmp_Irrad = tmp_Irrad + max(0.0,tmp_irr_band(nb) * exp(-tmp_opacity * dzt(i,j,k) * 0.5))
              !   Change tmp_irr_band from being the value atop layer k to the value
              ! at the bottom of layer k.
              tmp_irr_band(nb) = tmp_irr_band(nb) * exp(-tmp_opacity * dzt(i,j,k))

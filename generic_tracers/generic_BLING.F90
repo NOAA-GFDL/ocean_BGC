@@ -1655,7 +1655,8 @@ call close_file (ioun)
     real, dimension(:,:,:) ,pointer :: grid_tmask
     integer, dimension(:,:),pointer :: mask_coast,grid_kmt
 
-    integer :: used,nb
+    integer :: nb
+    logical :: used
     real :: tmp_hblt, tmp_Irrad, tmp_irrad_ML, tmp_opacity
     real, dimension(:), Allocatable :: tmp_irr_band 
     real :: s_over_p, fe_2_p
@@ -2371,7 +2372,7 @@ call close_file (ioun)
        
       bling%jfe_reminp(i,j,k) = (bling%fpofe(i,j,k-1) +                    &
        (bling%jfe_ads_org(i,j,k) + bling%jfe_ads_inorg(i,j,k) +            & 
-       + bling%jpofe(i,j,k)) * rho_dzt(i,j,k) -                            &
+         bling%jpofe(i,j,k)) * rho_dzt(i,j,k) -                            &
        bling%fpofe(i,j,k)) / (epsln + rho_dzt(i,j,k))
 
     enddo; enddo ; enddo !} i,j,k
@@ -2596,7 +2597,7 @@ call close_file (ioun)
             (bling%f_o2(i,j,k) .lt. bling%o2_min) ) then !{
          bling%jo2(i,j,k) = 0. * grid_tmask(i,j,k)
        else
-         bling%jo2(i,j,k) = bling%o2_2_p * -bling%jpo4(i,j,k)              &
+         bling%jo2(i,j,k) = - bling%o2_2_p * bling%jpo4(i,j,k)              &
            * grid_tmask(i,j,k)
        endif !}
 
