@@ -38,7 +38,7 @@ module generic_tracer
   use time_manager_mod, only : time_type
   use coupler_types_mod, only : coupler_2d_bc_type
 
-  use g_tracer_utils, only : g_tracer_type, g_tracer_init
+  use g_tracer_utils, only : g_tracer_type, g_tracer_init, g_diag_type
   use g_tracer_utils, only : g_tracer_get_common, g_tracer_set_common, g_tracer_is_prog
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get, g_tracer_register_diag
   use g_tracer_utils, only : g_tracer_vertdiff_M, g_tracer_vertdiff_G, g_tracer_get_next     
@@ -75,12 +75,16 @@ module generic_tracer
   public do_generic_tracer
   public generic_tracer_vertdiff_G
   public generic_tracer_vertdiff_M
-
+  public generic_tracer_get_diag_list
 
 
   !Linked Lists of all prog and diag tracers in this module
   !Ensure these pointers are "save"d between the calls
   type(g_tracer_type), save, pointer :: tracer_list => NULL()
+
+  !Linked Lists of diagnostics fields (specially those that need to be manipulated by the ocean model)
+  !Ensure these pointers are "save"d between the calls
+  type(g_diag_type), save, pointer :: diag_list => NULL()
 
   logical, save :: do_generic_tracer = .false.
 
@@ -216,7 +220,7 @@ contains
 
     !Diagnostics register for fields particular to each tracer module
     
-    if(do_generic_TOPAZ)  call generic_TOPAZ_register_diag()    
+    if(do_generic_TOPAZ)  call generic_TOPAZ_register_diag(diag_list)    
 
     if(do_generic_BLING)  call generic_BLING_register_diag()    
     
@@ -556,5 +560,10 @@ contains
     type(g_tracer_type),    pointer    :: list
     list => tracer_list
   end subroutine generic_tracer_get_list
+
+  subroutine generic_tracer_get_diag_list(list)
+    type(g_diag_type),    pointer    :: list
+    list => diag_list
+  end subroutine generic_tracer_get_diag_list
 
 end module generic_tracer

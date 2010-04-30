@@ -35,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 18.0 2010/03/02 23:54:51 fms Exp $'
-  character(len=128) :: tag = '$Name: riga $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 18.0.2.3 2010/04/22 21:27:52 nnz Exp $'
+  character(len=128) :: tag = '$Name: riga_201004 $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -224,6 +224,21 @@ module g_tracer_utils
 
   end type g_tracer_type
 
+
+  type g_diag_type
+     !A pointer to the next node in the list for the current "linked-list implementation".
+     type(g_diag_type), pointer :: next => NULL()
+  
+     integer :: diag_id = -1
+     character(len=fm_string_len) :: name, longname, package_name, units
+     !Diagnostic axes 
+     integer :: axes(3)
+     type(time_type) :: init_time
+     real :: missing_value = -1.0e+10
+     integer :: Z_diag = 0
+     real, pointer, dimension(:,:,:) :: field_ptr 
+  end type g_diag_type
+
   ! <DESCRIPTION>
   ! Public types:
   !
@@ -287,6 +302,8 @@ module g_tracer_utils
   public :: g_tracer_vertdiff_M
   public :: g_tracer_start_param_list
   public :: g_tracer_end_param_list
+  public :: g_diag_type
+  public :: g_diag_field_add
 
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
@@ -2430,6 +2447,54 @@ contains
 
   end subroutine g_tracer_vertdiff_M
 
+
+  subroutine g_diag_field_add(node_ptr, diag_id, package_name, name, axes, init_time, longname, units, &
+                            missing_value, Z_diag, field_ptr, Zname, Zlongname, Zunits)
+    type(g_diag_type), pointer :: node_ptr
+    integer, intent(inout) :: diag_id
+    CHARACTER(len=*), INTENT(in) :: package_name, name
+    INTEGER, INTENT(in) :: axes(:)
+    TYPE(time_type), INTENT(in) :: init_time
+    CHARACTER(len=*), INTENT(in) :: longname, units
+    REAL, OPTIONAL, INTENT(in) :: missing_value
+    integer, optional, intent(in) :: Z_diag
+    CHARACTER(len=*), optional, INTENT(in) :: Zname, Zlongname, Zunits
+    real, optional, pointer :: field_ptr(:,:,:)
+    
+
+    type(g_diag_type), pointer :: g_diag => NULL()
+    
+    !diag register with the original name
+    diag_id = register_diag_field(package_name, name, axes, init_time, longname,units, missing_value = missing_value)
+
+    !===================================================================
+    !Add this diagnostics to the list that is going to be used later (by GOLD) 
+    !===================================================================
+    allocate(g_diag)
+    
+    g_diag%diag_id = diag_id
+    g_diag%name         = trim(name)
+    g_diag%longname     = trim(longname)
+    g_diag%units        = trim(units)
+    g_diag%package_name = trim(package_name)
+    g_diag%axes         = axes
+    g_diag%init_time    = init_time
+    g_diag%missing_value= missing_value
+    !Is this a Z diag?
+    if(present(Z_diag))    g_diag%Z_diag       = Z_diag
+    if(present(field_ptr)) g_diag%field_ptr    => field_ptr
+    if(present(Zname))     g_diag%name         = trim(Zname)
+    if(present(Zlongname)) g_diag%longname     = trim(Zlongname)
+    if(present(Zunits))    g_diag%units        = trim(Zunits)
+
+
+    !===================================================================
+    !Reversed Linked List implementation! Make this new node to be the head of the list.
+    !===================================================================    
+
+    g_diag%next => node_ptr 
+    node_ptr => g_diag 
+  end subroutine g_diag_field_add
 
 
 end module g_tracer_utils
