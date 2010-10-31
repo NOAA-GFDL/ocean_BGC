@@ -113,7 +113,7 @@ module generic_BLING
 
   use coupler_types_mod, only: coupler_2d_bc_type
   use field_manager_mod, only: fm_string_len, fm_path_name_len
-  use mpp_mod,           only: mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
+  use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
   use fms_mod,           only: open_namelist_file, check_nml_error, close_file
   use fms_mod,           only: field_exist, file_exist
   use time_manager_mod,  only: time_type
@@ -503,7 +503,7 @@ namelist /generic_bling_nml/ do_14c, do_carbon, do_carbon_pre, &
      character(len=1)  :: mem_size ! The size in memory: d or f.
   end type vardesc
 
-  type(generic_BLING_type) :: bling
+  type(generic_BLING_type), save :: bling
 
   type(CO2_dope_vector) :: CO2_dope_vec
 
@@ -537,6 +537,10 @@ character(len=256), parameter   :: note_header =                                
 ! settings to switch tracers on and off.
 !
 
+#ifdef INTERNAL_FILE_NML
+read (input_nml_file, nml=generic_bling_nml, iostat=io_status)
+ierr = check_nml_error(io_status,'generic_bling_nml')
+#else
 ioun = open_namelist_file()
 read  (ioun, generic_bling_nml,iostat=io_status)
 write (stdout(),'(/)')
@@ -544,6 +548,7 @@ write (stdout(), generic_bling_nml)
 write (stdlog(), generic_bling_nml)
 ierr = check_nml_error(io_status,'generic_bling_nml')
 call close_file (ioun)
+#endif
 
   if ((do_14c) .and. (do_carbon)) then
     write (stdout(),*) trim(note_header), 'Simulating radiocarbon'
