@@ -99,8 +99,8 @@ module generic_TOPAZ
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 17.0.2.5.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1 2010/06/03 16:46:06 jgj Exp $'
-  character(len=128) :: tag = '$Name: riga_201012 $'
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 17.0.2.5.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.4.1 2011/01/15 01:25:54 jgj Exp $'
+  character(len=128) :: tag = '$Name: riga_201104 $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
@@ -3252,7 +3252,7 @@ contains
     call g_tracer_get_values(tracer_list,'cadet_arag'  ,'btm_reservoir', topaz%fcadet_arag_btm,isd,jsd)
     topaz%fcadet_arag_btm = topaz%fcadet_arag_btm /dt
     call g_tracer_get_pointer(tracer_list,'cadet_arag_btf','field',temp_field)
-    temp_field(:,:,1,tau) = topaz%fcadet_arag_btm(:,:)
+    temp_field(:,:,1,1) = topaz%fcadet_arag_btm(:,:)
     call g_tracer_set_values(tracer_list,'cadet_arag','btm_reservoir',0.0)
     if (topaz%id_fcadet_arag_btm .gt. 0)           &
          used = send_data(topaz%id_fcadet_arag_btm,    topaz%fcadet_arag_btm,          &
@@ -3262,7 +3262,7 @@ contains
     call g_tracer_get_values(tracer_list,'cadet_calc'  ,'btm_reservoir', topaz%fcadet_calc_btm,isd,jsd)
     topaz%fcadet_calc_btm = topaz%fcadet_calc_btm /dt
     call g_tracer_get_pointer(tracer_list,'cadet_calc_btf','field',temp_field)
-    temp_field(:,:,1,tau) = topaz%fcadet_calc_btm(:,:)
+    temp_field(:,:,1,1) = topaz%fcadet_calc_btm(:,:)
     call g_tracer_set_values(tracer_list,'cadet_calc','btm_reservoir',0.0)
     if (topaz%id_fcadet_calc_btm .gt. 0)           &
          used = send_data(topaz%id_fcadet_calc_btm,    topaz%fcadet_calc_btm,          &
@@ -3281,7 +3281,7 @@ contains
     topaz%flithdet_btm = topaz%flithdet_btm /dt
     call g_tracer_set_values(tracer_list,'lithdet','btm_reservoir',0.0)
     call g_tracer_get_pointer(tracer_list,'lithdet_btf','field',temp_field)
-    temp_field(:,:,1,tau) = topaz%flithdet_btm(:,:)
+    temp_field(:,:,1,1) = topaz%flithdet_btm(:,:)
     if (topaz%id_flithdet_btm .gt. 0)           &
          used = send_data(topaz%id_flithdet_btm,    topaz%flithdet_btm,          &
          model_time, rmask = grid_tmask(:,:,1),& 
@@ -3290,7 +3290,7 @@ contains
     call g_tracer_get_values(tracer_list,'ndet'  ,'btm_reservoir', topaz%fndet_btm,isd,jsd)
     topaz%fndet_btm = topaz%fndet_btm /dt
     call g_tracer_get_pointer(tracer_list,'ndet_btf','field',temp_field)
-    temp_field(:,:,1,tau) = topaz%fndet_btm(:,:)
+    temp_field(:,:,1,1) = topaz%fndet_btm(:,:)
     call g_tracer_set_values(tracer_list,'ndet','btm_reservoir',0.0)
     if (topaz%id_fndet_btm .gt. 0)           &
          used = send_data(topaz%id_fndet_btm,    topaz%fndet_btm,          &
@@ -3300,7 +3300,7 @@ contains
     call g_tracer_get_values(tracer_list,'pdet'  ,'btm_reservoir', topaz%fpdet_btm,isd,jsd)
     topaz%fpdet_btm = topaz%fpdet_btm /dt
     call g_tracer_get_pointer(tracer_list,'pdet_btf','field',temp_field)
-    temp_field(:,:,1,tau) = topaz%fpdet_btm(:,:)
+    temp_field(:,:,1,1) = topaz%fpdet_btm(:,:)
     call g_tracer_set_values(tracer_list,'pdet','btm_reservoir',0.0)
     if (topaz%id_fpdet_btm .gt. 0)           &
          used = send_data(topaz%id_fpdet_btm,    topaz%fpdet_btm,          &
@@ -3310,7 +3310,7 @@ contains
     call g_tracer_get_values(tracer_list,'sidet'  ,'btm_reservoir', topaz%fsidet_btm,isd,jsd)
     topaz%fsidet_btm = topaz%fsidet_btm /dt
     call g_tracer_get_pointer(tracer_list,'sidet_btf','field',temp_field)
-    temp_field(:,:,1,tau) = topaz%fsidet_btm(:,:)
+    temp_field(:,:,1,1) = topaz%fsidet_btm(:,:)
     call g_tracer_set_values(tracer_list,'sidet','btm_reservoir',0.0)
     if (topaz%id_fsidet_btm .gt. 0)           &
          used = send_data(topaz%id_fsidet_btm,    topaz%fsidet_btm,          &
