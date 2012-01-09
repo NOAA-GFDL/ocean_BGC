@@ -96,9 +96,10 @@ contains
   subroutine generic_tracer_register
 
     integer :: ioun, io_status, ierr
-
+    integer :: stdoutunit,stdlogunit
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_register'
 
+    stdoutunit=stdout();stdlogunit=stdlog()
     ! provide for namelist over-ride of defaults 
 #ifdef INTERNAL_FILE_NML
 read (input_nml_file, nml=generic_tracer_nml, iostat=io_status)
@@ -106,9 +107,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 #else
     ioun = open_namelist_file()
     read  (ioun, generic_tracer_nml,iostat=io_status)
-    write (stdout(),'(/)')
-    write (stdout(), generic_tracer_nml)
-    write (stdlog(), generic_tracer_nml)
+    write (stdoutunit,'(/)')
+    write (stdoutunit, generic_tracer_nml)
+    write (stdlogunit, generic_tracer_nml)
     ierr = check_nml_error(io_status,'generic_tracer_nml')
     call close_file (ioun)
 #endif
@@ -161,15 +162,16 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
     integer :: ioun, io_status, ierr
-
+    integer :: stdoutunit,stdlogunit
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_init'
 
+    stdoutunit=stdout();stdlogunit=stdlog()
     ! provide for namelist over-ride of defaults 
     ioun = open_namelist_file()
     read  (ioun, generic_tracer_nml,iostat=io_status)
-    write (stdout(),'(/)')
-    write (stdout(), generic_tracer_nml)
-    write (stdlog(), generic_tracer_nml)
+    write (stdoutunit,'(/)')
+    write (stdoutunit, generic_tracer_nml)
+    write (stdlogunit, generic_tracer_nml)
     ierr = check_nml_error(io_status,'generic_tracer_nml')
     call close_file (ioun)
 

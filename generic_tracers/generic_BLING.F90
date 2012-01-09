@@ -518,7 +518,7 @@ integer                                                 :: ioun
 integer                                                 :: ierr
 integer                                                 :: io_status
 character(len=fm_string_len)                            :: name
-
+integer                                                 :: stdoutunit,stdlogunit
 !-----------------------------------------------------------------------
 !     local parameters
 !-----------------------------------------------------------------------
@@ -536,6 +536,7 @@ character(len=256), parameter   :: note_header =                                
 ! This needs to go before the add_tracers in order to allow the namelist 
 ! settings to switch tracers on and off.
 !
+stdoutunit=stdout();stdlogunit=stdlog()
 
 #ifdef INTERNAL_FILE_NML
 read (input_nml_file, nml=generic_bling_nml, iostat=io_status)
@@ -543,29 +544,29 @@ ierr = check_nml_error(io_status,'generic_bling_nml')
 #else
 ioun = open_namelist_file()
 read  (ioun, generic_bling_nml,iostat=io_status)
-write (stdout(),'(/)')
-write (stdout(), generic_bling_nml)  
-write (stdlog(), generic_bling_nml)
+write (stdoutunit,'(/)')
+write (stdoutunit, generic_bling_nml)  
+write (stdlogunit, generic_bling_nml)
 ierr = check_nml_error(io_status,'generic_bling_nml')
 call close_file (ioun)
 #endif
 
   if ((do_14c) .and. (do_carbon)) then
-    write (stdout(),*) trim(note_header), 'Simulating radiocarbon'
+    write (stdoutunit,*) trim(note_header), 'Simulating radiocarbon'
   else if ((do_14c) .and. .not. (do_carbon)) then
     call mpp_error(FATAL, trim(error_header) //        &
          'Do_14c requires do_carbon' // trim(name))
   endif
 
   if ((do_carbon_pre) .and. (do_carbon)) then
-    write (stdout(),*) trim(note_header), 'Calculating DIC_pre and DIC_sat'
+    write (stdoutunit,*) trim(note_header), 'Calculating DIC_pre and DIC_sat'
   else if ((do_carbon_pre) .and. .not. (do_carbon)) then
     call mpp_error(FATAL, trim(error_header) //        &
          'Do_carbon_pre requires do_carbon' // trim(name))
   endif
 
   if ((bury_caco3) .and. (do_carbon)) then
-    write (stdout(),*) trim(note_header), &
+    write (stdoutunit,*) trim(note_header), &
          'CAUTION: burying CaCO3, are you sure you want to do this?'
   else if ((bury_caco3) .and. .not. (do_carbon)) then
     call mpp_error(FATAL, trim(error_header) //        &

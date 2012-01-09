@@ -99,8 +99,8 @@ module generic_TOPAZ
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 17.0.2.5.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.2.1.4.1 2011/01/15 01:25:54 jgj Exp $'
-  character(len=128) :: tag = '$Name: riga_201104 $'
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 19.0 2012/01/06 21:54:15 fms Exp $'
+  character(len=128) :: tag = '$Name: siena $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
@@ -4913,8 +4913,8 @@ contains
                 phyto(LARGE)%jprod_n(i,j,k) * min(1.0, topaz%nLg_diatoms(i,j,k) /                   &
                 max(epsln, phyto(LARGE)%f_n(i,j,k))) * rho_dzt(i,j,k)
              topaz%jprod_nlg_nondiatoms_100(i,j) = topaz%jprod_nlg_nondiatoms_100(i,j) +            &
-                max(0.0, phyto(LARGE)%jprod_n(i,j,k) * rho_dzt(i,j,k) -                             &
-                topaz%jprod_nlg_diatoms_100(i,j))
+                max(0.0, phyto(LARGE)%jprod_n(i,j,k) * (1.0 - min(1.0, topaz%nLg_diatoms(i,j,k) /   &
+                max(epsln, phyto(LARGE)%f_n(i,j,k))))) * rho_dzt(i,j,k) 
              topaz%jprod_no3tot_100(i,j) = topaz%jprod_no3tot_100(i,j) +                            &
                 (phyto(DIAZO)%jprod_no3(i,j,k) + phyto(LARGE)%jprod_no3(i,j,k) +                    &
                 phyto(SMALL)%jprod_no3(i,j,k)) * rho_dzt(i,j,k)
