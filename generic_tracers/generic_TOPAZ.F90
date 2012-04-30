@@ -99,8 +99,8 @@ module generic_TOPAZ
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 19.0 2012/01/06 21:54:15 fms Exp $'
-  character(len=128) :: tag = '$Name: siena_201203 $'
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 19.0.4.1 2012/04/19 17:25:15 jgj Exp $'
+  character(len=128) :: tag = '$Name: siena_201204 $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
@@ -165,6 +165,7 @@ module generic_TOPAZ
 
      real, pointer, dimension(:,:,:)  :: &
           chl         , & ! Phyto. Chl
+          jgraz_n     , & ! Nitrogen grazing layer integral
           jprod_n     , & ! Total Nitrogen production layer integral
           jprod_sio4      ! Silicon production layer integral
 
@@ -177,7 +178,6 @@ module generic_TOPAZ
           felim       , & ! Fed Limitation
           irrlim      , & ! Light Limitation
           jgraz_fe    , & ! Fe grazing layer integral
-          jgraz_n     , & ! Nitrogen grazing layer integral
           jgraz_sio2  , & ! Silicon grazing layer integral
           jprod_n2    , & ! Nitrogen fixation layer integral
           jprod_fe    , & ! Fe production layer integral
@@ -337,6 +337,7 @@ module generic_TOPAZ
           f_co3_ion,&
           f_htotal,&
           f_irr_mem,&
+          irr_inst,&
           jalk,&
           jalk_plus_btm,&
           jcadet_arag,&
@@ -351,7 +352,9 @@ module generic_TOPAZ
           jfed_plus_btm,&
           jfedet,&
           jgraz_ntot,&
+          jndet,&
           jnh4_plus_btm,&
+          jnitrif,&
           jno3_plus_btm,&
           jo2_plus_btm,&
           jpo4,&
@@ -359,6 +362,7 @@ module generic_TOPAZ
           jprod_cadet_arag,&
           jprod_cadet_calc,&
           jprod_fetot,&
+          jprod_ndet,&
           jprod_nlg_diatoms,&
           jprod_nlg_nondiatoms,&
           jprod_no3tot,&
@@ -407,17 +411,14 @@ module generic_TOPAZ
           f_sio4,&
           expkT,&
           frac_det_prod,&
-          irr_inst,&
           irr_mix,&
           jdiss_sio2,&
           jfe_graz,&
           jfe_coast,&
           jldon,&
-          jndet,&
           jnh4,&
           jnh4_graz,&
           jnhet,&
-          jnitrif,&
           jno3,&
           jno3denit_wc,&
           jo2,&
@@ -425,7 +426,6 @@ module generic_TOPAZ
           jpo4_graz,&
           jprod_fedet,&
           jprod_lithdet,&
-          jprod_ndet,&
           jprod_nhet,&
           jprod_pdet,&
           jsdon,&
@@ -838,6 +838,10 @@ contains
     !2010/05/28 add 9 more fields for rates with btm fluxes added
     !  jalk_plus_btm, jdic_plus_btm, jdin_plus_btm, jfed_plus_btm
     !  jnh4_plus_btm, jno4_plus_btm, jo2_plus_btm, jpo4_plus_btm, jsio4_plus_btm
+    !2012/01/09 JGJ add 4 more rate fields for JPD: 
+    ! jgraz_n_lg_z, jnitrif_z, jprod_ndet_z, jndet_z
+    !
+    !2012/01/31 JGJ modify output diagnostics to get irr_inst_z
 
     ! Register rho_dzt
 
@@ -1038,8 +1042,10 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jgraz_n_Lg","Large nitrogen grazing layer integral",'h','L','s','mol m-2 s-1','f')
-    phyto(LARGE)%id_jgraz_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    call g_diag_field_add(diag_list, phyto(LARGE)%id_jgraz_n, package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         Z_diag=1, Zname="jgraz_n_Lg" ,Zlongname="Large nitrogen grazing", &
+         Zunits="mol kg-1 s-1", field_ptr=phyto(LARGE)%jgraz_n)
 
     vardesc_temp = vardesc("jgraz_n_Sm","Small nitrogen grazing layer integral",'h','L','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jgraz_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
@@ -1338,8 +1344,10 @@ contains
          Zunits="mol kg-1", field_ptr= topaz%f_htotal)
 
     vardesc_temp = vardesc("irr_inst","Instantaneous Light",'h','L','s','W m-2','f')
-    topaz%id_irr_inst = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    call g_diag_field_add(diag_list, topaz%id_irr_inst, package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         Z_diag=1, Zname="irr_inst" ,Zlongname="Instantaneous Light", &
+         Zunits="W m-2", field_ptr= topaz%irr_inst)
 
     vardesc_temp = vardesc("irr_mem_diag","Irradiance memory",'h','L','s','W m-2','f')
     call g_diag_field_add(diag_list, topaz%id_irr_mem_diag, package_name, vardesc_temp%name, axes(1:3),&
@@ -1472,8 +1480,10 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jndet","Loss of sinking nitrogen layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    call g_diag_field_add(diag_list, topaz%id_jndet, package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         Z_diag=1, Zname="jndet" ,Zlongname="Loss of sinking nitrogen", &
+         Zunits="mol kg-1 s-1", field_ptr=topaz%jndet)
 
     vardesc_temp = vardesc("jnh4","NH4 source layer integral",'h','L','s','mol m-2 s-1','f')
     topaz%id_jnh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
@@ -1494,8 +1504,10 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jnitrif","Nitrification layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jnitrif = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    call g_diag_field_add(diag_list, topaz%id_jnitrif, package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         Z_diag=1, Zname="jnitrif" ,Zlongname="Nitrification", &
+         Zunits="mol kg-1 s-1", field_ptr=topaz%jnitrif)
 
     vardesc_temp = vardesc("jnitrif_100","Nitrification integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     topaz%id_jnitrif_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
@@ -1588,8 +1600,10 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jprod_ndet","Detrital PON production layer integral",'h','L','s','mol m-2 s-1','f')
-    topaz%id_jprod_ndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    call g_diag_field_add(diag_list, topaz%id_jprod_ndet, package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         Z_diag=1, Zname="jprod_ndet" ,Zlongname="Detrital PON production", &
+         Zunits="mol kg-1 s-1", field_ptr=topaz%jprod_ndet)
 
     vardesc_temp = vardesc("jprod_nhet","heterotrophic Nitrogen Production layer integral",'h','L','s','mol m-2 s-1','f')
     topaz%id_jprod_nhet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
