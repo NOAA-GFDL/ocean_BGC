@@ -47,6 +47,11 @@ module generic_tracer
   use generic_CFC,    only : generic_CFC_init, generic_CFC_update_from_source,generic_CFC_update_from_coupler
   use generic_CFC,    only : generic_CFC_set_boundary_values, generic_CFC_end, do_generic_CFC
 
+  use generic_ERGOM, only : generic_ERGOM_register, generic_ERGOM_register_diag
+  use generic_ERGOM, only : generic_ERGOM_init, generic_ERGOM_update_from_source,generic_ERGOM_update_from_coupler
+  use generic_ERGOM, only : generic_ERGOM_set_boundary_values, generic_ERGOM_end, do_generic_ERGOM
+  use generic_ERGOM, only : generic_ERGOM_update_from_bottom
+
   use generic_TOPAZ,  only : generic_TOPAZ_register
   use generic_TOPAZ,  only : generic_TOPAZ_init, generic_TOPAZ_update_from_source,generic_TOPAZ_register_diag
   use generic_TOPAZ,  only : generic_TOPAZ_update_from_bottom,generic_TOPAZ_update_from_coupler
@@ -88,7 +93,7 @@ module generic_tracer
 
   logical, save :: do_generic_tracer = .false.
 
-  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_CFC, do_generic_TOPAZ, do_generic_BLING
+  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_CFC, do_generic_TOPAZ, do_generic_ERGOM, do_generic_BLING
 
 contains
 
@@ -120,6 +125,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_TOPAZ) &
          call generic_TOPAZ_register(tracer_list)
+
+    if(do_generic_ERGOM) &
+         call generic_ERGOM_register(tracer_list)
 
     if(do_generic_BLING) &
          call generic_BLING_register(tracer_list)
@@ -178,7 +186,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     call g_tracer_set_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,grid_kmt,init_time) 
 
     !Allocate and initialize all registered generic tracers
-    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING) then
        g_tracer => tracer_list        
        !Go through the list of tracers 
        do  
@@ -199,6 +207,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_TOPAZ) &
          call generic_TOPAZ_init(tracer_list)
 
+    if(do_generic_ERGOM) &
+         call generic_ERGOM_init(tracer_list)
+
     if(do_generic_BLING) &
          call generic_BLING_init(tracer_list)
 
@@ -210,7 +221,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     
     !Diagnostics register for the fields common to All generic tracers
 
-    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -228,6 +239,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !Diagnostics register for fields particular to each tracer module
     
     if(do_generic_TOPAZ)  call generic_TOPAZ_register_diag(diag_list)    
+
+    if(do_generic_ERGOM)  call generic_ERGOM_register_diag(diag_list)    
 
     if(do_generic_BLING)  call generic_BLING_register_diag()    
     
@@ -310,7 +323,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   ! </SUBROUTINE>
 
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
-       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band)
+       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,      &
+       current_wave_stress)
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     integer,                        intent(in) :: ilb,jlb,tau
@@ -321,6 +335,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     real, dimension(:),             intent(in) :: max_wavelength_band
     real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band
     real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
+    real, dimension(ilb:,jlb:),optional ,    intent(in) :: current_wave_stress
+
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_source'
 
@@ -329,6 +345,10 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
          nbands,max_wavelength_band,sw_pen_band,opacity_band)
+
+    if(do_generic_ERGOM)  call generic_ERGOM_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
+         hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
+         nbands,max_wavelength_band,sw_pen_band,opacity_band,current_wave_stress)
 
     if(do_generic_BLING)  call generic_BLING_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
@@ -367,6 +387,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_bottom(tracer_list,dt, tau, model_time)
 
+    if(do_generic_ERGOM)  call generic_ERGOM_update_from_bottom(tracer_list,dt, tau, model_time)
+   
     if(do_generic_BLING)  call generic_BLING_update_from_bottom(tracer_list,dt, tau)
 
     return
@@ -397,7 +419,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
-    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -436,7 +458,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
-    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) then
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -501,13 +523,16 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_TOPAZ) &
          call generic_TOPAZ_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
 
+    if(do_generic_ERGOM) &
+         call generic_ERGOM_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
+
     if(do_generic_BLING) &
          call generic_BLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
     !
     !Set coupler fluxes from tracer boundary values (%alpha and %csurf)
     !for each tracer in the tracer_list that has been marked by the user routine above
     !
-    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_BLING) call g_tracer_coupler_set(tracer_list,IOB_struc)
+    if(do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING) call g_tracer_coupler_set(tracer_list,IOB_struc)
 
   end subroutine generic_tracer_coupler_set
 
@@ -543,6 +568,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_end'
     if(do_generic_CFC) call generic_CFC_end
     if(do_generic_TOPAZ)  call generic_TOPAZ_end
+    if(do_generic_ERGOM)  call generic_ERGOM_end
     if(do_generic_BLING)  call generic_BLING_end
   end subroutine generic_tracer_end
 

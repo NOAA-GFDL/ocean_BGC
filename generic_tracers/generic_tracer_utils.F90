@@ -35,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0 2012/01/06 21:54:19 fms Exp $'
-  character(len=128) :: tag = '$Name: siena_201204 $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0.4.1 2012/04/27 20:06:37 Niki.Zadeh Exp $'
+  character(len=128) :: tag = '$Name: siena_201207 $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -97,6 +97,11 @@ module g_tracer_utils
   !
   !   real, _ALLOCATABLE, dimension(:,:)    :: sc_no  _NULL 
   !
+  !   ! An 3D field for vertical movement, esp. for zooplankton, ... 
+  !   real, _ALLOCATABLE, dimension(:,:,:)  :: vmove  _NULL
+  !   ! An 3D field for random vertical movement, esp. for zooplankton, ... 
+  !   real, _ALLOCATABLE, dimension(:,:,:)  :: vdiff  _NULL
+
   !   ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
   !   real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
   !
@@ -112,6 +117,8 @@ module g_tracer_utils
   !
   !   ! Logical switches
   !   logical :: prog        = .false. !Is this a prognostic (.true.) or diagnostic (.false.) tracer?
+  !   logical :: move_vertical = .false. ! Enable allocation of fields for active vertical movement
+  !   logical :: diff_vertical = .false. ! Enable allocation of fields for random active vertical movement
   !   logical :: flux_gas    = .false. !Is there a gas flux to atmosphere?
   !   logical :: flux_runoff = .false. !Is there a river flux?
   !   logical :: flux_wetdep = .false. !Is there a wet deposition?
@@ -120,7 +127,7 @@ module g_tracer_utils
   !
   !   ! Flux identifiers to be set by aof_set_coupler_flux()
   !   integer :: flux_gas_ind    = -1  
-  !  integer :: flux_runoff_ind = -1
+  !   integer :: flux_runoff_ind = -1
   !   integer :: flux_wetdep_ind = -1
   !   integer :: flux_drydep_ind = -1
   !
@@ -192,6 +199,12 @@ module g_tracer_utils
 
      real, _ALLOCATABLE, dimension(:,:)    :: sc_no  _NULL 
 
+     ! An 3D field for vertical movement, esp. for zooplankton, ... 
+     real, _ALLOCATABLE, dimension(:,:,:)  :: vmove  _NULL
+
+     ! An 3D field for random vertical movement, esp. for zooplankton, ... 
+     real, _ALLOCATABLE, dimension(:,:,:)  :: vdiff  _NULL
+
      ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
      real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
 
@@ -199,7 +212,7 @@ module g_tracer_utils
      ! IDs for using diag_manager tools
      integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
      integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_sc_no=-1, diag_id_aux=-1
-     integer :: diag_id_btf=-1,diag_id_btm=-1
+     integer :: diag_id_btf=-1,diag_id_btm=-1, diag_id_vmove=-1, diag_id_vdiff=-1
 
      ! Tracer Initial concentration if constant everywhere
      real    :: const_init_value = 0.0
@@ -209,6 +222,8 @@ module g_tracer_utils
 
      ! Logical switches
      logical :: prog        = .false. !Is this a prognostic (.true.) or diagnostic (.false.) tracer?
+     logical :: move_vertical = .false. ! Enable allocation of fields for active vertical movement
+     logical :: diff_vertical = .false. ! Enable allocation of fields for random active vertical movement
      logical :: flux_gas    = .false. !Is there a gas flux to atmosphere?
      logical :: flux_runoff = .false. !Is there a river flux?
      logical :: flux_wetdep = .false. !Is there a wet deposition?
@@ -599,6 +614,11 @@ contains
   !  </IN>
   !  <IN NAME="btm_reservoir" TYPE="logical">
   !   .true. if there is bottom reservoir.
+  !  <IN NAME="move_vertical TYPE="logical">
+  !   .true. if there is active vertical movement
+  !  </IN>
+  !  <IN NAME="diff_vertical TYPE="logical">
+  !   .true. if there is random active vertical movement
   !  </IN>
   !  <IN NAME="flux_gas_molwt" TYPE="real">
   !   Molecular wt of gas defined in constants.F90 (g/mol)
@@ -623,7 +643,7 @@ contains
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
-       flux_param, flux_bottom, btm_reservoir, sink_rate, flux_gas_restart_file, flux_gas_type) 
+       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, flux_gas_type) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -637,6 +657,8 @@ contains
     logical,            intent(in), optional :: flux_drydep
     logical,            intent(in), optional :: flux_bottom
     logical,            intent(in), optional :: btm_reservoir
+    logical,            intent(in), optional :: move_vertical
+    logical,            intent(in), optional :: diff_vertical
     real,               intent(in), optional :: flux_gas_molwt
     real, dimension(:), intent(in), optional :: flux_gas_param
     real, dimension(:), intent(in), optional :: flux_param
@@ -746,6 +768,10 @@ contains
 
     if(present(btm_reservoir)) g_tracer%has_btm_reservoir = btm_reservoir
 
+    if(present(move_vertical)) g_tracer%move_vertical = move_vertical
+
+    if(present(diff_vertical)) g_tracer%diff_vertical = diff_vertical
+
     if(present(sink_rate)) g_tracer%sink_rate = sink_rate
 
     !===================================================================
@@ -800,6 +826,14 @@ contains
 
     if(g_tracer%has_btm_reservoir) then
        allocate(g_tracer%btm_reservoir(isd:ied,jsd:jed));g_tracer%btm_reservoir(:,:) = 0.0 
+    endif
+
+    if(g_tracer%move_vertical) then
+       allocate(g_tracer%vmove(isd:ied,jsd:jed, nk));g_tracer%vmove(:,:,:) = 0. 
+    endif
+
+    if(g_tracer%diff_vertical) then
+       allocate(g_tracer%vdiff(isd:ied,jsd:jed, nk));g_tracer%vdiff(:,:,:) = 0. 
     endif
     !Surface flux %stf exists if one of the following fluxes were requested:
 
@@ -890,7 +924,7 @@ contains
          g_tracer_com%init_time,       &
          trim(g_tracer%longname),      &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_aux")
     g_tracer%diag_id_aux = register_diag_field(g_tracer%package_name, &
@@ -899,7 +933,25 @@ contains
          g_tracer_com%init_time,       &
          trim(string),                 &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
+
+    string=trim(g_tracer%alias) // trim("_vmove")
+    g_tracer%diag_id_vmove = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         trim('vertical movement'),    &
+         trim('m/s'),                  &
+         missing_value = -1.0e+20)
+
+    string=trim(g_tracer%alias) // trim("_vdiff")
+    g_tracer%diag_id_vdiff = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         trim('random movement'),      &
+         trim('m/s'),                  &
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_stf")
     g_tracer%diag_id_stf = register_diag_field(g_tracer%package_name, &
@@ -908,7 +960,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Total flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
          trim('mole/m^2/sec'),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_stf_gas")
     g_tracer%diag_id_stf_gas = register_diag_field(g_tracer%package_name, &
@@ -917,7 +969,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Gas exchange flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
          trim('mole/m^2/sec'),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_deltap")
     g_tracer%diag_id_deltap = register_diag_field(g_tracer%package_name, &
@@ -926,7 +978,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Ocn minus Atm pressure of ') // trim(g_tracer%alias), &
          trim('uatm'),                 &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_kw")
     g_tracer%diag_id_kw = register_diag_field(g_tracer%package_name, &
@@ -935,7 +987,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Gas Exchange piston velocity for ') // trim(g_tracer%alias), &
          trim('m/sec'),                &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_btf")
     g_tracer%diag_id_btf = register_diag_field(g_tracer%package_name, &
@@ -944,7 +996,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Total flux of ') // trim(g_tracer%alias) // trim(' into Ocean Bottom'), &
          trim('mole/m^2/sec'),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_btm_reservoir")
     g_tracer%diag_id_btm = register_diag_field(g_tracer%package_name, &
@@ -953,7 +1005,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Bottom reservoir of ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_trunoff")
     g_tracer%diag_id_trunoff = register_diag_field(g_tracer%package_name, &
@@ -962,7 +1014,7 @@ contains
          g_tracer_com%init_time,       &
          trim('River concentration of ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_alpha")
     g_tracer%diag_id_alpha = register_diag_field(g_tracer%package_name, &
@@ -971,7 +1023,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Atmospheric saturation for ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_csurf")
     g_tracer%diag_id_csurf = register_diag_field(g_tracer%package_name, &
@@ -980,7 +1032,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Ocean surface gas concentration of ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_sc_no")
     g_tracer%diag_id_sc_no = register_diag_field(g_tracer%package_name, &
@@ -989,7 +1041,7 @@ contains
          g_tracer_com%init_time,       &
          trim('Ocean surface Schmidt Number for ') // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
-         missing_value = -1.0e+10)
+         missing_value = -1.0e+20)
 
   end subroutine g_tracer_register_diag
 
@@ -1430,6 +1482,10 @@ contains
     select case(member)
     case ('field') 
        array_ptr => g_tracer%field(:,:,:,1)
+    case ('vmove') 
+       array_ptr => g_tracer%vmove
+    case ('vdiff') 
+       array_ptr => g_tracer%vdiff
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1548,6 +1604,10 @@ contains
        if(present(positive)) array = max(0.0,array)
     case ('tendency') 
        array(:,:,:) = g_tracer%tendency(:,:,:)
+    case ('vmove') 
+       array(:,:,:) = g_tracer%vmove(:,:,:)
+    case ('vdiff') 
+       array(:,:,:) = g_tracer%vdiff(:,:,:)
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1764,6 +1824,10 @@ contains
        g_tracer%tendency  = array 
     case ('field') 
        g_tracer%field(:,:,:,tau) = array(:,:,:) 
+    case ('vmove') 
+       g_tracer%vmove  = array 
+    case ('vdiff') 
+       g_tracer%vdiff  = array 
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1939,6 +2003,20 @@ contains
        if (g_tracer%diag_id_field .gt. 0) then
           if(.NOT. g_tracer_is_prog(g_tracer)) tau_1=1
           used = send_data(g_tracer%diag_id_field, g_tracer%field(:,:,:,tau_1), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+       endif
+
+       if (g_tracer%diag_id_vmove .gt. 0 .and. _ALLOCATED(g_tracer%vmove)) then
+          used = send_data(g_tracer%diag_id_vmove, g_tracer%vmove(:,:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+       endif
+
+       if (g_tracer%diag_id_vdiff .gt. 0 .and. _ALLOCATED(g_tracer%vdiff)) then
+          used = send_data(g_tracer%diag_id_vdiff, g_tracer%vdiff(:,:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
@@ -2186,7 +2264,7 @@ contains
     ! and bottom sources, are applied.  The sinking is implemented with an
     ! fully implicit upwind advection scheme.
 
-    real :: sink_dist    ! The distance the tracer sinks in a time step, in H.
+    real :: sink_dist(1:g_tracer_com%nk+1)    ! The distance the tracer sinks in a time step, in H.
     real :: sfc_src      ! The time-integrated surface source of the tracer, in
     ! units of H times a concentration.
     real :: btm_src      ! The time-integrated bottom source of the tracer, in
@@ -2215,6 +2293,9 @@ contains
 
           nz=g_tracer_com%grid_kmt(i,j)
 
+          if (g_tracer%move_vertical) then
+	    do k=2,nz; sink_dist(k) = (dt*g_tracer%vmove(i,j,k)) * m_to_H; enddo
+	  endif
           sfc_src = 0.0 ; btm_src = 0.0 
 
           ! Find the sinking rates at all interfaces, limiting them if necesary
@@ -2223,21 +2304,21 @@ contains
           ! here.
           if (_ALLOCATED(g_tracer%btm_reservoir)) then
              do k=2,nz 
-                sink(k) = sink_dist ; h_minus_dsink(k) = h_old(i,j,k)
+                sink(k) = sink_dist(k) ; h_minus_dsink(k) = h_old(i,j,k)
              enddo
-             sink(nz+1) = sink_dist 
+             sink(nz+1) = sink_dist(k) 
           else
              sink(nz+1) = 0.0 
              ! Find the limited sinking distance at the interfaces.
              do k=nz,2,-1
-                if (sink(k+1) >= sink_dist) then
-                   sink(k) = sink_dist
+                if (sink(k+1) >= sink_dist(k)) then
+                   sink(k) = sink_dist(k)
                    h_minus_dsink(k) = h_old(i,j,k) + (sink(k+1) - sink(k))
-                elseif (sink(k+1) + h_old(i,j,k) < sink_dist) then
+                elseif (sink(k+1) + h_old(i,j,k) < sink_dist(k)) then
                    sink(k) = sink(k+1) + h_old(i,j,k)
                    h_minus_dsink(k) = 0.0
                 else
-                   sink(k) = sink_dist
+                   sink(k) = sink_dist(k)
                    h_minus_dsink(k) = (h_old(i,j,k) + sink(k+1)) - sink(k)
                 endif
              enddo
@@ -2318,15 +2399,24 @@ contains
     real,                   intent(in) :: dt,rho0
     integer,                intent(in) :: tau
 
-    real, dimension(g_tracer_com%isd:g_tracer_com%ied,0:g_tracer_com%nk) ::  a,b,c, e, f
+    real, dimension(g_tracer_com%isd:g_tracer_com%ied,0:g_tracer_com%nk) ::  a,b,c, e, f, a1, c1
+    real, dimension(g_tracer_com%isd:g_tracer_com%ied,0:g_tracer_com%nk) ::  wposu, wnegu, wposl, wnegl
     real, dimension(g_tracer_com%isd:g_tracer_com%ied,g_tracer_com%jsd:g_tracer_com%jed,0:g_tracer_com%nk) ::  dcb
     real, dimension(g_tracer_com%isd:g_tracer_com%ied) :: bet
 
     real, dimension(:,:,:), allocatable    :: ea, eb
     integer :: i, j, k, km1, kp1
-    real :: eps, factu, factl
-    logical, parameter :: GOLDtridiag = .true.
-
+    real :: eps, factu, factl, wabsu, wabsl, fact1, fact2
+    logical :: GOLDtridiag = .true.
+    logical :: IOWtridiag  = .false.
+    
+    GOLDtridiag = .true.
+    IOWtridiag  = .false.
+    if (g_tracer%move_vertical) then
+       GOLDtridiag = .false.
+       IOWtridiag  = .true.
+    endif
+    
     eps = 1.e-30
     !
     !Add the contribution of K33_implicit to the diffusivity
@@ -2340,7 +2430,15 @@ contains
           enddo
        enddo
     enddo
-
+    if (g_tracer%diff_vertical) then
+      do j=g_tracer_com%jsc,g_tracer_com%jec
+        do i=g_tracer_com%isc,g_tracer_com%iec
+           do k=1,g_tracer_com%nk
+             dcb(i,j,k) = dcb(i,j,k) + rho0*g_tracer%vdiff(i,j,k) 
+           enddo
+        enddo
+      enddo
+    endif
     !
     !The following two alternatives for solving the tridiagonal equation produce exact same results.
     !The choice between them should come from performance testing. I have not done this yet.
@@ -2379,6 +2477,84 @@ contains
 
        deallocate(ea, eb)
 
+    elseif(IOWtridiag) then
+
+       !
+       !OR 
+       !
+       !===== 2 ===================
+       !Via MOM's invtri routine with vertical movement added
+       !===========================
+       !
+       !This is borrowed from MOM invtri
+       !     call invtri (T_prog(n)%field(:,:,:,taup1), T_prog(n)%stf, &
+       !                  T_prog(n)%btf, wrk2(:,:,:), dtime_t, Grd%kmt,&
+       !                  Grd%tmask, Thickness%rho_dzt(:,:,:,taup1), Thickness%dzwt, aidif, nk) 
+       !
+       do j=g_tracer_com%jsc,g_tracer_com%jec
+          do k=1,g_tracer_com%nk
+             km1   = max(1,k-1)
+             kp1   = min(k+1,g_tracer_com%nk)
+             do i=g_tracer_com%isc,g_tracer_com%iec
+                fact1  = dt/dh(i,j,k)
+		fact2  = rho0*fact1*0.5
+		factu  = fact1/dhw(i,j,km1)
+                factl  = fact1/dhw(i,j,k)
+		wabsu       = abs(g_tracer%vmove(i,j,km1))
+		wposu(i,k)  = fact2*(g_tracer%vmove(i,j,km1) + wabsu)*g_tracer_com%grid_tmask(i,j,k)
+		wnegu(i,k)  = fact2*(g_tracer%vmove(i,j,km1) - wabsu)*g_tracer_com%grid_tmask(i,j,k)
+		wabsl       = abs(g_tracer%vmove(i,j,k))
+		wposl(i,k)  = fact2*(g_tracer%vmove(i,j,k  ) + wabsl)*g_tracer_com%grid_tmask(i,j,kp1)
+		wnegl(i,k)  = fact2*(g_tracer%vmove(i,j,k  ) - wabsl)*g_tracer_com%grid_tmask(i,j,kp1)
+                a1(i,k) = dcb(i,j,km1)*factu*g_tracer_com%grid_tmask(i,j,k)  
+                c1(i,k) = dcb(i,j,k)  *factl*g_tracer_com%grid_tmask(i,j,kp1)
+                a(i,k) = -(a1(i,k) - wnegu(i,k))
+                c(i,k) = -(c1(i,k) + wposl(i,k))
+                f(i,k) = g_tracer%field(i,j,k,tau)*g_tracer_com%grid_tmask(i,j,k) 
+                b(i,k) = 1.0 + a1(i,k) + c1(i,k) - wnegl(i,k) + wposu(i,k)
+             enddo
+          enddo
+
+          do i=g_tracer_com%isc,g_tracer_com%iec
+             a1(i,1)  = 0.0
+	     wnegu(i,1) = 0.0; wposu(i,1) = 0.0
+	     a(i,1)  = 0.0
+             c1(i,g_tracer_com%nk) = 0.0
+	     wposl(i,g_tracer_com%nk) = 0.0; wnegl(i,g_tracer_com%nk) = 0.0 
+             c(i,g_tracer_com%nk) = 0.0
+             b(i,1)  = 1.0 + a1(i,1) + c1(i,1) - wnegl(i,1) + wposu(i,1)
+             b(i,g_tracer_com%nk) = 1.0 + a1(i,g_tracer_com%nk) + c1(i,g_tracer_com%nk) &
+	                                - wnegl(i,g_tracer_com%nk) + wposu(i,g_tracer_com%nk)
+
+             ! top and bottom b.c.
+             if (_ALLOCATED(g_tracer%stf)) &
+                  f(i,1) = g_tracer%field(i,j,1,tau) + g_tracer%stf(i,j)*dt*g_tracer_com%grid_tmask(i,j,1)/dh(i,j,1)
+             if (_ALLOCATED(g_tracer%btf)) then
+                k = max(2,g_tracer_com%grid_kmt(i,j))
+                f(i,k) = g_tracer%field(i,j,k,tau) - g_tracer%btf(i,j)*dt*g_tracer_com%grid_tmask(i,j,k)/dh(i,j,k)
+             endif
+          enddo
+
+          ! decomposition and forward substitution
+          do i=g_tracer_com%isc,g_tracer_com%iec
+             bet(i) = g_tracer_com%grid_tmask(i,j,1)/(b(i,1) + eps)
+             g_tracer%field(i,j,1,tau) = f(i,1)*bet(i)
+          enddo
+          do k=2,g_tracer_com%nk
+             do i=g_tracer_com%isc,g_tracer_com%iec
+                e(i,k) = c(i,k-1)*bet(i)
+                bet(i) = g_tracer_com%grid_tmask(i,j,k)/(b(i,k) - a(i,k)*e(i,k) + eps)
+                g_tracer%field(i,j,k,tau) = (f(i,k) - a(i,k)*g_tracer%field(i,j,k-1,tau))*bet(i)
+             enddo
+          enddo
+
+          ! back substitution
+          do k=g_tracer_com%nk-1,1,-1
+             do i=g_tracer_com%isc,g_tracer_com%iec
+                g_tracer%field(i,j,k,tau) = g_tracer%field(i,j,k,tau) - e(i,k+1)*g_tracer%field(i,j,k+1,tau)
+             enddo
+          enddo
+       enddo
     else
 
        !
