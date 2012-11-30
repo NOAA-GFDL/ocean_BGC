@@ -97,8 +97,8 @@ module generic_ERGOM
      real :: Rho_0
      ! 
      real :: &
-          q10_nit    = 0., &   ! q10 parameter for nitrification [1/째C]
-          q10_h2s    = 0., &   ! q10 parameter for chemolithotrophs (so4 reduction) [1/째C]
+          q10_nit    = 0., &   ! q10 parameter for nitrification [1/Celsius]
+          q10_h2s    = 0., &   ! q10 parameter for chemolithotrophs (so4 reduction) [1/Celsius]
           nf         = 0., &   ! nitrification rate [1/s]
           alpha_nit  = 0., &   ! half-saturation constant for nitrification [mol/kg]
           alp_o2     = 0., &   ! slope function for detritus recycling [kg/mol]
@@ -209,7 +209,7 @@ module generic_ERGOM
           p_phyt          !nitrogen in phytoplankton [mol/kg]
      real :: &
           imin     = 0. , & ! minimum light [W/m2]
-	  tmin     = 0. , & ! minimum temperature [째C]
+	  tmin     = 0. , & ! minimum temperature [Celsius]
 	  smin     = 0. , & ! minimum phytoplankton salinity [g/kg]
 	  smax     = 0. , & ! maximum phytoplankton salinity [g/kg]
           alpha    = 0. , & ! DIN half-saturation constant [mol/kg]
@@ -252,8 +252,8 @@ module generic_ERGOM
      real :: &
 	  pnr            = 0. , &  ! P/N ratio
 	  cnr            = 0. , &  ! C/N ratio
-	  t_opt          = 0. , &  ! optimal grazing temperature [째C]
-          t_max          = 0. , &  ! maximal grazing temperature [째C]
+	  t_opt          = 0. , &  ! optimal grazing temperature [Celsius]
+          t_max          = 0. , &  ! maximal grazing temperature [Celsius]
           beta           = 0. , &  ! parameter for temperature dependence of grazing [dimensionless]
 	  sigma_b        = 0. , &  ! zooplankton loss rate to detritus [1/s]
           oxy_sub        = 0. , &  ! oxygen level below which reduced respiration starts [mol/kg]
@@ -306,7 +306,7 @@ module generic_ERGOM
 	  jmort    	          ! nitrogen gain in detritus by mortality [mol/kg/s]
      real :: &
 	  dn       = 0. , &       ! recycling rate [1/s]
-	  q10_rec  = 0.	          ! q10 parameter for recycling of detritus [1/캜]
+	  q10_rec  = 0.	          ! q10 parameter for recycling of detritus [1/Celsius]
      integer ::        &
                                   ! detritus is suspended matter. The data field is in spm(i) 
           index_spm      = -1 , & ! stores the index index_spm in spm(index_spm)
@@ -329,14 +329,14 @@ module generic_ERGOM
 	  dn              = 0. , & ! recycling rate [1/s]
           frac_dn_anoxic  = 0. , & ! fraction of recycling in shallow sediments for anoxic bottom water [dimensionless]
 	  thio_bact_min   = 0. , & ! minimum amount of active sediment for thiomargarita [mol/m2]
-	  q10_rec         = 0. , & ! q10 parameter for recycling [1/캜]
+	  q10_rec         = 0. , & ! q10 parameter for recycling [1/Celsius]
 	  den_rate        = 0. , & ! proportion of denitrification at the redoxcline in sediment
 	  pnr             = 0. , & ! P/N ratio
 	  cnr             = 0. , & ! C/N ratio
 	  wsed            = 0. , & ! sedimentation rate [m/s]
           po4_lib_rate    = 0. , & ! liberation rate for iron phosphate in the sediment [1/s]
           po4_retention   = 0. , & ! fraction of phosphorous retained in the sediment while recycled [dimensionless]
-          po4_ret_plus_BB = 0. , & ! value added to po4_retention north of 60.75캮 
+          po4_ret_plus_BB = 0. , & ! value added to po4_retention north of 60.75N 
                           	   ! (special treatment for the Bothnian Bay to supress cyanobacterial blooms)
           o2_bioerosion   = 0.     ! oxygen threshold for bioerosion  [mol/kg]
      character(len=32) ::  &
@@ -360,6 +360,8 @@ module generic_ERGOM
           p_wat                         ! pointer to 3d variable for concentration in water column [mol/kg]
      real, ALLOCATABLE, dimension(:,:) :: &
           jsed                          ! sedimentation [mol/m2/s]
+     real, ALLOCATABLE, dimension(:,:) :: &
+          btf                           ! The total bottom flux [mol/m2/s]
      real :: &
 	  wsink0          = 0. , &      ! sinking velocity (<0 for sinking) [m/d]
           wsed            = 0.          ! sedimentation rate [m/d]
@@ -468,7 +470,7 @@ module generic_ERGOM
   integer, parameter :: maxspm=2, maxsed=2, max_sediment_layers=2
   real, dimension(maxphyt) :: &
         imin   , &	  ! minimum light [W/m2]
-        tmin   , &	    ! minimum phytoplankton growth temperature (for cyanobacteria only) [째C]
+        tmin   , &	    ! minimum phytoplankton growth temperature (for cyanobacteria only) [Celsius]
         smin   , &	    ! minimum phytoplankton salinity (for diatoms only) 
         smax   , &	    ! maximum phytoplankton salinity (for diatoms only) 
         alpha  , &	    ! half-saturation constants of nutrient uptake by phytoplankton [mol/kg]
@@ -484,8 +486,8 @@ module generic_ERGOM
   character(len=32)        :: name_phyt(maxphyt)
                                   
   real, dimension(maxzoo)  :: &
-        t_opt_zoo  , &      ! temperature optimum of grazing [째C]
-        t_max_zoo  , &      ! maximal grazing temperature [째C]
+        t_opt_zoo  , &      ! temperature optimum of grazing [Celsius]
+        t_max_zoo  , &      ! maximal grazing temperature [Celsius]
         beta_zoo   , &      ! parameter for temperature dependence of grazing [dimensionless]
         oxy_sub_zoo , &     ! oxygen level below which reduced respiration starts [mol/kg]
         oxy_min_zoo, &      ! oxygen level below which no respiration takes place [mol/kg]
@@ -529,7 +531,7 @@ module generic_ERGOM
 
   real, dimension(maxdet)   :: &
         dn     , &          ! recycling rate
-	q10_rec             ! q10 parameter for recycling [1/캜]
+	q10_rec             ! q10 parameter for recycling [1/Celsius]
   character(len=32)         :: &
         name_det(maxdet), &
         name_redfield_sed   = 'sed', &
@@ -559,9 +561,9 @@ module generic_ERGOM
 	                         ! < 0: the layer may become infinitely thick.
   real  :: &
         nf        = .1       , &  ! nitrification rate [1/d]
-        q10_nit   = .11      , &  ! q10 parameter for nitrification [1/째C]
+        q10_nit   = .11      , &  ! q10 parameter for nitrification [1/Celsius]
         alpha_nit = 3.75e-6  , &  ! half-saturation constant for nitrification [mol/kg]
-        q10_h2s   = 0.0693   , &  ! q10 parameter for chemolithotrophs (h2s oxidation) [1/째C]
+        q10_h2s   = 0.0693   , &  ! q10 parameter for chemolithotrophs (h2s oxidation) [1/Celsius]
         k_h2s_o2  = 8.e5     , &  ! reaction constant h2s oxidation with o2  [kg/mol/d]
         k_h2s_no3 = 8.e5     , &  ! reaction constant h2s oxidation with no3 [kg/mol/d]
         k_sul_o2  = 2.e4     , &  ! reaction constant sulfur oxidation with o2 [kg/mol/d]
@@ -587,7 +589,7 @@ module generic_ERGOM
         nc_sed    = 106.     , &  ! number of C atoms in the sediment, Redfield ratio
         po4_lib_rate	 = 0., &  ! fraction of phosphorous retained in the sediment while recycled [1/d]
         po4_retention	 = 0., &  ! fraction of phosphorous retained in the sediment while recycled [dimensionless]
-        po4_ret_plus_BB  = 0., &  ! value added to po4_retention north of 60.75째N
+        po4_ret_plus_BB  = 0., &  ! value added to po4_retention north of 60.75N
         			  ! (special treatment for the Bothnian Bay to supress cyanobacterial blooms)
         o2_bioerosion	 = 6.5e-5 ! oxygen thresold to enable bioerosion [mol/kg]
    
@@ -619,7 +621,7 @@ module generic_ERGOM
 
   data (imin (n),    n=1, maxphyt) /25.,50.,50/                  ! minimum light saturation for phytoplankton growth [W/m^2]
   data (tmin(n),     n=1, maxphyt) /-20.,-20., 20./              ! minimum growth temperature for phytoplankton, 
-                                                                 ! here only for diazotrophs [캜]
+                                                                 ! here only for diazotrophs [Celsius]
   data (smin(n),     n=1, maxphyt) /-20.,-20.,-20./              ! minimum growth salinity for phytoplankton, 
                                                                  ! here only for diazotrophs [psu]
   data (smax(n),     n=1, maxphyt) /60., 60., 60./               ! maximum growth salinity for phytoplankton, 
@@ -651,8 +653,8 @@ module generic_ERGOM
   data (z0     (n),  n=1, maxzoo)  /1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9/
                                                                  ! background concentration for initial growth [mol/kg]
   data (sigma_b(n),  n=1, maxzoo)  /0.03, 0.03, 0.03, 0.03/      ! loss rate of zooplankton to detritus [mol/kg/d]
-  data (t_opt_zoo(n),   n=1, maxzoo)  /15.0, 10.0, 10.0, 10.0/	 ! temperature optimum of zooplankton for grazing [째C]
-  data (t_max_zoo(n),   n=1, maxzoo)  /25.0, 15.0, 15.0, 15.0/	 ! maximal grazing temperature [째C]
+  data (t_opt_zoo(n),   n=1, maxzoo)  /15.0, 10.0, 10.0, 10.0/	 ! temperature optimum of zooplankton for grazing [Celsius]
+  data (t_max_zoo(n),   n=1, maxzoo)  /25.0, 15.0, 15.0, 15.0/	 ! maximal grazing temperature [Celsius]
   data (beta_zoo(n),    n=1, maxzoo)  /1.7, 1.7, 1.7, 1.7/       ! parameter for temperature dependence of grazing 
                                                                  ! [dimensionless]
   data (oxy_sub_zoo(n), n=1, maxzoo) /60.e-6, 60.e-6, 60.e-6, 60.e-6/	
@@ -701,7 +703,7 @@ module generic_ERGOM
   data (graz_pref (n), n=1, maxzoo) /ERGOM_PREFS,GENUS_IVLEV,GENUS_IVLEV,0/ ! flag to select grazing preferences
   
   data (dn     (n),  n=1, maxdet)  /0.003,  0.003 /	  ! recycling rate of detritus [1/d]
-  data (q10_rec(n),  n=1, maxdet)  /0.0693, 0.0693/	  ! q10 paramter for recycling of detritus [1/째C]
+  data (q10_rec(n),  n=1, maxdet)  /0.0693, 0.0693/	  ! q10 paramter for recycling of detritus [1/Celsius]
   data (name_det(n), n=1, maxdet)  /'det','fast'/         ! 
 
   data(wsink0_spm (n) , n=1, maxspm) /-3.0, -1.0/	  ! sinking velocity (<0 for sinking) [m/d]
@@ -757,8 +759,8 @@ module generic_ERGOM
    wtemp        , & ! weight number for temperature sensitivity
    wo2          , & ! weight number for o2 sensitivity
    wh2s         , & ! weight number for h2s sensitivity
-   t_opt_zoo    , & ! temperature optimum of zooplankton for grazing [째C]
-   t_max_zoo    , & ! temperature maximum of zooplankton for grazing [째C]
+   t_opt_zoo    , & ! temperature optimum of zooplankton for grazing [Celsius]
+   t_max_zoo    , & ! temperature maximum of zooplankton for grazing [Celsius]
    beta_zoo     , & ! parameter for temperature dependence of grazing [dimensionless]
    oxy_sub_zoo ,  & ! oxygen level below which reduced respiration starts [mol/kg]
    oxy_min_zoo,   & ! oxygen level below which no respiration takes place [mol/kg]
@@ -784,12 +786,12 @@ module generic_ERGOM
 ! detritus parameters
    name_det     , & ! name of detritus, must be equal to a suspended particulate matter (spm) variable name
    dn	        , & ! recycling rate [1/d]
-   q10_rec      , & ! q10 paramter for recycling of detritus [1/째C]
+   q10_rec      , & ! q10 paramter for recycling of detritus [1/Celsius]
 ! generic_ERGOM_type parameters
    nf	        , & ! nitrification rate [1/d]
-   q10_nit      , & ! q10 parameter for nitrification [1/째C]
+   q10_nit      , & ! q10 parameter for nitrification [1/Celsius]
    alpha_nit    , & ! half-saturation constant for nitrification [mol/kg]
-   q10_h2s      , & ! q10 parameter for chemolithotrophs (h2s oxidation) [1/째C]
+   q10_h2s      , & ! q10 parameter for chemolithotrophs (h2s oxidation) [1/Celsius]
    k_h2s_o2     , & ! reaction constant h2s oxidation with o2  [kg/mol/d]
    k_h2s_no3    , & ! reaction constant h2s oxidation with no3 [kg/mol/d]
    k_sul_o2     , & ! reaction constant sulfur oxidation with o2 [kg/mol/d]
@@ -803,14 +805,14 @@ module generic_ERGOM
    dn_sed       , & ! recycling rate of detritus in the sediment [1/d]
    frac_dn_anoxic, &! fraction of recycling rate in shallow sediments for anoxic bottom water [dimensionless]
    thio_bact_min, & ! minimum nitrogen content of active sediment for thiomargarita [mol/m2]
-   q10_rec_sed  , & ! q10 paramter for recycling of detritus in the sediment [1/째C]
+   q10_rec_sed  , & ! q10 paramter for recycling of detritus in the sediment [1/Celsius]
    den_rate     , & ! porportion of denitrification at the sediment redoxcline
    np_sed       , & ! number of P atoms in the sediment, Redfield ratio
    nn_sed       , & ! number of N atoms in the sediment, Redfield ratio
    nc_sed       , & ! number of C atoms in the sediment, Redfield ratio
    po4_lib_rate , & ! liberation rate of iron phosphate in the sediment [1/d]
    po4_retention, & ! fraction of phosphorous retained in the sediment while recycled [dimensionless]
-   po4_ret_plus_BB, &! value added to po4_retention north of 60.75째N 
+   po4_ret_plus_BB, &! value added to po4_retention north of 60.75N 
                      !(special treatment for the Bothnian Bay to supress cyanobacterial blooms)
    o2_bioerosion  , &! oxygen thresold to enable bioerosion  [mol/kg]
 ! suspended particulate matter parameters
@@ -1202,32 +1204,33 @@ contains
     allocate(ergom%b_nitrogen(isd:ied, jsd:jed));          ergom%b_nitrogen=0.0
     allocate(ergom%b_h2s(isd:ied, jsd:jed));               ergom%b_h2s=0.0
     do n = 1, NUM_PHYTO
-       allocate(phyto(n)%f_n(isd:ied,jsd:jed,nk));         ; phyto(n)%f_n            = 0.0
-       allocate(phyto(n)%jgraz_n(isd:ied,jsd:jed,nk))      ; phyto(n)%jgraz_n        = 0.0
-       allocate(phyto(n)%jprod_po4(isd:ied,jsd:jed,nk))    ; phyto(n)%jprod_po4      = 0.0
-       allocate(phyto(n)%jres_n(isd:ied,jsd:jed,nk))       ; phyto(n)%jres_n         = 0.0
-       allocate(phyto(n)%jdet_n(isd:ied,jsd:jed,nk))       ; phyto(n)%jdet_n         = 0.0
+       allocate(phyto(n)%f_n(isd:ied,jsd:jed,nk));         ; phyto(n)%f_n        = 0.0
+       allocate(phyto(n)%jgraz_n(isd:ied,jsd:jed,nk))      ; phyto(n)%jgraz_n    = 0.0
+       allocate(phyto(n)%jprod_po4(isd:ied,jsd:jed,nk))    ; phyto(n)%jprod_po4  = 0.0
+       allocate(phyto(n)%jres_n(isd:ied,jsd:jed,nk))       ; phyto(n)%jres_n     = 0.0
+       allocate(phyto(n)%jdet_n(isd:ied,jsd:jed,nk))       ; phyto(n)%jdet_n     = 0.0
     enddo
-    allocate(phyto(dia)%move  (isd:ied,jsd:jed,nk))        ; phyto(dia)%move         = 0.0
-    allocate(phyto(cya)%move  (isd:ied,jsd:jed,nk))        ; phyto(cya)%move         = 0.0
+    allocate(phyto(dia)%move  (isd:ied,jsd:jed,nk))        ; phyto(dia)%move     = 0.0
+    allocate(phyto(cya)%move  (isd:ied,jsd:jed,nk))        ; phyto(cya)%move     = 0.0
     do n = 1, 2
-       allocate(phyto(n)%jprod_nh4(isd:ied,jsd:jed,nk))    ; phyto(n)%jprod_nh4      = 0.0
-       allocate(phyto(n)%jprod_no3(isd:ied,jsd:jed,nk))    ; phyto(n)%jprod_no3      = 0.0
+       allocate(phyto(n)%jprod_nh4(isd:ied,jsd:jed,nk))    ; phyto(n)%jprod_nh4  = 0.0
+       allocate(phyto(n)%jprod_no3(isd:ied,jsd:jed,nk))    ; phyto(n)%jprod_no3  = 0.0
     enddo
     allocate(phyto(CYA)%jprod_n2(isd:ied,jsd:jed,nk))      ; phyto(CYA)%jprod_n2   = 0.0
     do n = 1, NUM_ZOO
-      allocate(zoo(n)%f_n (isd:ied, jsd:jed, 1:nk))	  ; zoo(n)%f_n  	  = 0.0
-      allocate(zoo(n)%jgraz_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jgraz_n	  = 0.0
-      allocate(zoo(n)%jgain_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jgain_n	  = 0.0
-      allocate(zoo(n)%jres_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jres_n	  = 0.0
-      allocate(zoo(n)%jdet_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jdet_n	  = 0.0
+      allocate(zoo(n)%f_n (isd:ied, jsd:jed, 1:nk))	  ; zoo(n)%f_n      = 0.0
+      allocate(zoo(n)%jgraz_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jgraz_n  = 0.0
+      allocate(zoo(n)%jgain_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jgain_n  = 0.0
+      allocate(zoo(n)%jres_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jres_n   = 0.0
+      allocate(zoo(n)%jdet_n(isd:ied,jsd:jed,nk))	  ; zoo(n)%jdet_n   = 0.0
 !       if(vertical_migration(n)) &
 !       allocate(zoo(n)%move  (isd:ied,jsd:jed,nk))         ; zoo(n)%move         = 0.0
     enddo
     allocate(biosed%bioerosion(isd:ied,jsd:jed))            ; biosed%bioerosion       = 0.0
     do n = 1, NUM_SPM
-      allocate(spm(n)%move     (isd:ied,jsd:jed,nk))  ; spm(n)%move	  = 0.0
-      allocate(spm(n)%jsed     (isd:ied,jsd:jed))     ; spm(n)%jsed	  = 0.0
+      allocate(spm(n)%move     (isd:ied,jsd:jed,nk))  ; spm(n)%move = 0.0
+      allocate(spm(n)%btf      (isd:ied,jsd:jed))     ; spm(n)%btf  = 0.0
+      allocate(spm(n)%jsed     (isd:ied,jsd:jed))     ; spm(n)%jsed = 0.0
     enddo
     do n = 1, NUM_SED
       allocate(sed(n)%f_sed    (isd:ied,jsd:jed,NUM_SEDIMENT_LAYERS)); sed(n)%f_sed = 0.0
@@ -1817,7 +1820,8 @@ contains
            name       = trim(name_spm(n)),             &
            longname   = trim(longname_spm(n))//' concentration in water', &
            units      = 'mol/kg',          &
-	   prog       = .true.            )
+	   prog       = .true. ,           &
+           flux_bottom= .true.            )
     enddo
     do n=1, NUM_SED
         do i=1,NUM_SEDIMENT_LAYERS
@@ -2179,7 +2183,11 @@ contains
     real,  parameter                   :: smax = 4.5            ! maximum nitrogen in sediment
     
     call mpp_clock_begin(id_susp)
-
+    
+    do n=1,NUM_SPM
+       spm(n)%btf = 0
+    enddo !n
+   
     !sedimentation
     do n=1,NUM_SPM
        if (spm(n)%index_sediment_to .gt. 0) then
@@ -2187,9 +2195,8 @@ contains
           do j = jsc, jec; do i = isc, iec
              k=grid_kmt(i,j)
              if (k == 0) cycle
-             temp1 = spm(n)%p_wat(i,j,k,tau) * spm(n)%wsed/dzt(i,j,k)	      ! settling rate [mol kg-1 s-1]
-             spm(n)%p_wat(i,j,k,tau) = spm(n)%p_wat(i,j,k,tau) - temp1  * dt  ! remove suspended matter [mol kg-1]
-             temp1 = temp1 * rho_dzt(i,j,k)				      ! convert to [mol m-2 s-1] (3d->2d)
+             temp1 = spm(n)%p_wat(i,j,k,tau) * spm(n)%wsed * ergom%rho_0             ! settling rate [mol m-2 s-1]
+             spm(n)%btf(i,j) = spm(n)%btf(i,j) + temp1
              sed(n_sed)%f_sed(i,j,1)   = &
           		sed(n_sed)%f_sed(i,j,1) + temp1  * dt		      ! add suspended matter to sediment
              if (spm(n)%id_jsed .gt. 0) spm(n)%jsed(i,j) = temp1	      ! output of sedimentation
@@ -2212,9 +2219,7 @@ contains
         	   temp1 = sed(n)%f_sed(i,j,1) * sed(n)%erosion_rate	   ! erosion rate [mol m-2 s-1]
         	   if (sed(n)%id_jres .gt. 0) sed(n)%jres(i,j) = temp1	   ! output of resuspension
         	   sed(n)%f_sed(i,j,1) = sed(n)%f_sed(i,j,1) - temp1  * dt ! remove sediment [mol m-2]
-        	   temp1 = temp1 / rho_dzt(i,j,k)                          ! convert to [mol kg-1 s-1]
-        	   spm(n_sed)%p_wat(i,j,k,tau)   = &
-        		   spm(n_sed)%p_wat(i,j,k,tau) + temp1  * dt	   ! add concentration to spm
+                   spm(n_sed)%btf(i,j) = spm(n_sed)%btf(i,j) - temp1
                 else
         	   if (sed(n)%id_jres .gt. 0) sed(n)%jres(i,j) = 0.
                 endif
@@ -2234,9 +2239,9 @@ contains
         	 temp1 = diff_stress * sed(n)%erosion_rate	           ! erosion rate [mol m-2 s-1]
         	 if (sed(n)%id_jres .gt. 0) sed(n)%jres(i,j) = temp1	   ! output of resuspension
         	 sed(n)%f_sed(i,j,1) = sed(n)%f_sed(i,j,1) - temp1  * dt   ! remove sediment [mol m-2]
-        	 temp1 = temp1 / rho_dzt(i,j,k)      			   ! convert to [mol kg-1 s-1]
-        	 spm(n_sed)%p_wat(i,j,k,tau)   = &
-        		   spm(n_sed)%p_wat(i,j,k,tau) + temp1  * dt	   ! add concentration to spm
+                 spm(n_sed)%btf(i,j) = spm(n_sed)%btf(i,j) - temp1
+!        	 spm(n_sed)%p_wat(i,j,k,tau)   = &
+!        		   spm(n_sed)%p_wat(i,j,k,tau) + temp1  * dt	   ! add concentration to spm
                else
         	  if (sed(n)%id_jres .gt. 0) sed(n)%jres(i,j) = 0.
                endif
@@ -2259,8 +2264,7 @@ contains
              temp1 = sed(n)%f_sed(i,j,1) * sed(n)%bioerosion_rate * bioerosion(i,j) ! bioerosion [mol m-2 s-1]
              if (sed(n)%id_jbiores .gt. 0) sed(n)%jbiores(i,j) = temp1  	    ! output of bioerosion
              sed(n)%f_sed(i,j,1) = sed(n)%f_sed(i,j,1) - temp1  * dt		    ! remove sediment [mol m-2]
-             temp1 = temp1 / rho_dzt(i,j,k)					    ! convert to [mol kg-1 s-1]
-             spm(n_sed)%p_wat(i,j,k,tau) = spm(n_sed)%p_wat(i,j,k,tau) + temp1 * dt ! add concentration to spm
+             spm(n_sed)%btf(i,j) = spm(n_sed)%btf(i,j) - temp1
           enddo; enddo !i,j
        endif
     enddo !n
@@ -2964,7 +2968,7 @@ contains
     enddo; enddo; enddo; enddo
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  
       ! temperature dependenc of anammox
-      ! i.e. only between 7 and 30째C (Dalsgaard & Thamdrup 2002 in ApplEnvMicrobiol) 
+      ! i.e. only between 7 and 30degC (Dalsgaard & Thamdrup 2002 in ApplEnvMicrobiol) 
       k_an = ergom%k_an0 * det(SLOW)%f_n(i,j,k) 	 &    ! only det(SLOW)
         	   / (1. + exp((temp(i,j,k) - 30.)*0.5)) &    
     		   / (1. + exp((7.  - temp(i,j,k))*0.5))      
@@ -3175,6 +3179,10 @@ contains
     call g_tracer_get_pointer(tracer_list,'po4','runoff_tracer_flux',runoff_flux_po4)
     call g_tracer_get_pointer(tracer_list,'po4','drydep',dry_po4)
     call g_tracer_get_pointer(tracer_list,'po4','wetdep',wet_po4)
+    do n=1,NUM_SED
+       call g_tracer_set_values(tracer_list,trim(spm(n)%name),  'btf', spm(n)%btf ,isd,jsd)
+    enddo !n
+
 
     if (ergom%id_runoff_flux_po4 .gt. 0)      &
        used = send_data(ergom%id_runoff_flux_po4, runoff_flux_po4,           &
@@ -3765,6 +3773,7 @@ contains
     deallocate(biosed%bioerosion)
     do n = 1, NUM_SPM
         deallocate(spm(n)%move)
+        deallocate(spm(n)%btf)
         deallocate(spm(n)%jsed)
     enddo
     do n = 1, NUM_SED

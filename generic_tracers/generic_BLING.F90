@@ -3103,16 +3103,15 @@ call close_file (ioun)
             grid_tmask(i,j,1)
        sc_no_term = sqrt(660.0 / (sc_o2 + epsln)) 
      
-       o2_alpha(i,j) = o2_saturation       * sc_no_term
+       o2_alpha(i,j) = o2_saturation       * sc_no_term * bling%Rho_0
        o2_csurf(i,j) = o2_field(i,j,1,tau) * sc_no_term * bling%Rho_0 !nnz: MOM has rho(i,j,1,tau)
 
+    enddo; enddo
     !
     !Set %csurf and %alpha for these tracers. This will mark them for sending fluxes to coupler
     !
     call g_tracer_set_values(tracer_list,'o2_b', 'alpha',o2_alpha, isd,jsd)
     call g_tracer_set_values(tracer_list,'o2_b', 'csurf',o2_csurf, isd,jsd)
-
-    enddo; enddo
 
     if (do_carbon) then                                !<<CARBON CYCLE
     

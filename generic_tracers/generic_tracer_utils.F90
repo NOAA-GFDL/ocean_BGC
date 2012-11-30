@@ -35,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0.4.1 2012/04/27 20:06:37 Niki.Zadeh Exp $'
-  character(len=128) :: tag = '$Name: siena_201207 $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0.4.2 2012/08/06 21:55:22 nnz Exp $'
+  character(len=128) :: tag = '$Name: siena_201211 $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -415,6 +415,7 @@ module g_tracer_utils
   !  <DESCRIPTION>
   !   This means "get the values of array  %field_name for tracer tracer_name and put them in argument array_out".
   !  </DESCRIPTION>
+  ! </INTERFACE>
   !
   interface g_tracer_get_values
      module procedure g_tracer_get_4D_val
@@ -434,6 +435,7 @@ module g_tracer_utils
   !  <DESCRIPTION>
   !   This means "get the pointer of array  %field_name for tracer tracer_name  in argument array_ptr".
   !  </DESCRIPTION>
+  ! </INTERFACE>
 
   interface g_tracer_get_pointer
      module procedure g_tracer_get_4D
@@ -614,10 +616,11 @@ contains
   !  </IN>
   !  <IN NAME="btm_reservoir" TYPE="logical">
   !   .true. if there is bottom reservoir.
-  !  <IN NAME="move_vertical TYPE="logical">
+  !  </IN>
+  !  <IN NAME="move_vertical" TYPE="logical">
   !   .true. if there is active vertical movement
   !  </IN>
-  !  <IN NAME="diff_vertical TYPE="logical">
+  !  <IN NAME="diff_vertical" TYPE="logical">
   !   .true. if there is random active vertical movement
   !  </IN>
   !  <IN NAME="flux_gas_molwt" TYPE="real">
@@ -1932,7 +1935,7 @@ contains
   !  <IN/OUT NAME="g_tracer" TYPE="type(g_tracer_type),    pointer">
   !   Head of the generic tracer list.
   !   Upon return this will be a pointer to the tracer node called name or NULL if not found 
-  !  </IN>
+  !  </IN/OUT>
   !  <IN NAME="name" TYPE="character(len=*)">
   !   Name of a tracer node
   !  </IN>
@@ -2306,7 +2309,7 @@ contains
              do k=2,nz 
                 sink(k) = sink_dist(k) ; h_minus_dsink(k) = h_old(i,j,k)
              enddo
-             sink(nz+1) = sink_dist(k) 
+             sink(nz+1) = sink_dist(nz+1) 
           else
              sink(nz+1) = 0.0 
              ! Find the limited sinking distance at the interfaces.

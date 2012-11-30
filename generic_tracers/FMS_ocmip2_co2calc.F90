@@ -47,7 +47,7 @@ public  :: FMS_ocmip2_co2calc, CO2_dope_vector
 public  :: FMS_ocmip2_co2_alpha
 
 character(len=128) :: version = '$Id: FMS_ocmip2_co2calc.F90,v 17.0 2009/07/21 03:18:07 fms Exp $'
-character(len=128) :: tagname = '$Name: siena_201207 $'
+character(len=128) :: tagname = '$Name: siena_201211 $'
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
