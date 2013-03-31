@@ -34,8 +34,8 @@ module generic_ERGOM
 
   use coupler_types_mod,   only: coupler_2d_bc_type
   use field_manager_mod,   only: fm_string_len
-  use fms_mod,             only: open_namelist_file, close_file, check_nml_error  
-  use mpp_mod,             only: mpp_error, NOTE, WARNING, FATAL, stdout, stdlog
+  use fms_mod,             only: write_version_number, open_namelist_file, close_file, check_nml_error  
+  use mpp_mod,             only: mpp_error, NOTE, WARNING, FATAL, stdout, stdlog, input_nml_file
   use mpp_mod,             only: mpp_clock_id, mpp_clock_begin, mpp_clock_end, CLOCK_ROUTINE
   use time_manager_mod,    only: time_type
   use fm_util_mod,         only: fm_util_start_namelist, fm_util_end_namelist  
@@ -51,6 +51,9 @@ module generic_ERGOM
 
 
   implicit none ; private
+
+  character(len=128) :: version = '$Id: generic_ERGOM.F90,v 1.1.2.3.4.2 2013/02/25 21:52:53 Niki.Zadeh Exp $'
+  character(len=128) :: tagname = '$Name: siena_201303 $'
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_ERGOM'
   character(len=fm_string_len), parameter :: package_name   = 'generic_ergom'
@@ -846,15 +849,25 @@ contains
     character(len=fm_string_len) :: errorstring
     integer :: ioun, io_status, ierr, i, j
     logical :: found
+    integer :: stdoutunit,stdlogunit
+
+    stdoutunit=stdout();stdlogunit=stdlog()
+
+    call write_version_number( version, tagname )
 
     ! provide for namelist over-ride of defaults 
+#ifdef INTERNAL_FILE_NML
+    read (input_nml_file, nml=ergom_nml, iostat=io_status)
+#else
     ioun = open_namelist_file()
     read  (ioun, ergom_nml,iostat=io_status)
-    write (stdout(),'(/)')
-    write (stdout(), ergom_nml)
-    write (stdlog(), ergom_nml)
-    ierr = check_nml_error(io_status,'ergom_nml')
     call close_file (ioun)
+#endif
+    ierr = check_nml_error(io_status,'ergom_nml')
+
+    write (stdoutunit,'(/)')
+    write (stdoutunit, ergom_nml)
+    write (stdlogunit, ergom_nml)
 
     allocate(phyto  (NUM_PHYTO)  )
     allocate(zoo    (NUM_ZOO)    )
@@ -996,22 +1009,15 @@ contains
     type(g_tracer_type), pointer :: tracer_list
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_ERGOM_init'
-    integer :: ioun, io_status, ierr
-    
+    integer :: stdoutunit,stdlogunit
+
+    stdoutunit=stdout();stdlogunit=stdlog()
+
     id_init   =   mpp_clock_id('(ERGOM init) '           ,grain=CLOCK_ROUTINE)
     id_alloc  =   mpp_clock_id('(ERGOM allocate) '       ,grain=CLOCK_ROUTINE)
     id_source = mpp_clock_id('(ERGOM source terms) '     ,grain=CLOCK_ROUTINE)
     id_susp   =   mpp_clock_id('(ERGOM resuspension) '   ,grain=CLOCK_ROUTINE)
     call mpp_clock_begin(id_init)
-
-    ! provide for namelist over-ride of defaults 
-    ioun = open_namelist_file()
-    read  (ioun, ergom_nml,iostat=io_status)
-    write (stdout(),'(/)')
-    write (stdout(), ergom_nml)
-    write (stdlog(), ergom_nml)
-    ierr = check_nml_error(io_status,'ergom_nml')
-    call close_file (ioun)
 
     !Specify and initialize all parameters used by this package
     call user_add_params
@@ -1020,142 +1026,142 @@ contains
     call user_allocate_arrays 
     
     ! now print a summary of all parameters    
-    write (stdout(),'(/)')
-    write (stdout(),*) 'Summary of the ERGOM model setup'
-    write (stdout(),'(a,I2)') 'Number of phytoplankton types : ', NUM_PHYTO
-    write (stdout(),'(a,I2)') 'Number of zoooplankton types  : ', NUM_ZOO
-    write (stdout(),'(a,I2)') 'Number of detritus types      : ', NUM_DET
-    write (stdout(),'(a,I2)') 'Number of SPM types           : ', NUM_SPM
-    write (stdout(),'(a,I2)') 'Number of settled matter types: ', NUM_SED
+    write (stdoutunit,'(/)')
+    write (stdoutunit,*) 'Summary of the ERGOM model setup'
+    write (stdoutunit,'(a,I2)') 'Number of phytoplankton types : ', NUM_PHYTO
+    write (stdoutunit,'(a,I2)') 'Number of zoooplankton types  : ', NUM_ZOO
+    write (stdoutunit,'(a,I2)') 'Number of detritus types      : ', NUM_DET
+    write (stdoutunit,'(a,I2)') 'Number of SPM types           : ', NUM_SPM
+    write (stdoutunit,'(a,I2)') 'Number of settled matter types: ', NUM_SED
     do n=1, NUM_PHYTO
-       write (stdout(),'(a)')          phyto(n)%name//':'
-       write (stdout(),'(a)')         '  Parameters: '
-       write (stdout(),'((a), e13.6)')'    P/N ratio, pnr			        : ', phyto(n)%pnr
-       write (stdout(),'((a), e13.6)')'    C/N ratio, cnr			        : ', phyto(n)%cnr
-       write (stdout(),'((a), e13.6)')'    seed concentration, p0, [mol/kg]	        : ', phyto(n)%p0
-       write (stdout(),'(a)')         '  Parameters for growth: '
-       write (stdout(),'((a), e13.6)')'    minimum light		  imin [W/m2]   : ', phyto(n)%imin  
-       write (stdout(),'((a), e13.6)')'    minimum temperature  	  tmin [C]      : ', phyto(n)%tmin  
-       write (stdout(),'((a), e13.6)')'    minimum phytoplankton salinity smin [g/kg]   : ', phyto(n)%smin  
-       write (stdout(),'((a), e13.6)')'    maximum phytoplankton salinity smax [g/kg]   : ', phyto(n)%smax  
-       write (stdout(),'((a), e13.6)')'    DIN half-sat constant, alpha [mol/kg]        : ', phyto(n)%alpha 
-       write (stdout(),'((a), e13.6)')'    temperature dep. uptake, talpha  [Celsius]   : ', phyto(n)%talpha 
-       write (stdout(),'((a), e13.6)')'    maximum uptake rate  	  rp0  [1/s]    : ', phyto(n)%rp0   
-       write (stdout(),'(a)')         '  Parameters for losses: '
-       write (stdout(),'((a), e13.6)')'    loss to detritus, lpd  [1/s] 	        : ', phyto(n)%lpd
-       write (stdout(),'((a), e13.6)')'    loss by respiration, lpr [1/s]	        : ', phyto(n)%lpr
-       write (stdout(),'((a), e13.6)')'    sinking velocity, wsink0 [m/s]	        : ', phyto(n)%wsink0
-       write (stdout(),'(/)')
+       write (stdoutunit,'(a)')          phyto(n)%name//':'
+       write (stdoutunit,'(a)')         '  Parameters: '
+       write (stdoutunit,'((a), e13.6)')'    P/N ratio, pnr			        : ', phyto(n)%pnr
+       write (stdoutunit,'((a), e13.6)')'    C/N ratio, cnr			        : ', phyto(n)%cnr
+       write (stdoutunit,'((a), e13.6)')'    seed concentration, p0, [mol/kg]	        : ', phyto(n)%p0
+       write (stdoutunit,'(a)')         '  Parameters for growth: '
+       write (stdoutunit,'((a), e13.6)')'    minimum light		  imin [W/m2]   : ', phyto(n)%imin  
+       write (stdoutunit,'((a), e13.6)')'    minimum temperature  	  tmin [C]      : ', phyto(n)%tmin  
+       write (stdoutunit,'((a), e13.6)')'    minimum phytoplankton salinity smin [g/kg]   : ', phyto(n)%smin  
+       write (stdoutunit,'((a), e13.6)')'    maximum phytoplankton salinity smax [g/kg]   : ', phyto(n)%smax  
+       write (stdoutunit,'((a), e13.6)')'    DIN half-sat constant, alpha [mol/kg]        : ', phyto(n)%alpha 
+       write (stdoutunit,'((a), e13.6)')'    temperature dep. uptake, talpha  [Celsius]   : ', phyto(n)%talpha 
+       write (stdoutunit,'((a), e13.6)')'    maximum uptake rate  	  rp0  [1/s]    : ', phyto(n)%rp0   
+       write (stdoutunit,'(a)')         '  Parameters for losses: '
+       write (stdoutunit,'((a), e13.6)')'    loss to detritus, lpd  [1/s] 	        : ', phyto(n)%lpd
+       write (stdoutunit,'((a), e13.6)')'    loss by respiration, lpr [1/s]	        : ', phyto(n)%lpr
+       write (stdoutunit,'((a), e13.6)')'    sinking velocity, wsink0 [m/s]	        : ', phyto(n)%wsink0
+       write (stdoutunit,'(/)')
     enddo
     do n=1, NUM_ZOO
-       write (stdout(),'(a)')             zoo(n)%name//':'
-       write (stdout(),'(a,(5f7.4,2x))')'  Grazing preferences phytoplankton            : ', &
+       write (stdoutunit,'(a)')             zoo(n)%name//':'
+       write (stdoutunit,'(a,(5f7.4,2x))')'  Grazing preferences phytoplankton            : ', &
                                          (zoo(n)%pref_phy(m),m=1,NUM_PHYTO)
-       write (stdout(),'(a,(5f7.4,2x))')'  Grazing preferences zooplankton              : ', &
+       write (stdoutunit,'(a,(5f7.4,2x))')'  Grazing preferences zooplankton              : ', &
                                          (zoo(n)%pref_zoo(m),m=1,NUM_ZOO)
-       write (stdout(),'(a,(5f7.4,2x))')'  Grazing preferences detritus                 : ', &
+       write (stdoutunit,'(a,(5f7.4,2x))')'  Grazing preferences detritus                 : ', &
                                          (zoo(n)%pref_det(m),m=1,NUM_DET)
-       write (stdout(),'(a)')           '  Parameters: '
-       write (stdout(),'((a), e13.6)')  '    P/N ratio, pnr				: ', zoo(n)%pnr
-       write (stdout(),'((a), e13.6)')  '    C/N ratio, cnr				: ', zoo(n)%cnr
-       write (stdout(),'((a), e13.6)')  '    seed concentration, z0, [mol/kg]		: ', zoo(n)%z0
-       write (stdout(),'(a)')           '  Parameters for grazing: '
-       write (stdout(),'((a), I2)')     '    grazing preference method                  : ', zoo(n)%graz_pref
-       write (stdout(),'((a), e13.6)')  '    Ivlev constant, iv,         [kg/mol]       : ', zoo(n)%iv
-       write (stdout(),'((a), e13.6)')  '    maximum grazing rate, graz, [1/s]          : ', zoo(n)%graz
-       write (stdout(),'((a), e13.6)')  '    maximal grazing temperature, t_max [C]     : ', zoo(n)%t_max
-       write (stdout(),'((a), e13.6)')  '    optimal grazing temperature, t_opt [C]     : ', zoo(n)%t_opt
-       write (stdout(),'((a), e13.6)')  '    parameter for temperature dependence, beta : ', zoo(n)%beta
-       write (stdout(),'((a), e13.6)')  '    fraction lost to respiration, food_to_nh4  : ', zoo(n)%food_to_nh4
-       write (stdout(),'((a), e13.6)')  '    fraction lost to detritus                  : ', zoo(n)%food_to_det
-       write (stdout(),'(a)')           '  Parameters for migration: '
+       write (stdoutunit,'(a)')           '  Parameters: '
+       write (stdoutunit,'((a), e13.6)')  '    P/N ratio, pnr				: ', zoo(n)%pnr
+       write (stdoutunit,'((a), e13.6)')  '    C/N ratio, cnr				: ', zoo(n)%cnr
+       write (stdoutunit,'((a), e13.6)')  '    seed concentration, z0, [mol/kg]		: ', zoo(n)%z0
+       write (stdoutunit,'(a)')           '  Parameters for grazing: '
+       write (stdoutunit,'((a), I2)')     '    grazing preference method                  : ', zoo(n)%graz_pref
+       write (stdoutunit,'((a), e13.6)')  '    Ivlev constant, iv,         [kg/mol]       : ', zoo(n)%iv
+       write (stdoutunit,'((a), e13.6)')  '    maximum grazing rate, graz, [1/s]          : ', zoo(n)%graz
+       write (stdoutunit,'((a), e13.6)')  '    maximal grazing temperature, t_max [C]     : ', zoo(n)%t_max
+       write (stdoutunit,'((a), e13.6)')  '    optimal grazing temperature, t_opt [C]     : ', zoo(n)%t_opt
+       write (stdoutunit,'((a), e13.6)')  '    parameter for temperature dependence, beta : ', zoo(n)%beta
+       write (stdoutunit,'((a), e13.6)')  '    fraction lost to respiration, food_to_nh4  : ', zoo(n)%food_to_nh4
+       write (stdoutunit,'((a), e13.6)')  '    fraction lost to detritus                  : ', zoo(n)%food_to_det
+       write (stdoutunit,'(a)')           '  Parameters for migration: '
        if (zoo(n)%vertical_migration) then
-         write (stdout(),'(a)')         '    migrating '
-         write (stdout(),'((a), e13.6)')'    maximum light intensity, Imax [W/m^2]	: ', zoo(n)%imax
-         write (stdout(),'((a), e13.6)')'    minimum oxygen conc., o2min [mol/kg]	: ', zoo(n)%o2min
-         write (stdout(),'((a), e13.6)')'    maximal temp for migration, t_max [C]	: ', zoo(n)%t_max
-         write (stdout(),'((a), e13.6)')'    maximum rise velocity, wrise0 [m/s]	: ', zoo(n)%wrise0
-         write (stdout(),'((a), e13.6)')'    maximum sink velocity, wsink0 [m/s]	: ', zoo(n)%wsink0
-         write (stdout(),'((a), e13.6)')'    maximum enhanced diff., vdiff_max [m2/s]	: ', zoo(n)%vdiff_max
+         write (stdoutunit,'(a)')         '    migrating '
+         write (stdoutunit,'((a), e13.6)')'    maximum light intensity, Imax [W/m^2]	: ', zoo(n)%imax
+         write (stdoutunit,'((a), e13.6)')'    minimum oxygen conc., o2min [mol/kg]	: ', zoo(n)%o2min
+         write (stdoutunit,'((a), e13.6)')'    maximal temp for migration, t_max [C]	: ', zoo(n)%t_max
+         write (stdoutunit,'((a), e13.6)')'    maximum rise velocity, wrise0 [m/s]	: ', zoo(n)%wrise0
+         write (stdoutunit,'((a), e13.6)')'    maximum sink velocity, wsink0 [m/s]	: ', zoo(n)%wsink0
+         write (stdoutunit,'((a), e13.6)')'    maximum enhanced diff., vdiff_max [m2/s]	: ', zoo(n)%vdiff_max
        else
-         write (stdout(),'(a)')         '    not migrating '
+         write (stdoutunit,'(a)')         '    not migrating '
        endif
-       write (stdout(),'(a)')           '  Closure term: '
-       write (stdout(),'((a), e13.6)')  '    closure parameter, zcl1 [kg/mol]           : ', zoo(n)%zcl1
-       write (stdout(),'((a), e13.6)')  '    loss rate by respiration, nue [1/s]        : ', zoo(n)%nue
-       write (stdout(),'((a), e13.6)')  '    loss rate to detritus, sigma_b [1/s]       : ', zoo(n)%sigma_b
-       write (stdout(),'(a)')           '  Respiration: '
-       write (stdout(),'((a), e13.6)')  '    reduction factor for respiration, resp_red : ', zoo(n)%resp_red
-       write (stdout(),'((a), e13.6)')  '    max oxy. f. reduced resp., oxy_sub [mol/kg]: ', zoo(n)%oxy_sub
-       write (stdout(),'((a), e13.6)')  '    min oxy. f. resp., oxy_min [mol/kg]        : ', zoo(n)%oxy_min
+       write (stdoutunit,'(a)')           '  Closure term: '
+       write (stdoutunit,'((a), e13.6)')  '    closure parameter, zcl1 [kg/mol]           : ', zoo(n)%zcl1
+       write (stdoutunit,'((a), e13.6)')  '    loss rate by respiration, nue [1/s]        : ', zoo(n)%nue
+       write (stdoutunit,'((a), e13.6)')  '    loss rate to detritus, sigma_b [1/s]       : ', zoo(n)%sigma_b
+       write (stdoutunit,'(a)')           '  Respiration: '
+       write (stdoutunit,'((a), e13.6)')  '    reduction factor for respiration, resp_red : ', zoo(n)%resp_red
+       write (stdoutunit,'((a), e13.6)')  '    max oxy. f. reduced resp., oxy_sub [mol/kg]: ', zoo(n)%oxy_sub
+       write (stdoutunit,'((a), e13.6)')  '    min oxy. f. resp., oxy_min [mol/kg]        : ', zoo(n)%oxy_min
 
-       write (stdout(),'(/)')
+       write (stdoutunit,'(/)')
     enddo
     do n=1, NUM_DET
-       write (stdout(),'(a)') det(n)%name//':'
-       write (stdout(),'(/)')
+       write (stdoutunit,'(a)') det(n)%name//':'
+       write (stdoutunit,'(/)')
     enddo
     do n=1, NUM_SPM
-       write (stdout(),'(a)')            trim(spm(n)%name)//':'
-       write (stdout(),'((a), e13.6)')  '  sinking velocity, wsink0 [m/d]               : ', spm(n)%wsink0  
-       write (stdout(),'((a), e13.6)')  '  sedimentation rate, wsed [m/d]               : ', spm(n)%wsed    
-       write (stdout(),'((a), (a))')    '  will sediment to tracer, (sediment_to)       : ', trim(sed(spm(n)%index_sediment_to)%name) 
+       write (stdoutunit,'(a)')            trim(spm(n)%name)//':'
+       write (stdoutunit,'((a), e13.6)')  '  sinking velocity, wsink0 [m/d]               : ', spm(n)%wsink0  
+       write (stdoutunit,'((a), e13.6)')  '  sedimentation rate, wsed [m/d]               : ', spm(n)%wsed    
+       write (stdoutunit,'((a), (a))')    '  will sediment to tracer, (sediment_to)       : ', trim(sed(spm(n)%index_sediment_to)%name) 
     enddo
     do n=1, NUM_SED
-       write (stdout(),'(a)')            trim(sed(n)%name)//':'
-       write (stdout(),'((a), e13.6)')  '  critical shear stress, critical_stress [N/m2]: ', sed(n)%critical_stress  
-       write (stdout(),'((a), (a))')    '  will be resuspended to tracer, (suspend_to)  : ', trim(spm(sed(n)%index_suspend_to)%name) 
+       write (stdoutunit,'(a)')            trim(sed(n)%name)//':'
+       write (stdoutunit,'((a), e13.6)')  '  critical shear stress, critical_stress [N/m2]: ', sed(n)%critical_stress  
+       write (stdoutunit,'((a), (a))')    '  will be resuspended to tracer, (suspend_to)  : ', trim(spm(sed(n)%index_suspend_to)%name) 
     enddo
-    write (stdout(),'(a)')          'Sediment parameters:'
-    write (stdout(),'((a), e13.6)') '  recycling rate, dn [1/s]                                              : ', &
+    write (stdoutunit,'(a)')          'Sediment parameters:'
+    write (stdoutunit,'((a), e13.6)') '  recycling rate, dn [1/s]                                              : ', &
                                     biosed%dn	       
-    write (stdout(),'((a), e13.6)') '  frac. rec.-rate in shallow sediments when anoxic, frac_dn_anoxic      : ', &
+    write (stdoutunit,'((a), e13.6)') '  frac. rec.-rate in shallow sediments when anoxic, frac_dn_anoxic      : ', &
                                     biosed%frac_dn_anoxic   
-    write (stdout(),'((a), e13.6)') '  minimum amount of active sed for thiomargarita, thio_bact_min [mol/m2]: ', & 
+    write (stdoutunit,'((a), e13.6)') '  minimum amount of active sed for thiomargarita, thio_bact_min [mol/m2]: ', & 
                                     biosed%thio_bact_min    
-    write (stdout(),'((a), e13.6)') '  q10 parameter for recycling, q10_rec [1/C]                            : ', & 
+    write (stdoutunit,'((a), e13.6)') '  q10 parameter for recycling, q10_rec [1/C]                            : ', & 
                                     biosed%q10_rec	       
-    write (stdout(),'((a), e13.6)') '  proportion of denit in sediment, den_rate                             : ', & 
+    write (stdoutunit,'((a), e13.6)') '  proportion of denit in sediment, den_rate                             : ', & 
                                     biosed%den_rate         
-    write (stdout(),'((a), e13.6)') '  P/N ratio, pnr                                                        : ', &
+    write (stdoutunit,'((a), e13.6)') '  P/N ratio, pnr                                                        : ', &
                                     biosed%pnr	       
-    write (stdout(),'((a), e13.6)') '  C/N ratio, cnr                                                        : ', &
+    write (stdoutunit,'((a), e13.6)') '  C/N ratio, cnr                                                        : ', &
                                     biosed%cnr	       
-    write (stdout(),'((a), e13.6)') '  liberation rate for iron phosphate, po4_lib_rate  [1/s]               : ', & 
+    write (stdoutunit,'((a), e13.6)') '  liberation rate for iron phosphate, po4_lib_rate  [1/s]               : ', & 
                                     biosed%po4_lib_rate     
-    write (stdout(),'((a), e13.6)') '  fraction of phosphorous retained in the sediment, po4_retention       : ', & 
+    write (stdoutunit,'((a), e13.6)') '  fraction of phosphorous retained in the sediment, po4_retention       : ', & 
                                     biosed%po4_retention    
-    write (stdout(),'((a), e13.6)') '  value added to po4_retention north of 60.75N, po4_ret_plus_BB         : ', & 
+    write (stdoutunit,'((a), e13.6)') '  value added to po4_retention north of 60.75N, po4_ret_plus_BB         : ', & 
                                     biosed%po4_ret_plus_BB  
-    write (stdout(),'(/)')
-    write (stdout(),'(a)')          'Ergom parameters:'
-    write (stdout(),'((a), e13.6)') '  q10 parameter for nitrification, q10_nit [1/C]                        : ', & 
+    write (stdoutunit,'(/)')
+    write (stdoutunit,'(a)')          'Ergom parameters:'
+    write (stdoutunit,'((a), e13.6)') '  q10 parameter for nitrification, q10_nit [1/C]                        : ', & 
                                     ergom%q10_nit        
-    write (stdout(),'((a), e13.6)') '  q10 parameter for chemolithotrophs (so4 reduction), q10_h2s   [1/C]   : ', & 
+    write (stdoutunit,'((a), e13.6)') '  q10 parameter for chemolithotrophs (so4 reduction), q10_h2s   [1/C]   : ', & 
                                     ergom%q10_h2s        
-    write (stdout(),'((a), e13.6)') '  nitrification rate, nf [1/s]                                          : ', & 
+    write (stdoutunit,'((a), e13.6)') '  nitrification rate, nf [1/s]                                          : ', & 
                                     ergom%nf     
-    write (stdout(),'((a), e13.6)') '  half-saturation constant for nitrification, alpha_nit [mol/kg]        : ', & 
+    write (stdoutunit,'((a), e13.6)') '  half-saturation constant for nitrification, alpha_nit [mol/kg]        : ', & 
                                     ergom%alpha_nit 
-    write (stdout(),'((a), e13.6)') '  slope function for detritus recycling, alp_o2   [kg/mol]              : ', & 
+    write (stdoutunit,'((a), e13.6)') '  slope function for detritus recycling, alp_o2   [kg/mol]              : ', & 
                                     ergom%alp_o2 
-    write (stdout(),'((a), e13.6)') '  slope function for detritus recycling, alp_no3  [kg/mol]              : ', & 
+    write (stdoutunit,'((a), e13.6)') '  slope function for detritus recycling, alp_no3  [kg/mol]              : ', & 
                                     ergom%alp_no3        
-    write (stdout(),'((a), e13.6)') '  slope function for detritus recycling, alp_h2s  [kg/mol]              : ', & 
+    write (stdoutunit,'((a), e13.6)') '  slope function for detritus recycling, alp_h2s  [kg/mol]              : ', & 
                                     ergom%alp_h2s        
-    write (stdout(),'((a), e13.6)') '  slope function for detritus recycling, alp_nh4  [kg/mol]              : ', & 
+    write (stdoutunit,'((a), e13.6)') '  slope function for detritus recycling, alp_nh4  [kg/mol]              : ', & 
                                     ergom%alp_nh4        
-    write (stdout(),'((a), e13.6)') '  reaction constant h2s oxidation with o2, k_h2s_o2 [kg/mol/s]          : ', & 
+    write (stdoutunit,'((a), e13.6)') '  reaction constant h2s oxidation with o2, k_h2s_o2 [kg/mol/s]          : ', & 
                                     ergom%k_h2s_o2  
-    write (stdout(),'((a), e13.6)') '  reaction constant h2s oxidation with no3, k_h2s_no3 [kg/mol/s]        : ', & 
+    write (stdoutunit,'((a), e13.6)') '  reaction constant h2s oxidation with no3, k_h2s_no3 [kg/mol/s]        : ', & 
                                     ergom%k_h2s_no3 
-    write (stdout(),'((a), e13.6)') '  reaction constant sulfur oxidation with o2, k_sul_o2 [kg/mol/s]       : ', & 
+    write (stdoutunit,'((a), e13.6)') '  reaction constant sulfur oxidation with o2, k_sul_o2 [kg/mol/s]       : ', & 
                                     ergom%k_sul_o2  
-    write (stdout(),'((a), e13.6)') '  reaction constant sulfur oxidation with no3, k_sul_no3 [kg/mol/s]     : ', & 
+    write (stdoutunit,'((a), e13.6)') '  reaction constant sulfur oxidation with no3, k_sul_no3 [kg/mol/s]     : ', & 
                                     ergom%k_sul_no3 
-    write (stdout(),'((a), e13.6)') '  maximum anammox rate, k_an0 [1/s]                                     : ', & 
+    write (stdoutunit,'((a), e13.6)') '  maximum anammox rate, k_an0 [1/s]                                     : ', & 
                                     ergom%k_an0	 
-    write (stdout(),'(/)')
+    write (stdoutunit,'(/)')
 
 !! Do not delete, men at work
 !!  food_to_nh4_2 ! fraction of food eaten potentially at optimal temperature directly lost to respiration [dimensionless]
@@ -1537,8 +1543,11 @@ contains
     integer                      :: n
     real                         :: pref_sum
     character(len=fm_string_len) :: mystring
-    call g_tracer_start_param_list(package_name)
+    integer :: stdoutunit
 
+    stdoutunit=stdout()
+    call g_tracer_start_param_list(package_name)
+    
     !-----------------------------------------------------------------------
     !     Schmidt number coefficients
     !-----------------------------------------------------------------------
@@ -1679,7 +1688,7 @@ contains
          pref_zoo(n,m) = pref_zoo(n,m)/(pref_sum+epsln)
       enddo
       if (pref_sum .le. epsln) then 
-         write (stdout(),'(a)') 'WARNING, all preferences of '//trim(zoo(n)%name)//' are zero.'
+         write (stdoutunit,'(a)') 'WARNING, all preferences of '//trim(zoo(n)%name)//' are zero.'
       endif
       do m=1, NUM_PHYTO
          call g_tracer_add_param(trim(zoo(n)%name)//'pref'//trim(phyto(m)%name), zoo(n)%pref_phy(m), pref_phy(n,m))

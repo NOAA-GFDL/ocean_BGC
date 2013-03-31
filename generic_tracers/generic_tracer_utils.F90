@@ -35,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0.4.2 2012/08/06 21:55:22 nnz Exp $'
-  character(len=128) :: tag = '$Name: siena_201211 $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0.4.2.2.1.2.1 2013/03/06 18:19:34 Niki.Zadeh Exp $'
+  character(len=128) :: tag = '$Name: siena_201303 $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -102,6 +102,9 @@ module g_tracer_utils
   !   ! An 3D field for random vertical movement, esp. for zooplankton, ... 
   !   real, _ALLOCATABLE, dimension(:,:,:)  :: vdiff  _NULL
 
+  !   ! An 3D field for implicit vertical diffusion
+  !   real, _ALLOCATABLE, dimension(:,:,:)  :: vdiffuse_impl  _NULL
+
   !   ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
   !   real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
   !
@@ -164,6 +167,10 @@ module g_tracer_utils
      ! Tracer concentration field in space (and time)
      ! MOM keeps the field at 3 time levels, hence 4D.
      real, _ALLOCATABLE, dimension(:,:,:,:):: field  _NULL
+     ! Define a 3-d field pointer so as to retain the lower
+     ! and upper bounds for the 3-d version of g_tracer_get_pointer
+     ! for the field option
+     real, pointer,      dimension(:,:,:)  :: field_3d => NULL()
 
      ! Surface flux, surface flux of gas, deltap and kw
      real, _ALLOCATABLE, dimension(:,:)    :: stf    _NULL
@@ -205,6 +212,9 @@ module g_tracer_utils
      ! An 3D field for random vertical movement, esp. for zooplankton, ... 
      real, _ALLOCATABLE, dimension(:,:,:)  :: vdiff  _NULL
 
+     ! An 3D field for implicit vertical diffusion
+     real, _ALLOCATABLE, dimension(:,:,:)  :: vdiffuse_impl  _NULL
+
      ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
      real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
 
@@ -213,6 +223,7 @@ module g_tracer_utils
      integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
      integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_sc_no=-1, diag_id_aux=-1
      integer :: diag_id_btf=-1,diag_id_btm=-1, diag_id_vmove=-1, diag_id_vdiff=-1
+     integer :: diag_id_vdiffuse_impl = -1, diag_id_tendency = -1, diag_id_field_taup1 = -1
 
      ! Tracer Initial concentration if constant everywhere
      real    :: const_init_value = 0.0
@@ -298,6 +309,8 @@ module g_tracer_utils
   public :: g_tracer_add
   public :: g_tracer_init
   public :: g_tracer_flux_init
+  public :: g_tracer_column_int
+  public :: g_tracer_flux_at_depth
   public :: g_tracer_add_param
   public :: g_tracer_set_values
   public :: g_tracer_get_values
@@ -308,6 +321,7 @@ module g_tracer_utils
   public :: g_tracer_coupler_set
   public :: g_tracer_coupler_get
   public :: g_tracer_send_diag
+  public :: g_tracer_diag
   public :: g_tracer_get_name
   public :: g_tracer_get_alias
   public :: g_tracer_get_next
@@ -511,7 +525,16 @@ contains
     real,             intent(in)  :: value
     real,             intent(out) :: var
 
-    if(.NOT. fm_get_value(name, var))  var = value
+    real :: x
+
+    ! Need to save "value" since if "var" and "value" are the same
+    ! variable, and "name" does not exist, then "var/value" will be
+    ! set to 0 in the fm_get_value routine, and "var" cannot then be
+    ! set to the supplied default value
+
+    x = value
+
+    if(.NOT. fm_get_value(name, var))  var = x
 
   end subroutine g_tracer_add_param_real
 
@@ -521,7 +544,16 @@ contains
     logical,          intent(in)  :: value
     logical,          intent(out) :: var
 
-    if(.NOT. fm_get_value(name, var))  var = value
+    logical :: x
+
+    ! Need to save "value" since if "var" and "value" are the same
+    ! variable, and "name" does not exist, then "var/value" will be
+    ! set to false in the fm_get_value routine, and "var" cannot then be
+    ! set to the supplied default value
+
+    x = value
+
+    if(.NOT. fm_get_value(name, var))  var = x
 
   end subroutine g_tracer_add_param_logical
 
@@ -531,7 +563,16 @@ contains
     integer,          intent(in)  :: value
     integer,          intent(out) :: var
 
-    if(.NOT. fm_get_value(name, var))  var = value
+    real :: x
+
+    ! Need to save "value" since if "var" and "value" are the same
+    ! variable, and "name" does not exist, then "var/value" will be
+    ! set to 0 in the fm_get_value routine, and "var" cannot then be
+    ! set to the supplied default value
+
+    x = value
+
+    if(.NOT. fm_get_value(name, var))  var = x
 
   end subroutine g_tracer_add_param_integer
 
@@ -541,7 +582,16 @@ contains
     character(len=*), intent(in)  :: value
     character(len=*), intent(out) :: var
 
-    if(.NOT. fm_get_value(name, var))  var = value
+    character(len=fm_string_len) :: x
+
+    ! Need to save "value" since if "var" and "value" are the same
+    ! variable, and "name" does not exist, then "var/value" will be
+    ! set to '' in the fm_get_value routine, and "var" cannot then be
+    ! set to the supplied default value
+
+    x = value
+
+    if(.NOT. fm_get_value(name, var))  var = x
 
   end subroutine g_tracer_add_param_string
 
@@ -787,6 +837,25 @@ contains
 
   end subroutine g_tracer_add
 
+  !
+  !     Local functiion to remap the bounds of an array
+  !     (Thanks to wikipedia for the suggestion)
+  !
+
+  function remap_bounds(ilb, jlb, klb, array) result(ptr)
+
+  real, dimension(:,:,:),          pointer              :: ptr
+
+  integer,                                 intent(in)   :: ilb
+  integer,                                 intent(in)   :: jlb
+  integer,                                 intent(in)   :: klb
+  real, dimension(ilb:,jlb:,klb:), target, intent(in)   :: array
+
+  ptr => array
+
+  return
+  end function remap_bounds
+
   subroutine g_tracer_init(g_tracer)
     type(g_tracer_type), pointer :: g_tracer
     integer :: isc,iec,jsc,jec,isd,ied,jsd,jed, nk,ntau,axes(3)
@@ -795,9 +864,12 @@ contains
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes) 
 
     allocate(g_tracer%field(isd:ied,jsd:jed,nk,ntau));  g_tracer%field(:,:,:,:) = g_tracer%initial_value
+    g_tracer%field_3d => remap_bounds(isd, jsd, 1, g_tracer%field(:,:,:,1))
 
     if(g_tracer%prog) then
        allocate(g_tracer%tendency(isd:ied,jsd:jed,nk)); g_tracer%tendency(:,:,:) = 0.0
+       allocate(g_tracer%vdiffuse_impl(isd:ied,jsd:jed,nk))
+       g_tracer%vdiffuse_impl(:,:,:) = 0.0
     endif
 
     if(g_tracer%flux_gas) then
@@ -929,6 +1001,15 @@ contains
          trim(g_tracer%units),         &
          missing_value = -1.0e+20)
 
+    string=trim(g_tracer%alias) // trim("_taup1")
+    g_tracer%diag_id_field_taup1 = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         trim(g_tracer%longname) // ' at taup1',      &
+         trim(g_tracer%units),         &
+         missing_value = -1.0e+20)
+
     string=trim(g_tracer%alias) // trim("_aux")
     g_tracer%diag_id_aux = register_diag_field(g_tracer%package_name, &
          trim(string),                 &
@@ -945,6 +1026,24 @@ contains
          g_tracer_com%init_time,       &
          trim('vertical movement'),    &
          trim('m/s'),                  &
+         missing_value = -1.0e+20)
+
+    string=trim(g_tracer%alias) // trim("_vdiffuse_impl")
+    g_tracer%diag_id_vdiffuse_impl = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         'Implicit vertical diffusion of ' // trim(g_tracer%alias),      &
+         trim('mole/m^2/s'),                  &
+         missing_value = -1.0e+20)
+
+    string=trim(g_tracer%alias) // trim("_tendency")
+    g_tracer%diag_id_tendency = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         'Generic tracer tendency of ' // trim(g_tracer%alias),      &
+         trim('mole/m^2/s'),                  &
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_vdiff")
@@ -1484,11 +1583,13 @@ contains
 
     select case(member)
     case ('field') 
-       array_ptr => g_tracer%field(:,:,:,1)
+       array_ptr => g_tracer%field_3d
     case ('vmove') 
        array_ptr => g_tracer%vmove
     case ('vdiff') 
        array_ptr => g_tracer%vdiff
+    case ('vdiffuse_impl') 
+       array_ptr => g_tracer%vdiffuse_impl
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1611,6 +1712,8 @@ contains
        array(:,:,:) = g_tracer%vmove(:,:,:)
     case ('vdiff') 
        array(:,:,:) = g_tracer%vdiff(:,:,:)
+    case ('vdiffuse_impl') 
+       array(:,:,:) = g_tracer%vdiffuse_impl(:,:,:)
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1831,6 +1934,8 @@ contains
        g_tracer%vmove  = array 
     case ('vdiff') 
        g_tracer%vdiff  = array 
+    case ('vdiffuse_impl') 
+       g_tracer%vdiffuse_impl  = array 
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1964,6 +2069,329 @@ contains
        g_tracer => g_tracer%next
     enddo
   end subroutine g_tracer_find
+  
+
+!#######################################################################
+  ! <SUBROUTINE NAME="g_tracer_column_int">
+  !  <OVERVIEW>
+  !   Calculate the column interval for a given variable
+  !  </OVERVIEW>
+  !  <DESCRIPTION>
+  !   Calculate the column interval for a given variable
+  !  </DESCRIPTION>
+  !  <TEMPLATE>
+  !   call g_tracer_column_int(depth, ilb, jlb, var, dzt, rho_dzt, rd, k_level, integral, caller)
+  !  </TEMPLATE>
+  !  <IN NAME="depth" TYPE="real">
+  !   Depth over which to integrate
+  !  </IN>
+  !  <IN NAME="ilb" TYPE="integer">
+  !   Lower bound of 1st dimension of arrays
+  !  </IN>
+  !  <IN NAME="jlb" TYPE="integer">
+  !   Lower bound of 2nd dimension of arrays
+  !  </IN>
+  !  <IN NAME="var" TYPE="real(:,:,:)">
+  !   Variable to integrate
+  !  </IN>
+  !  <IN NAME="dzt" TYPE="real(:,:,:)">
+  !   Layer thicknesses
+  !  </IN>
+  !  <IN NAME="rho_dzt" TYPE="real(:,:,:)">
+  !   Density times layer thicknesses
+  !  </IN>
+  !  <INOUT NAME="rd" TYPE="real(:,:,:)">
+  !   Work array: rho_dzt to be multiplied by var to do the integral (may be used in subsequent calls)
+  !  </INOUT>
+  !  <INOUT NAME="k_level" TYPE="integer">
+  !   K level for maximum depth to perform the integral, if 0 then calculate rd array (may be used in subsequent calls)
+  !   If set greater than 0, then the work array can be used in subsequent calls for the same depth to save some
+  !   computation. Care should be taken that if k_level is set > 0 that the same depth range is used.
+  !  </INOUT>
+  !  <OUT NAME="integral" TYPE="real(:,:,:)">
+  !   Integral of var over depth
+  !  </OUT>
+  !  <IN NAME="caller" TYPE="character(len=*), optional">
+  !   string indicating caller of this routine, for traceback
+  !  </IN>
+  ! </SUBROUTINE>
+
+  subroutine g_tracer_column_int(depth, ilb, jlb, var, dzt, rho_dzt, rd, k_level, integral, caller)
+
+    real,                         intent(in)            :: depth
+    integer,                      intent(in)            :: ilb
+    integer,                      intent(in)            :: jlb
+    real, dimension(ilb:,jlb:,:), intent(in)            :: var
+    real, dimension(ilb:,jlb:,:), intent(in)            :: dzt
+    real, dimension(ilb:,jlb:,:), intent(in)            :: rho_dzt
+    real, dimension(ilb:,jlb:,:), intent(inout)         :: rd
+    integer,                      intent(inout)         :: k_level
+    real, dimension(ilb:,jlb:),   intent(out)           :: integral
+    character(len=*),             intent(in), optional  :: caller
+
+!-----------------------------------------------------------------------
+!     local parameters
+
+    character(len=fm_string_len), parameter     :: sub_name = 'g_tracer_column_int'
+
+    character(len=256)                          :: caller_str
+    character(len=256)                          :: error_header
+    character(len=256)                          :: warn_header
+    character(len=256)                          :: note_header
+    integer                                     :: isc
+    integer                                     :: iec
+    integer                                     :: jsc
+    integer                                     :: jec
+    integer                                     :: isd
+    integer                                     :: ied
+    integer                                     :: jsd
+    integer                                     :: jed
+    integer                                     :: nk
+    integer                                     :: ntau
+    real,    dimension(:,:,:), pointer          :: grid_tmask
+    integer                                     :: i
+    integer                                     :: j
+    integer                                     :: k 
+    logical                                     :: continue_calc
+    real, dimension(:,:), allocatable           :: depth_x
+    
+    !  Set up the headers for stdout messages.
+
+    if (present(caller)) then
+      caller_str = trim(mod_name) // '(' // trim(sub_name) // ')[' // trim(caller) // ']'
+    else
+      caller_str = trim(mod_name) // '(' // trim(sub_name) // ')[]'
+    endif
+    error_header = '==> Error from '   // trim(caller_str) // ':'
+    warn_header =  '==> Warning from ' // trim(caller_str) // ':'
+    note_header =  '==> Note from '    // trim(caller_str) // ':'
+
+    !
+    ! Check the depth
+    !
+
+    if (depth .le. 0.0) then
+      call mpp_error(FATAL, trim(error_header) // ' Depth <= 0,0')
+    endif
+
+    !  Set up the module if not already done
+
+    call g_tracer_get_common(isc, iec, jsc, jec, isd, ied, jsd, jed, nk, ntau,  &
+         grid_tmask = grid_tmask)
+
+    !
+    ! Check the k_level
+    !
+
+    if (k_level .gt. nk) then
+      call mpp_error(FATAL, trim(error_header) // ' k_level > nk')
+    endif
+
+    !
+    !   Calculate the integral
+    !
+
+    if (k_level .le. 0) then  !{
+      allocate (depth_x(isd:ied,jsd:jed))
+      depth_x(:,:) = depth
+      rd(:,:,:) = 0.0
+      do k = 1, nk  !}
+        continue_calc = .false.
+        do j = jsc, jec  !{
+          do i = isc, iec  !{
+            if (grid_tmask(i,j,k) .gt. 0.5 .and. depth_x(i,j) .gt. 0.0) then  !{
+              k_level = k
+              if (depth_x(i,j) .gt. dzt(i,j,k)) then  !{
+                continue_calc = .true.
+                rd(i,j,k) = rho_dzt(i,j,k)
+                depth_x(i,j) = depth_x(i,j) - dzt(i,j,k)
+              else  !}{
+                rd(i,j,k) = depth_x(i,j) / dzt(i,j,k) * rho_dzt(i,j,k)
+                depth_x(i,j) = 0.0
+              endif  !}
+            endif  !}
+          enddo  !} i
+        enddo  !} j
+        if (.not. continue_calc) then
+          exit
+        endif
+      enddo  !} k
+      deallocate (depth_x)
+    endif  !}
+
+    integral(:,:) = 0.0
+    do k = 1, k_level  !}
+      do j = jsc, jec  !{
+        do i = isc, iec  !{
+          integral(i,j) = integral(i,j) + var(i,j,k) * rd(i,j,k)
+        enddo  !} i
+      enddo  !} j
+    enddo  !} k
+            
+    return
+
+  end subroutine g_tracer_column_int
+  
+
+!#######################################################################
+  ! <SUBROUTINE NAME="g_tracer_flux_at_depth">
+  !  <OVERVIEW>
+  !   Calculate the column interval for a given variable
+  !  </OVERVIEW>
+  !  <DESCRIPTION>
+  !   Calculate the column interval for a given variable
+  !  </DESCRIPTION>
+  !  <TEMPLATE>
+  !   call g_tracer_flux_at_depth(depth, ilb, jlb, var, dzt, k_level, frac, initialized, flux, caller)
+  !  </TEMPLATE>
+  !  <IN NAME="depth" TYPE="real">
+  !   Depth over which to integrate
+  !  </IN>
+  !  <IN NAME="ilb" TYPE="integer">
+  !   Lower bound of 1st dimension of arrays
+  !  </IN>
+  !  <IN NAME="jlb" TYPE="integer">
+  !   Lower bound of 2nd dimension of arrays
+  !  </IN>
+  !  <IN NAME="var" TYPE="real(:,:,:)">
+  !   Variable to integrate
+  !  </IN>
+  !  <IN NAME="dzt" TYPE="real(:,:,:)">
+  !   Layer thicknesses
+  !  </IN>
+  !  <INOUT NAME="k_level" TYPE="real(:,:)">
+  !   Work array: array of k level for each grid point at which depth occurs (may be used in future calls)
+  !  </INOUT>
+  !  <INOUT NAME="frac" TYPE="real(:,:)">
+  !   Work array: fraction of level at which depth occurs (may be used in future calls)
+  !  </INOUT>
+  !  <INOUT NAME="initialized" TYPE="logical">
+  !   True if the arrays have been initialized from a previous call, set to true in subroutine.
+  !   If true, then the work arrays can be used in subsequent calls for the same depth to save some
+  !   computation. Care should be taken that if iniitialized is set to true that the same depth range is used.
+  !  </INOUT>
+  !  <OUT NAME="flux" TYPE="real(:,:)">
+  !   Flux at specified depth
+  !  </OUT>
+  !  <IN NAME="caller" TYPE="character(len=*), optional">
+  !   string indicating caller of this routine, for traceback
+  !  </IN>
+  ! </SUBROUTINE>
+
+  subroutine g_tracer_flux_at_depth(depth, ilb, jlb, var, dzt, k_level, frac, initialized, flux, caller)
+
+    real,                            intent(in)                 :: depth
+    integer,                         intent(in)                 :: ilb
+    integer,                         intent(in)                 :: jlb
+    real,    dimension(ilb:,jlb:,:), intent(in)                 :: var
+    real,    dimension(ilb:,jlb:,:), intent(in)                 :: dzt
+    integer, dimension(ilb:,jlb:),   intent(inout)              :: k_level
+    real,    dimension(ilb:,jlb:),   intent(inout)              :: frac
+    logical,                         intent(inout)              :: initialized
+    real,    dimension(ilb:,jlb:),   intent(out)                :: flux
+    character(len=*),                intent(in),    optional    :: caller
+
+!-----------------------------------------------------------------------
+!     local parameters
+
+    character(len=fm_string_len), parameter     :: sub_name = 'g_tracer_flux_at_depth'
+
+    character(len=256)                          :: caller_str
+    character(len=256)                          :: error_header
+    character(len=256)                          :: warn_header
+    character(len=256)                          :: note_header
+    integer                                     :: isc
+    integer                                     :: iec
+    integer                                     :: jsc
+    integer                                     :: jec
+    integer                                     :: isd
+    integer                                     :: ied
+    integer                                     :: jsd
+    integer                                     :: jed
+    integer                                     :: nk
+    integer                                     :: ntau
+    real,    dimension(:,:,:), pointer          :: grid_tmask
+    integer                                     :: i
+    integer                                     :: j
+    integer                                     :: k 
+    real, dimension(:,:), allocatable           :: depth_x
+    logical                                     :: continue_calc
+    
+    !  Set up the headers for stdout messages.
+
+    if (present(caller)) then
+      caller_str = trim(mod_name) // '(' // trim(sub_name) // ')[' // trim(caller) // ']'
+    else
+      caller_str = trim(mod_name) // '(' // trim(sub_name) // ')[]'
+    endif
+    error_header = '==> Error from '   // trim(caller_str) // ':'
+    warn_header =  '==> Warning from ' // trim(caller_str) // ':'
+    note_header =  '==> Note from '    // trim(caller_str) // ':'
+
+    !
+    ! Check the depth
+    !
+
+    if (depth .le. 0.0) then
+      call mpp_error(FATAL, trim(error_header) // ' Depth <= 0,0')
+    endif
+
+    !  Set up the module if not already done
+
+    call g_tracer_get_common(isc, iec, jsc, jec, isd, ied, jsd, jed, nk, ntau,  &
+         grid_tmask = grid_tmask)
+
+    !
+    !   Calculate the flux
+    !
+
+    if (.not. initialized) then  !{
+      allocate (depth_x(isd:ied,jsd:jed))
+      depth_x(:,:) = depth
+      frac(:,:) = 0.0
+      k_level(:,:) = 0
+      do k = 1, nk  !{
+        continue_calc = .false.
+        do j = jsc, jec  !{
+          do i = isc, iec  !{
+            if (grid_tmask(i,j,k) .gt. 0.5 .and. depth_x(i,j) .gt. 0.0) then  !{
+              if (depth_x(i,j) .gt. dzt(i,j,k)) then  !{
+                continue_calc = .true.
+                depth_x(i,j) = depth_x(i,j) - dzt(i,j,k)
+              else  !}{
+                frac(i,j) = depth_x(i,j) / dzt(i,j,k)
+                k_level(i,j) = k
+                depth_x(i,j) = 0.0
+              endif  !}
+            endif  !}
+          enddo  !} i
+        enddo  !} j
+        if (.not. continue_calc) then
+          exit
+        endif
+      enddo  !} k
+      deallocate (depth_x)
+    endif  !}
+    initialized = .true.
+
+    flux(:,:) = 0.0
+    do j = jsc, jec  !{
+      do i = isc, iec  !{
+        if (k_level(i,j) .gt. 0) then  !{
+          k = k_level(i,j)
+          if (k .eq. 1) then
+            flux(i,j) = frac(i,j) * var(i,j,k)
+          else
+            flux(i,j) = (1.0 - frac(i,j)) * var(i,j,k-1) + frac(i,j) * var(i,j,k)
+          endif
+        endif  !}
+      enddo  !} i
+    enddo  !} j
+            
+    return
+
+  end subroutine g_tracer_flux_at_depth
+
 
   ! <SUBROUTINE NAME="g_tracer_send_diag">
   !  <OVERVIEW>
@@ -2110,6 +2538,82 @@ contains
   end subroutine g_tracer_send_diag
 
 
+  ! <SUBROUTINE NAME="g_tracer_diag">
+  !  <OVERVIEW>
+  !   Send diagnostics for all registered fields at finish (if in diag_table)
+  !  </OVERVIEW>
+  !  <DESCRIPTION>
+  !   Collectively sends out the diagnostics for all registered fields of all generic tracers
+  !  </DESCRIPTION>
+  !  <TEMPLATE>
+  !   call g_tracer_diag(g_tracer_list,model_time , tau)
+  !  </TEMPLATE>
+  !  <IN NAME="g_tracer_list" TYPE="type(g_tracer_type),    pointer">
+  !   pointer to the head of the generic tracer list
+  !  </IN>
+  !  <IN NAME="model_time" TYPE="type(time_type)">
+  !   Time that the diagnostics is sent
+  !  </IN>
+  !  <IN NAME="tau" TYPE="integer">
+  !   The time step for the %field 4D field to be reported
+  !  </IN>
+  ! </SUBROUTINE>
+
+  subroutine g_tracer_diag(g_tracer_list, ilb, jlb, rho_dzt_tau, rho_dzt_taup1, model_time, tau, taup1, dtts)
+    type(g_tracer_type),    pointer    :: g_tracer_list
+    integer,                  intent(in) :: ilb
+    integer,                  intent(in) :: jlb
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt_tau
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt_taup1
+    type(time_type),          intent(in) :: model_time
+    integer,                  intent(in) :: tau
+    integer,                  intent(in) :: taup1
+    real,                     intent(in) :: dtts
+
+    type(g_tracer_type),    pointer    :: g_tracer
+    integer :: tau_1
+    logical :: used
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_diag'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+
+    !Go through the list of tracers 
+    do  
+       tau_1=taup1
+       if (g_tracer%diag_id_field_taup1 .gt. 0) then
+          if(.NOT. g_tracer_is_prog(g_tracer)) tau_1=1
+          used = send_data(g_tracer%diag_id_field_taup1, g_tracer%field(:,:,:,tau_1), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+       endif
+
+       if (g_tracer%diag_id_tendency .gt. 0  .and. g_tracer%prog) then
+          used = send_data(g_tracer%diag_id_tendency,&
+               (g_tracer%field(:,:,:,taup1)*rho_dzt_taup1(:,:,:) - g_tracer%field(:,:,:,tau)*rho_dzt_tau(:,:,:))/dtts, model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+       endif
+
+       if (g_tracer%diag_id_vdiffuse_impl .gt. 0 .and. _ALLOCATED(g_tracer%vdiffuse_impl)) then
+          used = send_data(g_tracer%diag_id_vdiffuse_impl, g_tracer%vdiffuse_impl(:,:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+       endif
+
+       !traverse the linked list till hit NULL
+       if(.NOT. associated(g_tracer%next)) exit
+       g_tracer => g_tracer%next
+    enddo
+
+  end subroutine g_tracer_diag
+
 
   subroutine g_tracer_traverse(g_tracer_list)
     type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
@@ -2245,11 +2749,12 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine g_tracer_vertdiff_G(g_tracer, h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau)
+  subroutine g_tracer_vertdiff_G(g_tracer, h_old, ea, eb, dt, kg_m2_to_H, m_to_H, tau, mom)
     type(g_tracer_type),    pointer  :: g_tracer
     real, dimension(g_tracer_com%isd:,g_tracer_com%jsd:,:), intent(in) :: h_old, ea, eb
     real,                   intent(in) :: dt, kg_m2_to_H, m_to_H
     integer,                intent(in) :: tau
+    logical,                                                intent(in), optional :: mom
 
     ! Arguments: h_old -  Layer thickness before entrainment, in m or kg m-2.
     !                     In all the following comments the units of h_old are
@@ -2261,6 +2766,8 @@ contains
     !                         the units of h_old (H).
     !  (in)      m_to_H - A conversion factor that translates m into the units
     !                     of h_old (H).
+    !  (in,opt)  mom - If true, then called from MOM and don't do diagnostic,
+    !                  if false or not present, then not from MOM and do diagnostics.
 
     !   This subroutine solves a tridiagonal equation for the final tracer
     ! concentrations after the dual-entrainments, and possibly sinking or surface
@@ -2284,8 +2791,32 @@ contains
     real :: b_denom_1    ! The first term in the denominator of b1, in H.
     real :: H_to_kg_m2   ! 1 / kg_m2_to_H.
     integer :: i, j, k, nz
+    logical :: do_diagnostic
 
-    d1=0.0
+    !
+    !   Save the current state for calculation of the implicit vertical diffusion term
+    !
+
+    if (g_tracer%diag_id_vdiffuse_impl .gt. 0) then
+      if (present(mom)) then
+        do_diagnostic = .not. mom
+      else
+        do_diagnostic = .false.
+      endif
+    else
+      do_diagnostic = .false.
+    endif
+    if (do_diagnostic) then
+      do j = g_tracer_com%jsc, g_tracer_com%jec
+         do i = g_tracer_com%isc, g_tracer_com%iec
+            do k = 1, g_tracer_com%nk
+               g_tracer%vdiffuse_impl(i,j,k) = g_tracer%field(i,j,k,tau) 
+            enddo
+         enddo
+      enddo
+    endif
+
+    d1 = 0.0
     H_to_kg_m2 = 1.0 / kg_m2_to_H
 
     sink_dist = (dt*g_tracer%sink_rate) * m_to_H
@@ -2373,9 +2904,25 @@ contains
              g_tracer%field(i,j,k,tau) = g_tracer%field(i,j,k,tau) + c1(k+1)*g_tracer%field(i,j,k+1,tau)
           enddo
 
-       endif !(g_tracer_com%grid_tmask(i,j,1) > 0.5)
+        endif !(g_tracer_com%grid_tmask(i,j,1) > 0.5)
 
     enddo; enddo ! i,j
+
+    !
+    !   Calculate the implicit vertical diffusion term
+    !   (Note: not sure if this needs any unit conversion)
+    !
+
+    if (do_diagnostic) then
+      do j = g_tracer_com%jsc, g_tracer_com%jec
+         do i = g_tracer_com%isc, g_tracer_com%iec
+            do k = 1, g_tracer_com%nk
+               g_tracer%vdiffuse_impl(i,j,k) = g_tracer_com%grid_tmask(i,j,k) *   &
+                    (g_tracer%field(i,j,k,tau) - g_tracer%vdiffuse_impl(i,j,k)) / dt
+            enddo
+         enddo
+      enddo
+    endif
 
   end subroutine g_tracer_vertdiff_G
 
@@ -2421,6 +2968,21 @@ contains
     endif
     
     eps = 1.e-30
+
+    !
+    !   Save the current state for calculation of the implicit vertical diffusion term
+    !
+
+    if (g_tracer%diag_id_vdiffuse_impl .gt. 0) then
+      do j = g_tracer_com%jsc, g_tracer_com%jec
+         do i = g_tracer_com%isc, g_tracer_com%iec
+            do k = 1, g_tracer_com%nk
+               g_tracer%vdiffuse_impl(i,j,k) = g_tracer%field(i,j,k,tau) 
+            enddo
+         enddo
+      enddo
+    endif
+
     !
     !Add the contribution of K33_implicit to the diffusivity
     !
@@ -2473,7 +3035,7 @@ contains
           enddo
        enddo
        !Note: dh, ea, and eb have units here of kg m-2.
-       call g_tracer_vertdiff_G(g_tracer, dh, ea, eb, dt, 1.0, rho0, tau)
+       call g_tracer_vertdiff_G(g_tracer, dh, ea, eb, dt, 1.0, rho0, tau, mom = .true.)
 
        !Mask out the field over "land" (land under Ocean)
        g_tracer%field(:,:,:,tau) = g_tracer%field(:,:,:,tau) * g_tracer_com%grid_tmask(:,:,:)
@@ -2623,6 +3185,24 @@ contains
        enddo
 
     endif
+
+    !
+    !   Calculate the implicit vertical diffusion term
+    !   (Note: dh = rho_dzt(taup1)
+    !
+
+    if (g_tracer%diag_id_vdiffuse_impl .gt. 0) then
+      do j = g_tracer_com%jsc, g_tracer_com%jec
+         do i = g_tracer_com%isc, g_tracer_com%iec
+            do k = 1, g_tracer_com%nk
+               g_tracer%vdiffuse_impl(i,j,k) = dh(i,j,k) * g_tracer_com%grid_tmask(i,j,k) *   &
+                    (g_tracer%field(i,j,k,tau) - g_tracer%vdiffuse_impl(i,j,k)) / dt
+            enddo
+         enddo
+      enddo
+    endif
+
+    return
 
   end subroutine g_tracer_vertdiff_M
 

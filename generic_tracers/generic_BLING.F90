@@ -114,7 +114,7 @@ module generic_BLING
   use coupler_types_mod, only: coupler_2d_bc_type
   use field_manager_mod, only: fm_string_len, fm_path_name_len
   use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
-  use fms_mod,           only: open_namelist_file, check_nml_error, close_file
+  use fms_mod,           only: write_version_number, open_namelist_file, check_nml_error, close_file
   use fms_mod,           only: field_exist, file_exist
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
@@ -131,6 +131,9 @@ module generic_BLING
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
   implicit none ; private
+
+  character(len=128) :: version = '$Id: generic_BLING.F90,v 19.0.6.1.6.1 2013/02/22 00:10:13 Niki.Zadeh Exp $'
+  character(len=128) :: tagname = '$Name: siena_201303 $'
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_BLING'
   character(len=fm_string_len), parameter :: package_name   = 'generic_bling'
@@ -544,12 +547,13 @@ ierr = check_nml_error(io_status,'generic_bling_nml')
 #else
 ioun = open_namelist_file()
 read  (ioun, generic_bling_nml,iostat=io_status)
-write (stdoutunit,'(/)')
-write (stdoutunit, generic_bling_nml)  
-write (stdlogunit, generic_bling_nml)
 ierr = check_nml_error(io_status,'generic_bling_nml')
 call close_file (ioun)
 #endif
+
+write (stdoutunit,'(/)')
+write (stdoutunit, generic_bling_nml)
+write (stdlogunit, generic_bling_nml)
 
   if ((do_14c) .and. (do_carbon)) then
     write (stdoutunit,*) trim(note_header), 'Simulating radiocarbon'
@@ -601,6 +605,8 @@ call close_file (ioun)
   ! </SUBROUTINE>
   subroutine generic_BLING_init(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
+
+    call write_version_number( version, tagname )
 
     !Specify and initialize all parameters used by this package
     call user_add_params
