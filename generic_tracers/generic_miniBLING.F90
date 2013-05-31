@@ -2910,7 +2910,7 @@ contains
 
               bling%jfe_reminp(i,j,k) = (bling%fpofe(i,j,k-1) +                    &
                (bling%jfe_ads_org(i,j,k) + bling%jfe_ads_inorg(i,j,k) +            & 
-               + bling%jfeop(i,j,k)) * rho_dzt(i,j,k) -                                  &
+                bling%jfeop(i,j,k)) * rho_dzt(i,j,k) -                                  &
                bling%fpofe(i,j,k)) / (epsln + rho_dzt(i,j,k))
 
             enddo  !} i
@@ -3042,7 +3042,7 @@ contains
                  (bling%f_o2(i,j,k) .lt. bling%o2_min) ) then 
               bling%jo2(i,j,k) = 0. * grid_tmask(i,j,k)
             else
-              bling%jo2(i,j,k) = bling%o2_2_p * - bling%jpo4(i,j,k)             &
+              bling%jo2(i,j,k) = - bling%o2_2_p * bling%jpo4(i,j,k)             &
                 * grid_tmask(i,j,k)
             endif !}
 

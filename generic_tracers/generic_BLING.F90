@@ -133,7 +133,7 @@ module generic_BLING
   implicit none ; private
 
   character(len=128) :: version = '$Id: generic_BLING.F90,v 19.0.6.1.6.1 2013/02/22 00:10:13 Niki.Zadeh Exp $'
-  character(len=128) :: tagname = '$Name: siena_201303 $'
+  character(len=128) :: tagname = '$Name: siena_201305 $'
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_BLING'
   character(len=fm_string_len), parameter :: package_name   = 'generic_bling'
