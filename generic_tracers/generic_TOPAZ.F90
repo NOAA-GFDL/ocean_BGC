@@ -100,7 +100,7 @@ module generic_TOPAZ
   implicit none ; private
 !-----------------------------------------------------------------------
   character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 19.0.4.1 2012/04/19 17:25:15 jgj Exp $'
-  character(len=128) :: tag = '$Name: siena_201305 $'
+  character(len=128) :: tag = '$Name: siena_201308 $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
