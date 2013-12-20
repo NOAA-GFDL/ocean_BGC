@@ -75,8 +75,6 @@
 ! </INFO>
 !----------------------------------------------------------------
 
-#include <fms_platform.h>
-
 module generic_TOPAZ
 
   use coupler_types_mod, only: coupler_2d_bc_type
@@ -95,12 +93,12 @@ module generic_TOPAZ
   use g_tracer_utils, only : g_tracer_send_diag, g_tracer_get_values  
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
 
-  use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
+  use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, FMS_ocmip2_co2calc_old, CO2_dope_vector
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 19.0.4.1 2012/04/19 17:25:15 jgj Exp $'
-  character(len=128) :: tag = '$Name: siena_201309 $'
+  character(len=128) :: version = '$Id: generic_TOPAZ.F90,v 20.0 2013/12/14 00:18:07 fms Exp $'
+  character(len=128) :: tag = '$Name: tikal $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_TOPAZ'
@@ -247,6 +245,7 @@ module generic_TOPAZ
           fe_ballast_assoc, &                  ! If iron scavenging is associated with ballast
           init,             &                  ! If tracers should be initializated
           p_2_n_static,     &                  ! If P:N is fixed in phytoplankton
+          reproduce_esm2,   &                  ! Do not add changes post-CMIP5 version of ESM2
           si_2_n_static                        ! If Si:N is fixed in phytoplankton
 
      real  ::          &
@@ -2673,6 +2672,9 @@ contains
     !
     call g_tracer_add_param('do_extra_diag_calcs', topaz%do_extra_diag_calcs, .true.)
     !
+    ! Prevent incorporation of changes since CMIP5 version of ESM2
+    call g_tracer_add_param('reproduce_esm2', topaz%reproduce_esm2, .false.)
+    !
     ! Nitrification rate constant assumed to be light-limited with an inhibition
     ! factor.  gamma_nitrif was tuned to reproduce the scaling observed in Ward et
     ! al. (1982; Microbial nitrification rates in the  primary nitrite maximum off
@@ -3254,7 +3256,7 @@ contains
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau
     logical :: used
     real, dimension(:,:,:),pointer :: grid_tmask
-    real, dimension(:,:,:,:),pointer :: temp_field
+    real, dimension(:,:,:),pointer :: temp_field
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask) 
 
@@ -3266,7 +3268,7 @@ contains
     call g_tracer_get_values(tracer_list,'cadet_arag'  ,'btm_reservoir', topaz%fcadet_arag_btm,isd,jsd)
     topaz%fcadet_arag_btm = topaz%fcadet_arag_btm /dt
     call g_tracer_get_pointer(tracer_list,'cadet_arag_btf','field',temp_field)
-    temp_field(:,:,1,1) = topaz%fcadet_arag_btm(:,:)
+    temp_field(:,:,1) = topaz%fcadet_arag_btm(:,:)
     call g_tracer_set_values(tracer_list,'cadet_arag','btm_reservoir',0.0)
     if (topaz%id_fcadet_arag_btm .gt. 0)           &
          used = send_data(topaz%id_fcadet_arag_btm,    topaz%fcadet_arag_btm,          &
@@ -3276,7 +3278,7 @@ contains
     call g_tracer_get_values(tracer_list,'cadet_calc'  ,'btm_reservoir', topaz%fcadet_calc_btm,isd,jsd)
     topaz%fcadet_calc_btm = topaz%fcadet_calc_btm /dt
     call g_tracer_get_pointer(tracer_list,'cadet_calc_btf','field',temp_field)
-    temp_field(:,:,1,1) = topaz%fcadet_calc_btm(:,:)
+    temp_field(:,:,1) = topaz%fcadet_calc_btm(:,:)
     call g_tracer_set_values(tracer_list,'cadet_calc','btm_reservoir',0.0)
     if (topaz%id_fcadet_calc_btm .gt. 0)           &
          used = send_data(topaz%id_fcadet_calc_btm,    topaz%fcadet_calc_btm,          &
@@ -3295,7 +3297,7 @@ contains
     topaz%flithdet_btm = topaz%flithdet_btm /dt
     call g_tracer_set_values(tracer_list,'lithdet','btm_reservoir',0.0)
     call g_tracer_get_pointer(tracer_list,'lithdet_btf','field',temp_field)
-    temp_field(:,:,1,1) = topaz%flithdet_btm(:,:)
+    temp_field(:,:,1) = topaz%flithdet_btm(:,:)
     if (topaz%id_flithdet_btm .gt. 0)           &
          used = send_data(topaz%id_flithdet_btm,    topaz%flithdet_btm,          &
          model_time, rmask = grid_tmask(:,:,1),& 
@@ -3304,7 +3306,7 @@ contains
     call g_tracer_get_values(tracer_list,'ndet'  ,'btm_reservoir', topaz%fndet_btm,isd,jsd)
     topaz%fndet_btm = topaz%fndet_btm /dt
     call g_tracer_get_pointer(tracer_list,'ndet_btf','field',temp_field)
-    temp_field(:,:,1,1) = topaz%fndet_btm(:,:)
+    temp_field(:,:,1) = topaz%fndet_btm(:,:)
     call g_tracer_set_values(tracer_list,'ndet','btm_reservoir',0.0)
     if (topaz%id_fndet_btm .gt. 0)           &
          used = send_data(topaz%id_fndet_btm,    topaz%fndet_btm,          &
@@ -3314,7 +3316,7 @@ contains
     call g_tracer_get_values(tracer_list,'pdet'  ,'btm_reservoir', topaz%fpdet_btm,isd,jsd)
     topaz%fpdet_btm = topaz%fpdet_btm /dt
     call g_tracer_get_pointer(tracer_list,'pdet_btf','field',temp_field)
-    temp_field(:,:,1,1) = topaz%fpdet_btm(:,:)
+    temp_field(:,:,1) = topaz%fpdet_btm(:,:)
     call g_tracer_set_values(tracer_list,'pdet','btm_reservoir',0.0)
     if (topaz%id_fpdet_btm .gt. 0)           &
          used = send_data(topaz%id_fpdet_btm,    topaz%fpdet_btm,          &
@@ -3324,7 +3326,7 @@ contains
     call g_tracer_get_values(tracer_list,'sidet'  ,'btm_reservoir', topaz%fsidet_btm,isd,jsd)
     topaz%fsidet_btm = topaz%fsidet_btm /dt
     call g_tracer_get_pointer(tracer_list,'sidet_btf','field',temp_field)
-    temp_field(:,:,1,1) = topaz%fsidet_btm(:,:)
+    temp_field(:,:,1) = topaz%fsidet_btm(:,:)
     call g_tracer_set_values(tracer_list,'sidet','btm_reservoir',0.0)
     if (topaz%id_fsidet_btm .gt. 0)           &
          used = send_data(topaz%id_fsidet_btm,    topaz%fsidet_btm,          &
@@ -3450,6 +3452,21 @@ contains
        topaz%htotalhi(i,j) = topaz%htotal_scale_hi * topaz%f_htotal(i,j,k)
     enddo; enddo ; !} i, j
  
+    if (topaz%reproduce_esm2) then
+       call FMS_ocmip2_co2calc_old(CO2_dope_vec,grid_tmask(:,:,k),&
+         Temp(:,:,k), Salt(:,:,k),                    &
+         topaz%f_dic(:,:,k),                          &
+         topaz%f_po4(:,:,k),                          &  
+         topaz%f_sio4(:,:,k),                         &
+         topaz%f_alk(:,:,k),                          &
+         topaz%htotallo, topaz%htotalhi,&
+                                !InOut
+         topaz%f_htotal(:,:,k),                       & 
+                                !OUT
+         co2star=topaz%co2_csurf(:,:), alpha=topaz%co2_alpha(:,:), &
+         pCO2surf=topaz%pco2_csurf(:,:), &
+         co3_ion=topaz%f_co3_ion(:,:,k))
+    else
     call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
          Temp(:,:,k), Salt(:,:,k),                    &
          topaz%f_dic(:,:,k),                          &
@@ -3463,13 +3480,32 @@ contains
          co2star=topaz%co2_csurf(:,:), alpha=topaz%co2_alpha(:,:), &
          pCO2surf=topaz%pco2_csurf(:,:), &
          co3_ion=topaz%f_co3_ion(:,:,k))
+    endif
 
+    if(topaz%reproduce_esm2)then
+      do k = 2, nk
+        do j = jsc, jec ; do i = isc, iec  !{
+          topaz%htotallo(i,j) = topaz%htotal_scale_lo * topaz%f_htotal(i,j,k)
+          topaz%htotalhi(i,j) = topaz%htotal_scale_hi * topaz%f_htotal(i,j,k)
+        enddo; enddo ; !} i, j
+        call FMS_ocmip2_co2calc_old(CO2_dope_vec,grid_tmask(:,:,k),&
+            Temp(:,:,k), Salt(:,:,k),                    &
+            topaz%f_dic(:,:,k),                          &
+            topaz%f_po4(:,:,k),                          &  
+            topaz%f_sio4(:,:,k),                         &
+            topaz%f_alk(:,:,k),                          &
+            topaz%htotallo, topaz%htotalhi,&
+                                !InOut
+            topaz%f_htotal(:,:,k),                       & 
+                                !OUT
+            co3_ion=topaz%f_co3_ion(:,:,k))
+      enddo
+    else
     do k = 2, nk
        do j = jsc, jec ; do i = isc, iec  !{
           topaz%htotallo(i,j) = topaz%htotal_scale_lo * topaz%f_htotal(i,j,k)
           topaz%htotalhi(i,j) = topaz%htotal_scale_hi * topaz%f_htotal(i,j,k)
        enddo; enddo ; !} i, j
-  
        call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
             Temp(:,:,k), Salt(:,:,k),                    &
             topaz%f_dic(:,:,k),                          &
@@ -3482,6 +3518,7 @@ contains
                                 !OUT
             co3_ion=topaz%f_co3_ion(:,:,k))
     enddo
+    endif
 
     call g_tracer_set_values(tracer_list,'htotal','field',topaz%f_htotal  ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',topaz%f_co3_ion  ,isd,jsd,ntau=1)
@@ -4946,7 +4983,7 @@ contains
           endif
        enddo  !} k
        if (k_100 .gt. 1 .and. k_100 .lt. grid_kmt(i,j)) then
-          k_100 = k_100+1
+! 2013/05/22 CAS/JPD/JGJ remove line incrementing k_100
           drho_dzt = topaz%Rho_0 * 100.0 - rho_dzt_100(i,j)
           topaz%f_alk_int_100(i,j) = topaz%f_alk_int_100(i,j) + topaz%p_alk(i,j,k_100,tau) * drho_dzt
           topaz%f_dic_int_100(i,j) = topaz%f_dic_int_100(i,j) + topaz%p_dic(i,j,k_100,tau) * drho_dzt
@@ -6105,6 +6142,21 @@ contains
           topaz%htotalhi(i,j) = topaz%htotal_scale_hi * htotal_field(i,j,1)
        enddo; enddo ; !} i, j
 
+       if(topaz%reproduce_esm2) then
+       call FMS_ocmip2_co2calc_old(CO2_dope_vec,grid_tmask(:,:,1), &
+            SST(:,:), SSS(:,:),                            &
+            dic_field(:,:,1,tau),                          &
+            po4_field(:,:,1,tau),                          &
+            sio4_field(:,:,1,tau),                         &
+            alk_field(:,:,1,tau),                          &
+            topaz%htotallo, topaz%htotalhi,                &
+                                !InOut
+            htotal_field(:,:,1),                           & 
+                                !OUT
+            co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
+            pCO2surf=topaz%pco2_csurf(:,:), &
+            co3_ion=co3_ion_field(:,:,1))
+      else
        call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,1), &
             SST(:,:), SSS(:,:),                            &
             dic_field(:,:,1,tau),                          &
@@ -6118,6 +6170,7 @@ contains
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
             pCO2surf=topaz%pco2_csurf(:,:), &
             co3_ion=co3_ion_field(:,:,1))
+      endif
 
        !Set fields !nnz: if These are pointers do I need to do this?
        call g_tracer_set_values(tracer_list,'htotal' ,'field',htotal_field ,isd,jsd,ntau=1)

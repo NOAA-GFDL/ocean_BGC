@@ -35,8 +35,8 @@ module g_tracer_utils
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 19.0.4.2.2.1.2.1 2013/03/06 18:19:34 Niki.Zadeh Exp $'
-  character(len=128) :: tag = '$Name: siena_201309 $'
+  character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 20.0 2013/12/14 00:18:12 fms Exp $'
+  character(len=128) :: tag = '$Name: tikal $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -165,8 +165,12 @@ module g_tracer_utils
      character(len=fm_string_len) :: units, flux_units
 
      ! Tracer concentration field in space (and time)
-     ! MOM keeps the field at 3 time levels, hence 4D.
-     real, _ALLOCATABLE, dimension(:,:,:,:):: field  _NULL
+     ! MOM keeps the prognostic tracer fields at 3 time levels, hence 4D.
+     real, pointer, dimension(:,:,:,:):: field  => NULL()
+     !The following pointer is intended to point to prognostic tracer field in MOM. Do not allocate!
+     real, pointer,      dimension(:,:,:,:):: field4d_ptr => NULL()
+     !The following pointer is intended to point to diagnostic tracer field in MOM. Do not allocate!
+     real, pointer,      dimension(:,:,:)  :: field3d_ptr => NULL() 
      ! Define a 3-d field pointer so as to retain the lower
      ! and upper bounds for the 3-d version of g_tracer_get_pointer
      ! for the field option
@@ -216,8 +220,7 @@ module g_tracer_utils
      real, _ALLOCATABLE, dimension(:,:,:)  :: vdiffuse_impl  _NULL
 
      ! An auxiliary 3D field for keeping model dependent change tendencies, ... 
-     real, _ALLOCATABLE, dimension(:,:,:)  :: tendency  _NULL
-
+     real, pointer, dimension(:,:,:)  :: tendency  => NULL()
 
      ! IDs for using diag_manager tools
      integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
@@ -333,6 +336,7 @@ module g_tracer_utils
   public :: g_tracer_end_param_list
   public :: g_diag_type
   public :: g_diag_field_add
+  public :: g_tracer_set_pointer
 
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
@@ -376,6 +380,11 @@ module g_tracer_utils
      module procedure g_tracer_add_param_integer
      module procedure g_tracer_add_param_string      
   end interface
+
+  interface g_tracer_set_pointer
+    module procedure g_tracer_set_pointer_3d
+    module procedure g_tracer_set_pointer_4d
+  end interface g_tracer_set_pointer
 
   ! <INTERFACE NAME="g_tracer_set_values">
   !  <OVERVIEW>
@@ -1554,10 +1563,14 @@ contains
          ": No tracer in the list with name="//trim(name))
 
     select case(member)
-    case ('field') 
-       array_ptr => g_tracer%field
+    case ('field')
+       if(associated(g_tracer%field)) then 
+          array_ptr => g_tracer%field
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot get member variable: "//trim(name)//" % "//trim(member))
+       endif
     case default 
-       call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
+       call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(name)//" % "//trim(member))   
     end select
 
   end subroutine g_tracer_get_4D
@@ -1583,7 +1596,13 @@ contains
 
     select case(member)
     case ('field') 
-       array_ptr => g_tracer%field_3d
+       if(associated(g_tracer%field3d_ptr)) then 
+          array_ptr => g_tracer%field3d_ptr
+       elseif(associated(g_tracer%field_3d)) then
+          array_ptr => g_tracer%field_3d
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot get member variable: "//trim(name)//" % "//trim(member))
+       endif
     case ('vmove') 
        array_ptr => g_tracer%vmove
     case ('vdiff') 
@@ -1670,9 +1689,13 @@ contains
 
     select case(member)
     case ('field') 
-       array = g_tracer%field
+       if(associated(g_tracer%field)) then 
+          array = g_tracer%field
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot get member variable: "//trim(name)//" % "//trim(member))
+       endif
     case default 
-       call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
+       call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(name)//" % "//trim(member))   
     end select
 
   end subroutine g_tracer_get_4D_val
@@ -1704,7 +1727,14 @@ contains
 
     select case(member)
     case ('field') 
-       array(:,:,:) = g_tracer%field(:,:,:,tau)
+       if(associated(g_tracer%field)) then 
+          array(:,:,:) = g_tracer%field(:,:,:,tau)
+       elseif(associated(g_tracer%field3d_ptr)) then 
+          array(:,:,:) = g_tracer%field3d_ptr(:,:,:)
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot get member variable: "//trim(name)//" % "//trim(member))
+       endif
+          
        if(present(positive)) array = max(0.0,array)
     case ('tendency') 
        array(:,:,:) = g_tracer%tendency(:,:,:)
@@ -1929,7 +1959,13 @@ contains
     case ('tendency') 
        g_tracer%tendency  = array 
     case ('field') 
-       g_tracer%field(:,:,:,tau) = array(:,:,:) 
+       if(associated(g_tracer%field)) then 
+          g_tracer%field(:,:,:,tau) = array(:,:,:) 
+       elseif(associated(g_tracer%field3d_ptr)) then 
+          g_tracer%field3d_ptr(:,:,:) = array(:,:,:) 
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot set member variable: "//trim(name)//" % "//trim(member))
+       endif      
     case ('vmove') 
        g_tracer%vmove  = array 
     case ('vdiff') 
@@ -1964,8 +2000,12 @@ contains
          ": No tracer in the list with name="//trim(name))
 
     select case(member)
-    case ('field') 
-       g_tracer%field  = array 
+    case ('field')
+       if(associated(g_tracer%field)) then
+          g_tracer%field = array
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot set member variable: "//trim(name)//" % "//trim(member))
+       endif
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1994,7 +2034,11 @@ contains
 
     select case(member)
     case ('field') 
-       g_tracer%field     = value !Set all elements to value
+       if(associated(g_tracer%field)) then
+          g_tracer%field = value !Set all elements to value
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot set member variable: "//trim(name)//" % "//trim(member))
+       endif
     case ('tendency') 
        g_tracer%tendency  = value 
     case ('alpha') 
@@ -2026,6 +2070,94 @@ contains
     end select
 
   end subroutine g_tracer_set_real
+
+  subroutine g_tracer_set_pointer_4D(g_tracer_list,name,member,array,ilb,jlb)
+    character(len=*),               intent(in) :: name
+    character(len=*),               intent(in) :: member
+    type(g_tracer_type),            pointer    :: g_tracer_list, g_tracer
+    integer,                        intent(in) :: ilb,jlb
+    real, dimension(ilb:,jlb:,:,:), target, intent(in) :: array
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_set_pointer_4D'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+
+    !Find the node which has name=name
+    call g_tracer_find(g_tracer,name)
+    if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list with name="//trim(name))
+
+    select case(member)
+    case ('field') 
+       if (associated(g_tracer%field )) then
+          call mpp_error(NOTE, trim(sub_name) // ": Deallocating generic tracer "//trim(name)//" % "//trim(member))
+          deallocate( g_tracer%field )
+       endif
+       g_tracer%field  => array 
+    case default 
+       call mpp_error(FATAL, trim(sub_name)//": Not a supported operation for member variable: "//trim(name)//" % "//trim(member))
+    end select
+
+  end subroutine g_tracer_set_pointer_4D
+
+  subroutine g_tracer_set_pointer_3D(g_tracer_list,name,member,array,ilb,jlb)
+    character(len=*),               intent(in) :: name
+    character(len=*),               intent(in) :: member
+    type(g_tracer_type),            pointer    :: g_tracer_list, g_tracer
+    integer,                        intent(in) :: ilb,jlb
+    real, dimension(ilb:,jlb:,:), target, intent(in) :: array
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_set_pointer_3D'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+
+    !Find the node which has name=name
+    call g_tracer_find(g_tracer,name)
+    if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list with name="//trim(name))
+
+    select case(member)
+    case ('tendency') 
+       if (associated( g_tracer%tendency )) then
+          call mpp_error(NOTE, trim(sub_name) // ": Deallocating generic tracer "//trim(name)//" % "//trim(member))
+          deallocate( g_tracer%tendency )
+       endif
+       g_tracer%tendency  => array 
+    case ('field') 
+       if (associated( g_tracer%field )) then
+          call mpp_error(NOTE, trim(sub_name) // ": Deallocating generic tracer "//trim(name)//" % "//trim(member))
+          deallocate( g_tracer%field )
+       endif
+       g_tracer%field3d_ptr  => array 
+!       call set_cray_pointer_field(g_tracer%field,array,ilb,jlb)
+
+    case default 
+       call mpp_error(FATAL, trim(sub_name)//": Not a supported operation for member variable: "//trim(name)//" % "//trim(member))   
+    end select
+
+  end subroutine g_tracer_set_pointer_3D
+
+  !The following does not compile:
+  !error #6406: Conflicting attributes or multiple declaration of name.   [FIELD]
+  !  pointer(ptr,field)
+  !----------------^
+
+!  subroutine set_cray_pointer_field(field,array,ilb,jlb)
+!    real, dimension(:,:,:,:), intent(inout)     ::  field
+!    integer,                        intent(in) :: ilb,jlb
+!    real, dimension(ilb:,jlb:,:), target, intent(in) :: array
+!
+!    pointer(ptr,field)
+!
+!    ptr = LOC(array)
+!
+!  end subroutine set_cray_pointer_field
+
 
   ! <SUBROUTINE NAME="g_tracer_find">
   !  <OVERVIEW>
@@ -2433,10 +2565,23 @@ contains
        tau_1=tau
        if (g_tracer%diag_id_field .gt. 0) then
           if(.NOT. g_tracer_is_prog(g_tracer)) tau_1=1
+
+       if(associated(g_tracer%field)) then 
           used = send_data(g_tracer%diag_id_field, g_tracer%field(:,:,:,tau_1), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+       elseif(associated(g_tracer%field3d_ptr)) then 
+          used = send_data(g_tracer%diag_id_field, g_tracer%field3d_ptr(:,:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
+
+       else
+          call mpp_error(FATAL, trim(sub_name)//": Cannot send_diag field variable for "//trim(g_tracer%name) )
+       endif      
+
+
        endif
 
        if (g_tracer%diag_id_vmove .gt. 0 .and. _ALLOCATED(g_tracer%vmove)) then
