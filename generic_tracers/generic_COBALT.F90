@@ -108,8 +108,8 @@ module generic_COBALT
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0 2013/12/14 00:18:04 fms Exp $'
-  character(len=128) :: tag = '$Name: tikal $'
+  character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1 2014/02/28 15:08:18 Niki.Zadeh Exp $'
+  character(len=128) :: tag = '$Name: tikal_201403 $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_COBALT'
@@ -5550,7 +5550,7 @@ contains
     do k = 1, nk ; do j =jsc, jec ; do i = isc, iec  !{
        cobalt%jo2(i,j,k) = (cobalt%o2_2_no3 * (phyto(DIAZO)%juptake_no3(i,j,k) +   &
             phyto(LARGE)%juptake_no3(i,j,k) + phyto(SMALL)%juptake_no3(i,j,k)) + & 
-            + cobalt%o2_2_nh4 *       &
+             cobalt%o2_2_nh4 *       &
             (phyto(DIAZO)%juptake_nh4(i,j,k) + phyto(LARGE)%juptake_nh4(i,j,k) +      &
             phyto(SMALL)%juptake_nh4(i,j,k) + &  
             phyto(DIAZO)%juptake_n2(i,j,k))) * grid_tmask(i,j,k)
