@@ -109,7 +109,7 @@ module generic_COBALT
   implicit none ; private
 !-----------------------------------------------------------------------
   character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1 2014/02/28 15:08:18 Niki.Zadeh Exp $'
-  character(len=128) :: tag = '$Name: tikal_201403 $'
+  character(len=128) :: tag = '$Name: tikal_201409 $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_COBALT'
