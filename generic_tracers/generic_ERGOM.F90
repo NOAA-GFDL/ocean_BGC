@@ -53,7 +53,7 @@ module generic_ERGOM
   implicit none ; private
 
   character(len=128) :: version = '$Id: generic_ERGOM.F90,v 20.0 2013/12/14 00:18:05 fms Exp $'
-  character(len=128) :: tagname = '$Name: tikal_201409 $'
+  character(len=128) :: tagname = '$Name: ulm $'
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_ERGOM'
   character(len=fm_string_len), parameter :: package_name   = 'generic_ergom'

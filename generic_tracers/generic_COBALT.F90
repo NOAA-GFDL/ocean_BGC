@@ -108,8 +108,8 @@ module generic_COBALT
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1 2014/02/28 15:08:18 Niki.Zadeh Exp $'
-  character(len=128) :: tag = '$Name: tikal_201409 $'
+  character(len=128) :: version = '$Id: generic_COBALT.F90,v 21.0 2014/12/15 22:11:46 fms Exp $'
+  character(len=128) :: tag = '$Name: ulm $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_COBALT'
@@ -5941,8 +5941,10 @@ contains
     deallocate(rho_dzt_100)
 
     do j = jsc, jec ; do i = isc, iec ; !{
-      cobalt%btm_temp(i,j) = TEMP(i,j,grid_kmt(i,j))
-      cobalt%btm_o2(i,j) = cobalt%f_o2(i,j,grid_kmt(i,j))      
+      if (grid_kmt(i,j) .gt. 0) then !{
+         cobalt%btm_temp(i,j) = TEMP(i,j,grid_kmt(i,j))
+         cobalt%btm_o2(i,j) = cobalt%f_o2(i,j,grid_kmt(i,j))      
+      endif
     enddo; enddo  !} i, j
 
     !

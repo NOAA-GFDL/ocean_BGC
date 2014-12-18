@@ -49,7 +49,7 @@ public  :: FMS_ocmip2_co2calc,  FMS_ocmip2_co2calc_old, CO2_dope_vector
 public  :: FMS_ocmip2_co2_alpha
 
 character(len=128) :: version = '$Id: FMS_ocmip2_co2calc.F90,v 20.0 2013/12/14 00:18:00 fms Exp $'
-character(len=128) :: tagname = '$Name: tikal_201409 $'
+character(len=128) :: tagname = '$Name: ulm $'
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
