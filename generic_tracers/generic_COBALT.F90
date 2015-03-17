@@ -108,8 +108,8 @@ module generic_COBALT
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1.2.1 2014/09/29 16:40:08 Niki.Zadeh Exp $'
-  character(len=128) :: tag = '$Name: testing $'
+  character(len=128) :: version = '$Id$'
+  character(len=128) :: tag = '$Name$'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_COBALT'
