@@ -36,7 +36,7 @@ module g_tracer_utils
   implicit none ; private
 !-----------------------------------------------------------------------
   character(len=128) :: version = '$Id: generic_tracer_utils.F90,v 20.0 2013/12/14 00:18:12 fms Exp $'
-  character(len=128) :: tag = '$Name: ulm $'
+  character(len=128) :: tag = '$Name: testing $'
 !-----------------------------------------------------------------------
 
   character(len=48), parameter :: mod_name = 'g_tracer_utils'
@@ -337,6 +337,8 @@ module g_tracer_utils
   public :: g_diag_type
   public :: g_diag_field_add
   public :: g_tracer_set_pointer
+  public :: g_tracer_print_info
+  public :: g_tracer_coupler_accumulate
 
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
@@ -1417,6 +1419,21 @@ contains
     deallocate(temp_array, stf_array, stf_gas_array, deltap_array, kw_array)
 
   end subroutine g_tracer_coupler_get
+
+  subroutine g_tracer_coupler_accumulate(g_tracer_list,weight,IOB_struc_in,IOB_struc_out)
+    type(g_tracer_type),          pointer    :: g_tracer_list, g_tracer 
+    real,                        intent(in)  :: weight
+    type(coupler_2d_bc_type),    intent(in)  :: IOB_struc_in
+    type(coupler_2d_bc_type),    intent(out) :: IOB_struc_out
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_accumulate'
+    real, dimension(:,:), allocatable :: temp_array,stf_array,stf_gas_array,deltap_array, kw_array
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+  end subroutine g_tracer_coupler_accumulate
+
 
   ! <SUBROUTINE NAME="g_tracer_set_common">
   !  <OVERVIEW>
@@ -3399,6 +3416,43 @@ contains
     g_diag%next => node_ptr 
     node_ptr => g_diag 
   end subroutine g_diag_field_add
+
+
+  subroutine g_tracer_print_info(g_tracer_list)
+    type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
+    integer               :: num_prog,num_diag
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_print_info'
+    character(len=fm_string_len) :: errorstring
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+
+    num_prog = 0
+    num_diag = 0
+    !Go through the list of tracers 
+    do  
+       if(g_tracer%prog) then
+          num_prog = num_prog +1
+       else
+          num_diag = num_diag +1
+       endif
+
+       !traverse the linked list till hit NULL
+       if(.NOT. associated(g_tracer%next))  exit
+
+       g_tracer => g_tracer%next
+    enddo
+
+    write(errorstring, '(a,i4)')  ': Number of prognostic generic tracers = ',num_prog
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+    write(errorstring, '(a,i4)')  ': Number of diagnostic generic tracers = ',num_diag
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+
+  end subroutine g_tracer_print_info
+
 
 
 end module g_tracer_utils

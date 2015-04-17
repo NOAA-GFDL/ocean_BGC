@@ -43,7 +43,8 @@ module generic_tracer
   use g_tracer_utils, only : g_tracer_get_common, g_tracer_set_common, g_tracer_is_prog
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get, g_tracer_register_diag
   use g_tracer_utils, only : g_tracer_vertdiff_M, g_tracer_vertdiff_G, g_tracer_get_next     
-  use g_tracer_utils, only : g_tracer_diag
+  use g_tracer_utils, only : g_tracer_diag, g_tracer_print_info
+  use g_tracer_utils, only : g_tracer_coupler_accumulate
 
   use generic_CFC,    only : generic_CFC_register
   use generic_CFC,    only : generic_CFC_init, generic_CFC_update_from_source,generic_CFC_update_from_coupler
@@ -95,7 +96,7 @@ module generic_tracer
   public generic_tracer_vertdiff_G
   public generic_tracer_vertdiff_M
   public generic_tracer_get_diag_list
-
+  public generic_tracer_coupler_accumulate
 
   !Linked Lists of all prog and diag tracers in this module
   !Ensure these pointers are "save"d between the calls
@@ -153,6 +154,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_COBALT) &
          call generic_COBALT_register(tracer_list)
+    
+    call g_tracer_print_info(tracer_list)
 
   end subroutine generic_tracer_register
 
@@ -303,6 +306,17 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_COBALT)  call generic_COBALT_update_from_coupler(tracer_list)
 
   end subroutine generic_tracer_coupler_get
+
+  subroutine  generic_tracer_coupler_accumulate(weight,IOB_struc_in,IOB_struc_out )
+    real,                     intent(in)    :: weight
+    type(coupler_2d_bc_type), intent(in)    :: IOB_struc_in
+    type(coupler_2d_bc_type), intent(inout) :: IOB_struc_out
+
+    !All generic tracers
+    !Running average tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
+    call g_tracer_coupler_accumulate(tracer_list,weight,IOB_struc_in,IOB_struc_out)
+
+  end subroutine generic_tracer_coupler_accumulate
 
 
   ! <SUBROUTINE NAME="generic_tracer_diag">
