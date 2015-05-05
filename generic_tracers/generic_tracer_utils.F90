@@ -23,12 +23,13 @@ module g_tracer_utils
   use FMS_coupler_util,  only: extract_coupler_values, set_coupler_values
   use atmos_ocean_fluxes_mod, only: aof_set_coupler_flux
   use mpp_mod,           only: mpp_error, NOTE, WARNING, FATAL
-  use mpp_mod,           only: mpp_pe, mpp_root_pe
+  use mpp_mod,           only: mpp_pe, mpp_root_pe, mpp_sync
   use time_manager_mod,  only: time_type
   use diag_manager_mod,  only: register_diag_field, send_data 
 
 
   use field_manager_mod, only: fm_string_len, fm_path_name_len, fm_new_list, fm_change_list, fm_get_value
+  use field_manager_mod, only: fm_dump_list, fm_loop_over_list
 
   use fms_mod,           only: stdout
 
@@ -250,6 +251,11 @@ module g_tracer_utils
      integer :: flux_runoff_ind = -1
      integer :: flux_wetdep_ind = -1
      integer :: flux_drydep_ind = -1
+
+     ! Tracer source: filename, type, var name, units, record, gridfile  
+     character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
+     integer :: src_var_record
+     logical :: requires_src_info = .false.
 
   end type g_tracer_type
 
@@ -707,7 +713,7 @@ contains
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
-       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, flux_gas_type) 
+       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, flux_gas_type,requires_src_info) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -729,6 +735,7 @@ contains
     character(len=*),   intent(in), optional :: flux_gas_name
     character(len=*),   intent(in), optional :: flux_gas_type
     character(len=*),   intent(in), optional :: flux_gas_restart_file
+    logical,            intent(in), optional :: requires_src_info
 
     !
     !       Local parameters
@@ -785,6 +792,7 @@ contains
     endif
 
     if(present(init_value))  g_tracer%initial_value = init_value
+    if(present(requires_src_info))  g_tracer%requires_src_info = requires_src_info 
 
     !
     !Determine the fluxes 
@@ -838,6 +846,12 @@ contains
 
     if(present(sink_rate)) g_tracer%sink_rate = sink_rate
 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_file",         g_tracer%src_file ,        'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_name",     g_tracer%src_var_name ,    'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit",     g_tracer%src_var_unit ,    'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_record",   g_tracer%src_var_record ,  -1) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
+    
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
     !===================================================================    
@@ -3423,16 +3437,23 @@ contains
     integer               :: num_prog,num_diag
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_print_info'
-    character(len=fm_string_len) :: errorstring
+    character(len=256) :: errorstring
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list.")
 
-    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+    write(errorstring, '(a)')  ': Dumping generic tracer namelists tree: '
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+
+    if (.not. fm_dump_list('/ocean_mod/namelists', recursive = .true.)) then
+       call mpp_error(FATAL, trim(sub_name) // ': Problem dumping generic tracer namelists tree')
+    endif
 
     num_prog = 0
     num_diag = 0
+    write(errorstring, '(a)')  ''
     !Go through the list of tracers 
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
     do  
        if(g_tracer%prog) then
           num_prog = num_prog +1
@@ -3440,16 +3461,45 @@ contains
           num_diag = num_diag +1
        endif
 
+       !Check that the required source information is set 
+       if(g_tracer%requires_src_info) then 
+          if(g_tracer%src_file .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_file is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+           endif
+          if(g_tracer%src_var_name .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_name is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+           endif
+          if(g_tracer%src_var_unit .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+           endif
+          if(g_tracer%src_var_record == -1) then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_record is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+           endif
+          if(g_tracer%src_var_gridspec .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_gridspec is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+           endif
+       endif
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next))  exit
 
        g_tracer => g_tracer%next
     enddo
 
+    if(errorstring .ne. '') then
+       call flush(stdout())
+       call mpp_sync()
+       call mpp_error(FATAL, trim(sub_name) // ' : there are tracers with required source properties that are not set in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!'  )
+    endif
+
     write(errorstring, '(a,i4)')  ': Number of prognostic generic tracers = ',num_prog
     call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
     write(errorstring, '(a,i4)')  ': Number of diagnostic generic tracers = ',num_diag
-    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))     
 
   end subroutine g_tracer_print_info
 

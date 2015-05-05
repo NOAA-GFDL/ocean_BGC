@@ -253,24 +253,27 @@ contains
     !cfc_12
     call g_tracer_add(tracer_list,package_name,&
          name       = 'cfc_12',               &
-         longname   = 'cfc_12 Concentration', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
+         longname   = 'cfc_12 Concentration',          &
+         units      = 'mol/kg',                        &
+         prog       = .true.,                          &
+         requires_src_info  = .true.,                  &
          flux_gas       = .true.,                      &
-         flux_gas_type  = 'air_sea_gas_flux_generic',                  &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
+         flux_gas_type  = 'air_sea_gas_flux_generic',  &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
          flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
 
     !g_cfc_11
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'cfc_11',               &
-         longname   = 'cfc_11 Concentration', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
+    call g_tracer_add(tracer_list,package_name,        &
+         name       = 'cfc_11',                        &
+         longname   = 'cfc_11 Concentration',          &
+         units      = 'mol/kg',                        &
+         prog       = .true.,                          &
+         requires_src_info  = .true.,                  &
          flux_gas       = .true.,                      &
-         flux_gas_type  = 'air_sea_gas_flux_generic',                  &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
+         flux_gas_type  = 'air_sea_gas_flux_generic',  &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
          flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
+
 
 
   end subroutine user_add_tracers
