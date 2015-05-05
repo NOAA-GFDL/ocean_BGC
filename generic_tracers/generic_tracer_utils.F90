@@ -255,6 +255,7 @@ module g_tracer_utils
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
      integer :: src_var_record
+     real    :: src_var_unit_conversion
      logical :: requires_src_info = .false.
 
   end type g_tracer_type
@@ -345,6 +346,7 @@ module g_tracer_utils
   public :: g_tracer_set_pointer
   public :: g_tracer_print_info
   public :: g_tracer_coupler_accumulate
+  public :: g_tracer_get_src_info
 
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
@@ -849,6 +851,7 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_file",         g_tracer%src_file ,        'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_name",     g_tracer%src_var_name ,    'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit",     g_tracer%src_var_unit ,    'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit_conversion",     g_tracer%src_var_unit_conversion ,    -1.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_record",   g_tracer%src_var_record ,  -1) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
     
@@ -3475,6 +3478,10 @@ contains
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is not set in the field_table'
               call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
            endif
+          if(g_tracer%src_var_unit_conversion == -1.0) then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit_conversion is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+           endif
           if(g_tracer%src_var_record == -1) then
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_record is not set in the field_table'
               call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
@@ -3503,6 +3510,32 @@ contains
 
   end subroutine g_tracer_print_info
 
+  subroutine g_tracer_get_src_info(g_tracer_list,name,src_file, src_var_name, src_var_unit, src_var_gridspec,&
+                                   src_var_record,src_var_unit_conversion)
+    type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
+    character(len=*),         intent(in) :: name
+    character(len=*),         intent(out):: src_file, src_var_name, src_var_unit, src_var_gridspec
+    integer,                  intent(out):: src_var_record
+    real,                     intent(out):: src_var_unit_conversion
 
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_src_info'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+    !Find the node which has name=name
+    call g_tracer_find(g_tracer,name)
+    if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list with name="//trim(name))
+
+    src_file = g_tracer%src_file
+    src_var_name = g_tracer%src_var_name
+    src_var_unit = g_tracer%src_var_unit
+    src_var_gridspec = g_tracer%src_var_gridspec
+    src_var_record = g_tracer%src_var_record
+    src_var_unit_conversion = g_tracer%src_var_unit_conversion
+
+  end subroutine g_tracer_get_src_info
 
 end module g_tracer_utils
