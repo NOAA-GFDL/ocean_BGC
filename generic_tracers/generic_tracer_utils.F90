@@ -1272,9 +1272,10 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine g_tracer_coupler_get(g_tracer_list,IOB_struc)
+  subroutine g_tracer_coupler_get(g_tracer_list,IOB_struc, weight)
     type(g_tracer_type),          pointer :: g_tracer_list, g_tracer 
     type(coupler_2d_bc_type),    intent(in) :: IOB_struc
+    real,               optional,intent(in) :: weight
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_get'
     real, dimension(:,:), allocatable :: temp_array,stf_array,stf_gas_array,deltap_array, kw_array
@@ -1352,10 +1353,10 @@ contains
                is=g_tracer_com%isc, ie=g_tracer_com%iec, &
                js=g_tracer_com%jsc, je=g_tracer_com%jec)
 
-          stf_array = stf_array+temp_array !flux_drydep contributes to %stf
+          stf_array = stf_array+temp_array !flux_drydep contributes to %stf 
 
           call g_tracer_set_values(g_tracer,g_tracer%name,'drydep',temp_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        if(g_tracer%flux_wetdep) then
@@ -1372,7 +1373,7 @@ contains
           stf_array = stf_array+temp_array  !flux_wetdep contributes to %stf
 
           call g_tracer_set_values(g_tracer,g_tracer%name,'wetdep',temp_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        if(g_tracer%flux_runoff) then
@@ -1387,7 +1388,7 @@ contains
                js=g_tracer_com%jsc, je=g_tracer_com%jec)
 
           call g_tracer_set_values(g_tracer,g_tracer%name,'trunoff',temp_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        !Any of the following fluxes contribute to %stf
@@ -1397,17 +1398,17 @@ contains
 
        if(g_tracer%flux_gas .or. g_tracer%flux_drydep .or. g_tracer%flux_wetdep .or. g_tracer%flux_runoff ) then
           call g_tracer_set_values(g_tracer,g_tracer%name,'stf',stf_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        if(g_tracer%flux_gas) then
           call g_tracer_set_values(g_tracer,g_tracer%name,'stf_gas',stf_gas_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
           if(g_tracer%flux_gas_type .eq. 'air_sea_gas_flux_generic') then
              call g_tracer_set_values(g_tracer,g_tracer%name,'deltap',deltap_array,&
-                  g_tracer_com%isd,g_tracer_com%jsd)
+                  g_tracer_com%isd,g_tracer_com%jsd, weight)
              call g_tracer_set_values(g_tracer,g_tracer%name,'kw',kw_array,&
-                  g_tracer_com%isd,g_tracer_com%jsd)
+                  g_tracer_com%isd,g_tracer_com%jsd, weight)
           endif
        endif
 
@@ -1420,17 +1421,14 @@ contains
 
   end subroutine g_tracer_coupler_get
 
-  subroutine g_tracer_coupler_accumulate(g_tracer_list,weight,IOB_struc_in,IOB_struc_out)
+  subroutine g_tracer_coupler_accumulate(g_tracer_list,weight,IOB_struc)
     type(g_tracer_type),          pointer    :: g_tracer_list, g_tracer 
     real,                        intent(in)  :: weight
-    type(coupler_2d_bc_type),    intent(in)  :: IOB_struc_in
-    type(coupler_2d_bc_type),    intent(out) :: IOB_struc_out
+    type(coupler_2d_bc_type),    intent(in)  :: IOB_struc
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_accumulate'
-    real, dimension(:,:), allocatable :: temp_array,stf_array,stf_gas_array,deltap_array, kw_array
 
-    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
-         ": No tracer in the list.")
+    call g_tracer_coupler_get(g_tracer_list,IOB_struc, weight = weight )
 
   end subroutine g_tracer_coupler_accumulate
 
@@ -1894,13 +1892,15 @@ contains
 
   !Overload interface g_tracer_set_values for 2D fields
 
-  subroutine g_tracer_set_2D(g_tracer_list,name,member,array,isd,jsd)
+  subroutine g_tracer_set_2D(g_tracer_list,name,member,array,isd,jsd,weight)
     character(len=*),         intent(in) :: name
     character(len=*),         intent(in) :: member
-    type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer
-    integer,                  intent(in) :: isd,jsd
+    type(g_tracer_type),      pointer    :: g_tracer_list, g_tracer
+    integer,                   intent(in) :: isd,jsd
     real, dimension(isd:,jsd:),intent(in) :: array
+    real, optional            ,intent(in) :: weight
 
+    real :: w0,w1
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_set_2D'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
@@ -1913,33 +1913,40 @@ contains
     if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list with name="//trim(name))
 
+    w0=0
+    w1=1
+    if(present(weight)) then
+       w0=weight
+       w1=1.-w0
+    endif
+
     select case(member)
     case ('alpha') 
-       g_tracer%alpha  = array 
+       g_tracer%alpha  = w0*g_tracer%alpha + w1*array
     case ('csurf')
-       g_tracer%csurf  = array
+       g_tracer%csurf  = w0*g_tracer%csurf + w1*array
     case ('sc_no')
-       g_tracer%sc_no  = array
+       g_tracer%sc_no  = w0*g_tracer%sc_no + w1*array
     case ('stf') 
-       g_tracer%stf    = array
+       g_tracer%stf    = w0*g_tracer%stf + w1*array
     case ('stf_gas') 
-       g_tracer%stf_gas= array
+       g_tracer%stf_gas= w0*g_tracer%stf_gas + w1*array
     case ('deltap') 
-       g_tracer%deltap = array
+       g_tracer%deltap = w0*g_tracer%deltap + w1*array
     case ('kw') 
-       g_tracer%kw     = array
+       g_tracer%kw     = w0*g_tracer%kw + w1*array
     case ('btf') 
-       g_tracer%btf    = array
+       g_tracer%btf    = w0*g_tracer%btf + w1*array
     case ('btm_reservoir') 
-       g_tracer%btm_reservoir = array
+       g_tracer%btm_reservoir = w0*g_tracer%btm_reservoir + w1*array
     case ('trunoff')
-       g_tracer%trunoff = array
+       g_tracer%trunoff = w0*g_tracer%trunoff + w1*array
     case ('runoff_tracer_flux')
-       g_tracer%runoff_tracer_flux = array
+       g_tracer%runoff_tracer_flux = w0*g_tracer%runoff_tracer_flux + w1*array
     case ('drydep')
-       g_tracer%drydep = array
+       g_tracer%drydep = w0*g_tracer%drydep + w1*array
     case ('wetdep')
-       g_tracer%wetdep = array
+       g_tracer%wetdep = w0*g_tracer%wetdep + w1*array
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
