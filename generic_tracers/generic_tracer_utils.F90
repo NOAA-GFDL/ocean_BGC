@@ -1933,8 +1933,8 @@ contains
     w0=0
     w1=1
     if(present(weight)) then
-       w0=weight
-       w1=1.-w0
+       w1=weight
+       w0=1.-w1
     endif
 
     select case(member)

@@ -320,6 +320,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     type(coupler_2d_bc_type), intent(in)    :: IOB_struc
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_get'
+
+    if(.NOT. associated(tracer_list)) return
     !All generic tracers
     !Update tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
     call g_tracer_coupler_get(tracer_list,IOB_struc)
