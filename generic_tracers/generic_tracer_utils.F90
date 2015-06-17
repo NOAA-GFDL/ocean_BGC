@@ -1438,10 +1438,10 @@ contains
 
   end subroutine g_tracer_coupler_get
 
-  subroutine g_tracer_coupler_accumulate(g_tracer_list,weight,IOB_struc)
+  subroutine g_tracer_coupler_accumulate(g_tracer_list,IOB_struc, weight)
     type(g_tracer_type),          pointer    :: g_tracer_list, g_tracer 
-    real,                        intent(in)  :: weight
     type(coupler_2d_bc_type),    intent(in)  :: IOB_struc
+    real,                        intent(in)  :: weight
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_accumulate'
 

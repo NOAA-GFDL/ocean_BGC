@@ -321,7 +321,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_get'
 
-    if(.NOT. associated(tracer_list)) return
+    if(.NOT. do_generic_tracer) return
+
     !All generic tracers
     !Update tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
     call g_tracer_coupler_get(tracer_list,IOB_struc)
@@ -345,13 +346,13 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
   end subroutine generic_tracer_coupler_get
 
-  subroutine  generic_tracer_coupler_accumulate(weight,IOB_struc)
-    real,                     intent(in)    :: weight
+  subroutine  generic_tracer_coupler_accumulate(IOB_struc, weight)
     type(coupler_2d_bc_type), intent(in)    :: IOB_struc
+    real,                     intent(in)    :: weight
 
     !All generic tracers
     !Running average tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
-    if(do_generic_tracer) call g_tracer_coupler_accumulate(tracer_list,weight,IOB_struc)
+    if(do_generic_tracer) call g_tracer_coupler_accumulate(tracer_list,IOB_struc,weight)
 
   end subroutine generic_tracer_coupler_accumulate
 
