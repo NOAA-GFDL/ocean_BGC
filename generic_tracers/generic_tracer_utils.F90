@@ -3449,8 +3449,7 @@ contains
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_print_info'
     character(len=256) :: errorstring
 
-    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
-         ": No tracer in the list.")
+    if(.NOT. associated(g_tracer_list)) return
 
     write(errorstring, '(a)')  ': Dumping generic tracer namelists tree: '
     call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
@@ -3507,7 +3506,8 @@ contains
     if(errorstring .ne. '') then
        call flush(stdout())
        call mpp_sync()
-       call mpp_error(FATAL, trim(sub_name) // ' : there are tracers with required source properties that are not set in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!'  )
+       !The following cannot be FATAL for backward compatibility with MOM5 and GOLD
+       call mpp_error(WARNING, trim(sub_name) // ' : there are tracers with required source properties that are not set in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!'  )
     endif
 
     write(errorstring, '(a,i4)')  ': Number of prognostic generic tracers = ',num_prog
