@@ -3504,8 +3504,6 @@ contains
     enddo
 
     if(errorstring .ne. '') then
-       call flush(stdout())
-       call mpp_sync()
        !The following cannot be FATAL for backward compatibility with MOM5 and GOLD
        call mpp_error(WARNING, trim(sub_name) // ' : there are tracers with required source properties that are not set in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!'  )
     endif
