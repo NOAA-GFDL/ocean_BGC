@@ -255,8 +255,8 @@ module g_tracer_utils
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
      integer :: src_var_record
-     real    :: src_var_unit_conversion
      logical :: requires_src_info = .false.
+     real    :: src_var_unit_conversion = 1.0 !This factor depends on the tracer. Ask  Jasmin
 
   end type g_tracer_type
 
@@ -794,7 +794,6 @@ contains
     endif
 
     if(present(init_value))  g_tracer%initial_value = init_value
-    if(present(requires_src_info))  g_tracer%requires_src_info = requires_src_info 
 
     !
     !Determine the fluxes 
@@ -848,10 +847,15 @@ contains
 
     if(present(sink_rate)) g_tracer%sink_rate = sink_rate
 
+    if(present(requires_src_info)) then
+       g_tracer%requires_src_info = requires_src_info 
+    elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' ) then
+       g_tracer%requires_src_info = .true.
+    endif
+       
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_file",         g_tracer%src_file ,        'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_name",     g_tracer%src_var_name ,    'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit",     g_tracer%src_var_unit ,    'NULL') 
-    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit_conversion",     g_tracer%src_var_unit_conversion ,    -1.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_record",   g_tracer%src_var_record ,  -1) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
     
@@ -3474,28 +3478,64 @@ contains
        if(g_tracer%requires_src_info) then 
           if(g_tracer%src_file .eq. 'NULL') then
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_file is not set in the field_table'
-              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
-           endif
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
           if(g_tracer%src_var_name .eq. 'NULL') then
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_name is not set in the field_table'
-              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
-           endif
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+
           if(g_tracer%src_var_unit .eq. 'NULL') then
-              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is not set in the field_table'
-              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
-           endif
-          if(g_tracer%src_var_unit_conversion == -1.0) then
-              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit_conversion is not set in the field_table'
-              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
-           endif
+             write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is not set in the field_table'
+             call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          elseif(g_tracer%src_var_unit .eq. 'none') then
+             g_tracer%src_var_unit_conversion = 1.0
+          elseif(g_tracer%src_var_unit .eq. 'ppt') then
+             g_tracer%src_var_unit_conversion = 1.0e-12
+          elseif(g_tracer%src_var_unit .eq. 'milliliters_per_liter') then
+             select case (trim(g_tracer%name))
+             case('o2')  
+                g_tracer%src_var_unit_conversion = (1000.0/22391.6)/1035.0
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          elseif(g_tracer%src_var_unit .eq. 'micromoles_per_liter') then
+             select case (trim(g_tracer%name))
+             case('no3')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0350e3
+             case('po4')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0350e3
+             case('sio4')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0350e3
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          elseif(g_tracer%src_var_unit .eq. 'micromoles_per_kg') then
+             select case (trim(g_tracer%name))
+             case('alk')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dic')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          else 
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is set in the field_table to '//&
+                trim(g_tracer%src_var_unit)//". Cannot determine how to convert this!"
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring))              
+          endif
+
           if(g_tracer%src_var_record == -1) then
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_record is not set in the field_table'
               call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
-           endif
+          endif
           if(g_tracer%src_var_gridspec .eq. 'NULL') then
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_gridspec is not set in the field_table'
               call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
-           endif
+          endif
        endif
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next))  exit
@@ -3516,12 +3556,11 @@ contains
   end subroutine g_tracer_print_info
 
   subroutine g_tracer_get_src_info(g_tracer_list,name,src_file, src_var_name, src_var_unit, src_var_gridspec,&
-                                   src_var_record,src_var_unit_conversion)
+                                   src_var_record)
     type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
     character(len=*),         intent(in) :: name
     character(len=*),         intent(out):: src_file, src_var_name, src_var_unit, src_var_gridspec
     integer,                  intent(out):: src_var_record
-    real,                     intent(out):: src_var_unit_conversion
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_src_info'
 
@@ -3539,7 +3578,6 @@ contains
     src_var_unit = g_tracer%src_var_unit
     src_var_gridspec = g_tracer%src_var_gridspec
     src_var_record = g_tracer%src_var_record
-    src_var_unit_conversion = g_tracer%src_var_unit_conversion
 
   end subroutine g_tracer_get_src_info
 
