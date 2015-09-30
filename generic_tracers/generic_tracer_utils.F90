@@ -3503,11 +3503,11 @@ contains
           elseif(g_tracer%src_var_unit .eq. 'micromoles_per_liter') then
              select case (trim(g_tracer%name))
              case('no3')
-                g_tracer%src_var_unit_conversion = 1.0 / 1.0350e3
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
              case('po4')
-                g_tracer%src_var_unit_conversion = 1.0 / 1.0350e3
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
              case('sio4')
-                g_tracer%src_var_unit_conversion = 1.0 / 1.0350e3
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
                 call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 

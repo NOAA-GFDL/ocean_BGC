@@ -301,7 +301,7 @@ contains
          longname   = 'cfc_12 Concentration',          &
          units      = 'mol/kg',                        &
          prog       = .true.,                          &
-         requires_src_info  = .true.,                  &
+         requires_src_info  = .false.,                  &
          flux_gas       = .true.,                      &
          flux_gas_type  = 'air_sea_gas_flux_generic',  &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
@@ -313,7 +313,7 @@ contains
          longname   = 'cfc_11 Concentration',          &
          units      = 'mol/kg',                        &
          prog       = .true.,                          &
-         requires_src_info  = .true.,                  &
+         requires_src_info  = .false.,                  &
          flux_gas       = .true.,                      &
          flux_gas_type  = 'air_sea_gas_flux_generic',  &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
