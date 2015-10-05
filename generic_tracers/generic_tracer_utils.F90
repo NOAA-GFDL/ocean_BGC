@@ -257,6 +257,8 @@ module g_tracer_utils
      integer :: src_var_record
      logical :: requires_src_info = .false.
      real    :: src_var_unit_conversion = 1.0 !This factor depends on the tracer. Ask  Jasmin
+     real    :: src_var_valid_min = 0.0
+     real    :: src_var_valid_max  
 
   end type g_tracer_type
 
@@ -858,6 +860,8 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit",     g_tracer%src_var_unit ,    'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_record",   g_tracer%src_var_record ,  -1) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
     
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
@@ -3536,6 +3540,17 @@ contains
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_gridspec is not set in the field_table'
               call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
           endif
+
+          if(g_tracer%src_var_valid_min == -99.0 ) then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_valid_min is not set in the field_table'
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+!          if(g_tracer%src_var_valid_max == -99.0 ) then
+!              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_valid_max is not set in the field_table'
+!              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+!          endif
+
+
        endif
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next))  exit
@@ -3556,11 +3571,12 @@ contains
   end subroutine g_tracer_print_info
 
   subroutine g_tracer_get_src_info(g_tracer_list,name,src_file, src_var_name, src_var_unit, src_var_gridspec,&
-                                   src_var_record)
+                                   src_var_record, src_var_valid_min, src_var_valid_max)
     type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
     character(len=*),         intent(in) :: name
     character(len=*),         intent(out):: src_file, src_var_name, src_var_unit, src_var_gridspec
     integer,                  intent(out):: src_var_record
+    real,                     intent(out):: src_var_valid_min, src_var_valid_max
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_src_info'
 
@@ -3578,6 +3594,8 @@ contains
     src_var_unit = g_tracer%src_var_unit
     src_var_gridspec = g_tracer%src_var_gridspec
     src_var_record = g_tracer%src_var_record
+    src_var_valid_min = g_tracer%src_var_valid_min
+    src_var_valid_max = g_tracer%src_var_valid_max
 
   end subroutine g_tracer_get_src_info
 
