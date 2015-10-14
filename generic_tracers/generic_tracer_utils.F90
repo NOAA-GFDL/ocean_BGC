@@ -851,8 +851,8 @@ contains
 
     if(present(requires_src_info)) then
        g_tracer%requires_src_info = requires_src_info 
-    elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' ) then
-       g_tracer%requires_src_info = .true.
+    elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' ) then !Niki: later we can make this just else
+       call  g_tracer_add_param('enforce_src_info', g_tracer%requires_src_info ,  .true.) 
     endif
        
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_file",         g_tracer%src_file ,        'NULL') 
