@@ -448,6 +448,9 @@ module generic_COBALT
 
      logical  ::       &
           init,             &                  ! If tracers should be initializated
+          force_update_fluxes,&                ! If OCMIP2 tracers fluxes should be updated every coupling timesteps
+                                               !    when update_from_source is not called every coupling timesteps
+                                               !    as is the case with MOM6  THERMO_SPANS_COUPLING option
           p_2_n_static,     &                  ! If P:N is fixed in phytoplankton
           tracer_debug
 
@@ -1062,9 +1065,16 @@ contains
   !   Pointer to the head of generic tracer list.
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_COBALT_init(tracer_list)
+  subroutine generic_COBALT_init(tracer_list, force_update_fluxes)
     type(g_tracer_type), pointer :: tracer_list
+    logical          ,intent(in) :: force_update_fluxes
+
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_init'
+
+    !There are situations where the column_physics (update_from_source) is not called every timestep 
+    ! such as when MOM6 THERMO_SPANS_COUPLING=True , yet we want the fluxes to be updated every timestep
+    ! In that case we can force an update by setting the namelist generic_tracer_nml:force_update_fluxes=.true.
+    cobalt%force_update_fluxes = force_update_fluxes
 
     !Specify and initialize all parameters used by this package
     call user_add_params
@@ -7233,7 +7243,7 @@ contains
     !      This zeroing is done for non-generic TOPAZ by calling zero_ocean_sfc.
     !      Since the coupler values here are non-cumulative there is no need to zero them out anyway.
 
-    if (cobalt%init ) then
+    if (cobalt%init .OR. cobalt%force_update_fluxes) then
        !Get necessary fields
        call g_tracer_get_pointer(tracer_list,'dic'   ,'field', dic_field)
        call g_tracer_get_pointer(tracer_list,'po4'   ,'field', po4_field)

@@ -118,11 +118,11 @@ module generic_tracer
   !Ensure these pointers are "save"d between the calls
   type(g_diag_type), save, pointer :: diag_list => NULL()
 
-  logical, save :: do_generic_tracer = .false.
+  logical :: do_generic_tracer = .false.
+  logical :: force_update_fluxes = .false.
 
-  !JGJ 2013/05/31  merged COBALT into siena_201303
   namelist /generic_tracer_nml/ do_generic_tracer, do_generic_age, do_generic_argon, do_generic_CFC, do_generic_SF6, do_generic_TOPAZ,    &
-       do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT
+       do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, force_update_fluxes
 
 contains
 
@@ -261,7 +261,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
          call generic_miniBLING_init(tracer_list)
 
     if(do_generic_COBALT) &
-         call generic_COBALT_init(tracer_list)
+         call generic_COBALT_init(tracer_list, force_update_fluxes)
 
   end subroutine generic_tracer_init
 
@@ -346,13 +346,14 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
   end subroutine generic_tracer_coupler_get
 
-  subroutine  generic_tracer_coupler_accumulate(IOB_struc, weight)
+  subroutine  generic_tracer_coupler_accumulate(IOB_struc, weight, model_time)
     type(coupler_2d_bc_type), intent(in)    :: IOB_struc
     real,                     intent(in)    :: weight
+    type(time_type), optional,intent(in)    :: model_time
 
     !All generic tracers
     !Running average tracer boundary values (%stf and %triver) from coupler fluxes foreach tracer in the prog_tracer_list
-    if(do_generic_tracer) call g_tracer_coupler_accumulate(tracer_list,IOB_struc,weight)
+    if(do_generic_tracer) call g_tracer_coupler_accumulate(tracer_list,IOB_struc,weight, model_time)
 
   end subroutine generic_tracer_coupler_accumulate
 

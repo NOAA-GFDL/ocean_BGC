@@ -225,6 +225,7 @@ module g_tracer_utils
 
      ! IDs for using diag_manager tools
      integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
+     integer :: diag_id_stf_gas_aux=-1
      integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_sc_no=-1, diag_id_aux=-1
      integer :: diag_id_btf=-1,diag_id_btm=-1, diag_id_vmove=-1, diag_id_vdiff=-1
      integer :: diag_id_vdiffuse_impl = -1, diag_id_tendency = -1, diag_id_field_taup1 = -1
@@ -1109,6 +1110,15 @@ contains
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+20)
 
+    string=trim(g_tracer%alias) // trim("_stf_gas_aux")
+    g_tracer%diag_id_stf_gas_aux = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Auxilliary Gas exchange flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
+         trim('mole/m^2/sec'),         &
+         missing_value = -1.0e+20)
+
     string=trim(g_tracer%alias) // trim("_deltap")
     g_tracer%diag_id_deltap = register_diag_field(g_tracer%package_name, &
          trim(string),                 &
@@ -1297,11 +1307,12 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine g_tracer_coupler_get(g_tracer_list,IOB_struc, weight)
+  subroutine g_tracer_coupler_get(g_tracer_list,IOB_struc, weight, model_time)
     type(g_tracer_type),          pointer :: g_tracer_list, g_tracer 
     type(coupler_2d_bc_type),    intent(in) :: IOB_struc
+    type(time_type),    optional,intent(in) :: model_time
     real,               optional,intent(in) :: weight
-
+    logical :: used
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_get'
     real, dimension(:,:), allocatable :: temp_array,stf_array,stf_gas_array,deltap_array, kw_array
 
@@ -1437,6 +1448,15 @@ contains
           endif
        endif
 
+       if(present(model_time)) then
+       if (g_tracer%diag_id_stf_gas_aux .gt. 0 .and. _ALLOCATED(g_tracer%stf_gas)) then
+          used = send_data(g_tracer%diag_id_stf_gas_aux, g_tracer%stf_gas(:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+       endif
+       endif
+
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next)) exit
        g_tracer => g_tracer%next
@@ -1446,14 +1466,15 @@ contains
 
   end subroutine g_tracer_coupler_get
 
-  subroutine g_tracer_coupler_accumulate(g_tracer_list,IOB_struc, weight)
+  subroutine g_tracer_coupler_accumulate(g_tracer_list,IOB_struc, weight, model_time)
     type(g_tracer_type),          pointer    :: g_tracer_list, g_tracer 
     type(coupler_2d_bc_type),    intent(in)  :: IOB_struc
     real,                        intent(in)  :: weight
+    type(time_type), optional,   intent(in)  :: model_time
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_accumulate'
 
-    call g_tracer_coupler_get(g_tracer_list,IOB_struc, weight = weight )
+    call g_tracer_coupler_get(g_tracer_list,IOB_struc, weight = weight, model_time=model_time )
 
   end subroutine g_tracer_coupler_accumulate
 
