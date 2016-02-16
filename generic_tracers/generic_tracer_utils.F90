@@ -253,6 +253,7 @@ module g_tracer_utils
      integer :: flux_wetdep_ind = -1
      integer :: flux_drydep_ind = -1
 
+     logical :: requires_restart = .true.
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
      integer :: src_var_record
@@ -794,6 +795,7 @@ contains
     if(present(const_init_value)) then
        g_tracer%const_init_value = const_init_value
        g_tracer%initial_value = const_init_value
+       g_tracer%requires_restart = .false.
     endif
 
     if(present(init_value))  g_tracer%initial_value = init_value

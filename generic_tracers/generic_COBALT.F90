@@ -783,6 +783,7 @@ module generic_COBALT
           runoff_flux_sldop,&
           runoff_flux_srdop,&
           dry_fed, wet_fed,&
+          dry_esm_dust, wet_esm_dust,&
           dry_lith, wet_lith,&
           dry_no3, wet_no3,&
           dry_nh4, wet_nh4,&
@@ -839,6 +840,8 @@ module generic_COBALT
           id_dep_wet_po4   = -1,       &
           id_dep_wet_lith  = -1,       &
           id_dep_dry_lith  = -1,       &
+          id_dep_dry_esm_dust   = -1,  &
+          id_dep_wet_esm_dust   = -1,  &
           id_omega_arag    = -1,       &
           id_omega_calc    = -1,       &
           id_chl           = -1,       &
@@ -2136,6 +2139,14 @@ contains
     !
     !  Save river, depositon and bulk elemental fluxes
     !
+
+    vardesc_temp = vardesc("dep_wet_esm_dust","Wet Deposition of Iron to the ocean",'h','1','s','kg m-2 s-1','f')
+    cobalt%id_dep_wet_esm_dust = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("dep_dry_esm_dust","Dry Deposition of dust to the ocean",'h','1','s','kg m-2 s-1','f')
+    cobalt%id_dep_dry_esm_dust = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("dep_dry_fed","Dry Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_dry_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
@@ -3668,6 +3679,21 @@ contains
          units      = 'mol/kg',   &
          prog       = .true.     ) 
 
+    !
+    !       esm_dust
+    !
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'esm_dust',       &
+         longname   = 'has ATM dust flux', &
+         units      = 'N/A',    &
+         prog       = .true.,      &
+         const_init_value = 9.999999999999 ,&
+         requires_src_info= .false.,      & 
+         flux_wetdep= .true.,      &
+         flux_drydep= .true.,      &
+         flux_bottom= .false.,      &
+         flux_runoff= .false.,      &
+         flux_param = (/ 1.0 /) ) !If ATM flux is 1.0 the dep_dry flux becomes -1*flux_param(1)
     !===========================================================
     !Diagnostic Tracers
     !===========================================================
@@ -6110,6 +6136,8 @@ contains
     call g_tracer_get_pointer(tracer_list,'fed','runoff_tracer_flux',cobalt%runoff_flux_fed)
     call g_tracer_get_pointer(tracer_list,'fed','drydep',cobalt%dry_fed)
     call g_tracer_get_pointer(tracer_list,'fed','wetdep',cobalt%wet_fed)
+    call g_tracer_get_pointer(tracer_list,'esm_dust','drydep',cobalt%dry_esm_dust)
+    call g_tracer_get_pointer(tracer_list,'esm_dust','wetdep',cobalt%wet_esm_dust)
     call g_tracer_get_pointer(tracer_list,'lith','drydep',cobalt%dry_lith)
     call g_tracer_get_pointer(tracer_list,'lith','wetdep',cobalt%wet_lith)
     call g_tracer_get_pointer(tracer_list,'lith','runoff_tracer_flux',cobalt%runoff_flux_lith)
@@ -6860,6 +6888,14 @@ contains
     ! 
     ! Save river, depositon and bulk elemental fluxes
     !
+    if (cobalt%id_dep_dry_esm_dust .gt. 0)     &
+       used = send_data(cobalt%id_dep_dry_esm_dust, cobalt%dry_esm_dust,                          &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_dep_wet_esm_dust .gt. 0)     &
+       used = send_data(cobalt%id_dep_wet_esm_dust, cobalt%wet_esm_dust,                          &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_fed .gt. 0)     &
        used = send_data(cobalt%id_dep_dry_fed, cobalt%dry_fed,                          &
        model_time, rmask = grid_tmask(:,:,1),&
