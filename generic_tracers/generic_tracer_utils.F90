@@ -1053,14 +1053,6 @@ contains
 
     character(len=fm_string_len) :: string
 
-!    g_tracer%diag_id_field = g_register_diag_field(trim(g_tracer%package_name)//'_z_new', &
-!         trim(g_tracer%alias),         &
-!         g_tracer_com%axes(1:3),       &
-!         g_tracer_com%init_time,       &
-!         trim(g_tracer%longname),      &
-!         trim(g_tracer%units),         &
-!         missing_value = -1.0e+20)
-
     g_tracer%diag_id_field = g_register_diag_field(g_tracer%package_name, &
          trim(g_tracer%alias),         &
          g_tracer_com%axes(1:3),       &
@@ -3718,7 +3710,7 @@ contains
             cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
             x_cell_method, y_cell_method, v_cell_method)
     elseif(size(axes) .eq. 2) then
-       g_register_diag_field = register_diag_field_MOM(module_name, field_name, diag_CS_ptr%axesT1, init_time,&
+       g_register_diag_field = register_diag_field_MOM(trim(module_name), field_name, diag_CS_ptr%axesT1, init_time,&
             long_name, units, missing_value, range, mask_variant, standard_name,      &
             verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
             cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
