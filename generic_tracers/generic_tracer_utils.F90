@@ -30,7 +30,6 @@ module g_tracer_utils
   use field_manager_mod, only: fm_dump_list, fm_loop_over_list
 
   use fms_mod,           only: stdout
-  use diag_manager_mod, only : register_diag_field, send_data
 
 #ifdef _USE_MOM6_DIAG
     use MOM_diag_mediator, only : register_diag_field_MOM=>register_diag_field
@@ -3474,7 +3473,7 @@ contains
     type(g_diag_type), pointer :: g_diag => NULL()
     
     !diag register with the original name
-    diag_id = register_diag_field(package_name, name, axes, init_time, longname,units, missing_value = missing_value)
+    diag_id = g_register_diag_field(package_name, name, axes, init_time, longname,units, missing_value = missing_value)
 
     !===================================================================
     !Add this diagnostics to the list that is going to be used later (by GOLD) 
@@ -3693,25 +3692,26 @@ contains
 
 #ifdef _USE_MOM6_DIAG
     type(g_diag_ctrl), pointer :: diag_CS_ptr 
+    real :: MOM_missing_value
     
     if(present(diag_CS)) then
        diag_CS_ptr => diag_CS
     else
-       call mpp_error(WARNING, trim(sub_name)//&
-            ": the diag_CD argument is not present and the model is compiled with _USE_MOM6_DIAG for "//trim(field_name))
-       
+!       call mpp_error(NOTE, trim(sub_name)//&
+!            ": the diag_CD argument is not present and the model is compiled with _USE_MOM6_DIAG for "//trim(field_name))
+       !This is not thread-safe. It has to be fixed later.
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-
+    MOM_missing_value = diag_CS_ptr%missing_value
     if(size(axes) .eq. 3) then
        g_register_diag_field = register_diag_field_MOM(trim(module_name), field_name, diag_CS_ptr%axesTL, init_time,&
-            long_name, units, missing_value, range, mask_variant, standard_name,      &
+            long_name, units, MOM_missing_value, range, mask_variant, standard_name,      &
             verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
             cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
             x_cell_method, y_cell_method, v_cell_method)
     elseif(size(axes) .eq. 2) then
        g_register_diag_field = register_diag_field_MOM(trim(module_name), field_name, diag_CS_ptr%axesT1, init_time,&
-            long_name, units, missing_value, range, mask_variant, standard_name,      &
+            long_name, units, MOM_missing_value, range, mask_variant, standard_name,      &
             verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
             cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
             x_cell_method, y_cell_method, v_cell_method)

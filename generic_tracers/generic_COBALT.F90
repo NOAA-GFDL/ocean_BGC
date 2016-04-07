@@ -92,7 +92,6 @@ module generic_COBALT
   use mpp_mod,           only: CLOCK_COMPONENT, CLOCK_SUBCOMPONENT, CLOCK_MODULE
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
-  use diag_manager_mod,  only: register_diag_field, send_data 
   use constants_mod,     only: WTMCO2, WTMO2
   use fms_mod,           only: write_version_number, FATAL, WARNING, stdout, stdlog
 
@@ -103,6 +102,8 @@ module generic_COBALT
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get
   use g_tracer_utils, only : g_tracer_get_values  
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
+  use g_tracer_utils, only : register_diag_field=>g_register_diag_field
+  use g_tracer_utils, only : send_data=>g_send_data
 
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
