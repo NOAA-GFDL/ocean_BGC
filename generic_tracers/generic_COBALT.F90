@@ -178,7 +178,8 @@ module generic_COBALT
           jaggloss_fe , &  
           jaggloss_n  , & 
           jaggloss_p  , &
-          jaggloss_sio2,& 
+          jaggloss_sio2,&
+          agg_lim      ,& 
           jvirloss_fe , & 
           jvirloss_n  , & 
           jvirloss_p  , & 
@@ -198,7 +199,9 @@ module generic_COBALT
           juptake_sio4, &
           jprod_n     , & 
           liebig_lim  , & 
-          mu          , & 
+          mu          , &
+          f_mu_mem    , &
+          mu_mix      , & 
           nh4lim      , & 
           no3lim      , & 
           po4lim      , &
@@ -220,7 +223,8 @@ module generic_COBALT
           id_jaggloss_fe  = -1, &
           id_jaggloss_n   = -1, &
           id_jaggloss_p   = -1, &
-          id_jaggloss_sio2= -1, & 
+          id_jaggloss_sio2= -1, &
+          id_agg_lim      = -1, & 
           id_jvirloss_fe  = -1, & 
           id_jvirloss_n   = -1, &
           id_jvirloss_p   = -1, &
@@ -241,6 +245,8 @@ module generic_COBALT
           id_jprod_n      = -1, & 
           id_liebig_lim   = -1, &
           id_mu           = -1, &
+          id_f_mu_mem     = -1, &
+          id_mu_mix       = -1, &
           id_nh4lim       = -1, &
           id_no3lim       = -1, &
           id_po4lim       = -1, &
@@ -442,6 +448,9 @@ module generic_COBALT
 
      logical  ::       &
           init,             &                  ! If tracers should be initializated
+          force_update_fluxes,&                ! If OCMIP2 tracers fluxes should be updated every coupling timesteps
+                                               !    when update_from_source is not called every coupling timesteps
+                                               !    as is the case with MOM6  THERMO_SPANS_COUPLING option
           p_2_n_static,     &                  ! If P:N is fixed in phytoplankton
           tracer_debug
 
@@ -459,6 +468,7 @@ module generic_COBALT
           gamma_cadet_arag, & 
           gamma_cadet_calc, & 
           gamma_irr_mem,    &
+          gamma_mu_mem,     &
           gamma_ndet,       &
           gamma_nitrif,     &
           gamma_sidet,      &
@@ -573,7 +583,7 @@ module generic_COBALT
           f_chl,&
           f_co3_ion,&
           f_htotal,&
-          f_irr_mem,&       
+          f_irr_mem,&
           f_cased,&
           f_cadet_arag_btf,&
           f_cadet_calc_btf,&
@@ -655,7 +665,7 @@ module generic_COBALT
           hp_jingest_p,&
           hp_jingest_fe,&
           hp_jingest_sio2,&
-          irr_inst,&	
+          irr_inst,&
           irr_mix,&
           jno3denit_wc,&
           jnitrif,&
@@ -1055,9 +1065,16 @@ contains
   !   Pointer to the head of generic tracer list.
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_COBALT_init(tracer_list)
+  subroutine generic_COBALT_init(tracer_list, force_update_fluxes)
     type(g_tracer_type), pointer :: tracer_list
+    logical          ,intent(in) :: force_update_fluxes
+
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_init'
+
+    !There are situations where the column_physics (update_from_source) is not called every timestep 
+    ! such as when MOM6 THERMO_SPANS_COUPLING=True , yet we want the fluxes to be updated every timestep
+    ! In that case we can force an update by setting the namelist generic_tracer_nml:force_update_fluxes=.true.
+    cobalt%force_update_fluxes = force_update_fluxes
 
     !Specify and initialize all parameters used by this package
     call user_add_params
@@ -1168,6 +1185,30 @@ contains
     phyto(SMALL)%id_mu = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("mu_mem_Di","Diaz. Phyto. Growth Memory",'h','L','s','s-1','f')
+    phyto(DIAZO)%id_f_mu_mem = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("mu_mem_Lg","Large Phyto. Growth memory",'h','L','s','s-1','f')
+    phyto(LARGE)%id_f_mu_mem = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("mu_mem_Sm","Small Phyto. Growth Memory",'h','L','s','s-1','f')
+    phyto(SMALL)%id_f_mu_mem = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("mu_mix_Di","Diaz. Phyto. ML ave",'h','L','s','s-1','f')
+    phyto(DIAZO)%id_mu_mix = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("mu_mix_Lg","Large Phyto. ML ave",'h','L','s','s-1','f')
+    phyto(LARGE)%id_mu_mix = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("mu_mix_Sm","Small Phyto. ML ave",'h','L','s','s-1','f')
+    phyto(SMALL)%id_mu_mix = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("nh4lim_Lg","Ammonia Limitation of Large Phyto",'h','L','s','dimensionless','f')
     phyto(LARGE)%id_nh4lim = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -1257,6 +1298,22 @@ contains
                            'h','L','s','mol N m-2 s-1','f')
     phyto(SMALL)%id_jaggloss_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("agg_lim_Di","Diazotroph aggregation limitation",&
+                           'h','L','s','dimensionless','f')
+    phyto(DIAZO)%id_agg_lim = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("agg_lim_Lg","Large phyto aggregation limitation",&
+                           'h','L','s','dimensionless','f')
+    phyto(LARGE)%id_agg_lim = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("agg_lim_Sm","Small phyto aggregation limitation",&
+                           'h','L','s','dimensionless','f')
+    phyto(SMALL)%id_agg_lim= register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
 
     !
     !  Register diagnostics for phytoplankton loss terms: viruses
@@ -2935,6 +2992,7 @@ contains
     call g_tracer_add_param('thetamin_nolim', cobalt%thetamin_nolim, 0.0)                  ! g Chl g C-1
     call g_tracer_add_param('zeta', cobalt%zeta, 0.05)                                     ! dimensionless
     call g_tracer_add_param('gamma_irr_mem', cobalt%gamma_irr_mem, 1.0 / sperd)            ! s-1
+    call g_tracer_add_param('gamma_mu_mem', cobalt%gamma_mu_mem, 1.0 / sperd)              ! s-1
     !
     !-----------------------------------------------------------------------
     ! Nitrogen fixation inhibition parameters
@@ -2953,7 +3011,7 @@ contains
     call g_tracer_add_param('alk_2_n_denit', cobalt%alk_2_n_denit, 552.0/472.0)             ! eq. alk mol NO3-1
     call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static,1.0/40.0 )         ! mol P mol N-1
     call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static,1.0/16.0 )         ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static,1.0/16.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static,1.0/30.0 )         ! mol P mol N-1
     call g_tracer_add_param('si_2_n_static_Lg', phyto(LARGE)%si_2_n_static, 2.0)            ! mol Si mol N-1
     call g_tracer_add_param('si_2_n_max_Lg', phyto(LARGE)%si_2_n_max, 5.0)                  ! mol Si mol N-1
     call g_tracer_add_param('ca_2_n_arag', cobalt%ca_2_n_arag, 0.020 * 106.0 / 16.0)        ! mol Ca mol N-1
@@ -2964,7 +3022,7 @@ contains
     ! Zooplankton Stoichiometry - presently static
     !-----------------------------------------------------------------------
     !
-    call g_tracer_add_param('q_p_2_n_smz',zoo(1)%q_p_2_n, 1.0/16.0)          ! mol P mol N-1 
+    call g_tracer_add_param('q_p_2_n_smz',zoo(1)%q_p_2_n, 1.0/23.0)          ! mol P mol N-1 
     call g_tracer_add_param('q_p_2_n_mdz',zoo(2)%q_p_2_n, 1.0/16.0)          ! mol P mol N-1 
     call g_tracer_add_param('q_p_2_n_lgz',zoo(3)%q_p_2_n, 1.0/16.0)          ! mol P mol N-1 
     !
@@ -2980,7 +3038,7 @@ contains
     !-----------------------------------------------------------------------
     !
     call g_tracer_add_param('agg_Sm',phyto(SMALL)%agg,0.1*1e6 / sperd)          ! s-1 (mole N kg)-1
-    call g_tracer_add_param('agg_Di',phyto(DIAZO)%agg,  0    / sperd)            ! s-1 (mole N kg)-1
+    call g_tracer_add_param('agg_Di',phyto(DIAZO)%agg,  0.0    / sperd)            ! s-1 (mole N kg)-1
     call g_tracer_add_param('agg_Lg',phyto(LARGE)%agg,0.3*1e6/ sperd)            ! s-1 (mole N kg)-1
     !
     !-----------------------------------------------------------------------
@@ -3085,25 +3143,25 @@ contains
     ! Partitioning of zooplankton ingestion to other compartments
     !----------------------------------------------------------------------
     !
-    call g_tracer_add_param('phi_det_smz',zoo(1)%phi_det, 0.00)            ! dimensionless
+    call g_tracer_add_param('phi_det_smz',zoo(1)%phi_det, 0.05)            ! dimensionless
     call g_tracer_add_param('phi_det_mdz',zoo(2)%phi_det, 0.20)            ! dimensionless
     call g_tracer_add_param('phi_det_lgz',zoo(3)%phi_det, 0.30)            ! dimensionless
-    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, 0.55*0.30)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, 0.55*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, 0.55*0.0)      ! dimensionless
+    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, 0.57*0.25)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, 0.57*0.10)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, 0.57*0.0)      ! dimensionless
     call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, 0.45*0.30)     ! dimensionless
     call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, 0.45*0.10)     ! dimensionless
     call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, 0.45*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, 0.05*0.30)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, 0.05*0.10)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, 0.05*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, 0.15*0.30)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, 0.03*0.25)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, 0.03*0.10)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, 0.03*0.0)    ! dimensionless
+    call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, 0.15*0.25)   ! dimensionless
     call g_tracer_add_param('phi_srdop_mdz',zoo(2)%phi_srdop, 0.15*0.10)   ! dimensionless
     call g_tracer_add_param('phi_srdop_lgz',zoo(3)%phi_srdop, 0.15*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, 0.4*0.30)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, 0.4*0.25)    ! dimensionless
     call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, 0.4*0.10)    ! dimensionless
     call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, 0.4*0.0)     ! dimensionless
-    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, 0.4*0.30)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, 0.4*0.25)    ! dimensionless
     call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, 0.4*0.10)    ! dimensionless
     call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, 0.4*0.0)     ! dimensionless
     call g_tracer_add_param('phi_nh4_smz',zoo(1)%phi_nh4, 0.30)            ! dimensionless
@@ -3704,6 +3762,23 @@ contains
          units      = 'Watts/m^2',         &
          prog       = .false.              )
 
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'mu_mem_ndi',           &
+         longname   = 'Growth memory', &
+         units      = 'sec-1',         &
+         prog       = .false.              )
+
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'mu_mem_nlg',           &
+         longname   = 'Growth memory', &
+         units      = 'sec-1',         &
+         prog       = .false.              )
+
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'mu_mem_nsm',           &
+         longname   = 'Growth memory', &
+         units      = 'sec-1',         &
+         prog       = .false.              )
 
   end subroutine user_add_tracers
 
@@ -3945,7 +4020,7 @@ contains
     real :: P_C_m
     real :: p_lim_nhet
     real :: TK, PRESS, PKSPA, PKSPC
-    real :: tmp_hblt, tmp_irrad, tmp_irrad_ML,tmp_opacity
+    real :: tmp_hblt, tmp_irrad, tmp_irrad_ML,tmp_opacity,tmp_mu_ML
     real :: drho_dzt
     real, dimension(:), Allocatable   :: tmp_irr_band
     real, dimension(:,:), Allocatable :: rho_dzt_100, rho_dzt_200
@@ -3953,7 +4028,7 @@ contains
     real,dimension(1:NUM_PREY) :: hp_ipa_vec,hp_pa_vec,hp_ingest_vec
     real,dimension(1:NUM_PREY) :: prey_vec,prey_p2n_vec,prey_fe2n_vec,prey_si2n_vec
     real,dimension(1:NUM_ZOO)  :: tot_prey
-    real :: tot_prey_hp, sw_fac_denom, ingest_p2n, refuge_conc 
+    real :: tot_prey_hp, sw_fac_denom, assim_eff, refuge_conc 
     real :: bact_ldon_lim, bact_uptake_ratio, vmax_bact
     real :: fpoc_btm, log_fpoc_btm
 
@@ -4058,6 +4133,9 @@ contains
     call g_tracer_get_values(tracer_list,'nlg'    ,'field',phyto(LARGE)%f_n(:,:,:) ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'nsm' ,'field',phyto(SMALL)%f_n(:,:,:),isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'silg'   ,'field',cobalt%f_silg     ,isd,jsd,ntau=tau,positive=.true.)
+    call g_tracer_get_values(tracer_list,'mu_mem_ndi' ,'field',phyto(DIAZO)%f_mu_mem,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'mu_mem_nlg' ,'field',phyto(LARGE)%f_mu_mem,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'mu_mem_nsm' ,'field',phyto(SMALL)%f_mu_mem,isd,jsd,ntau=1)
     !
     ! zooplankton fields
     !
@@ -4214,6 +4292,8 @@ contains
              cobalt%expkT(i,j,k)*phyto(n)%bresp*                                      &
              phyto(n)%f_n(i,j,k)/(refuge_conc + phyto(n)%f_n(i,j,k))
 
+          phyto(n)%mu_mix(i,j,k) = phyto(n)%mu(i,j,k)
+
           cobalt%gross_prim_prod(i,j,k) = cobalt%gross_prim_prod(i,j,k) + P_C_m*phyto(n)%irrlim(i,j,k)* &
                                           phyto(n)%f_n(i,j,k)
           ! Negative growth assumed to go to cell death rather than respiration (see manual) 
@@ -4223,6 +4303,25 @@ contains
        cobalt%gross_prim_prod(i,j,k) = cobalt%gross_prim_prod(i,j,k)*cobalt%c_2_n*spery
        cobalt%net_prim_prod(i,j,k) = cobalt%net_prim_prod(i,j,k)*cobalt%c_2_n*spery
     enddo;  enddo ; enddo !} i,j,k
+
+    do j = jsc, jec ; do i = isc, iec ; do n = 1,NUM_PHYTO !{
+       kblt = 0 ; tmp_mu_ML = 0.0 ; tmp_hblt = 0.0
+       do k = 1, nk !{
+          if ((k == 1) .or. (tmp_hblt .lt. hblt_depth(i,j))) then !{
+             kblt = kblt+1
+             tmp_mu_ML = tmp_mu_ML + phyto(n)%mu_mix(i,j,k) * dzt(i,j,k)
+             tmp_hblt = tmp_hblt + dzt(i,j,k)
+          endif !}
+       enddo !} k-loop
+       phyto(n)%mu_mix(i,j,1:kblt) = tmp_mu_ML / max(1.0e-6,tmp_hblt)
+    enddo;  enddo; enddo !} i,j,n
+
+   do k = 1, nk ; do j = jsc, jec ; do i = isc, iec; do n = 1,NUM_PHYTO !{        
+       phyto(n)%f_mu_mem(i,j,k) = phyto(n)%f_mu_mem(i,j,k) + (phyto(n)%mu_mix(i,j,k) - &
+             phyto(n)%f_mu_mem(i,j,k))*min(1.0,cobalt%gamma_mu_mem*dt)*grid_tmask(i,j,k)
+    enddo; enddo ; enddo; enddo !} i,j,k,n
+
+
     !
     !-----------------------------------------------------------------------
     ! 1.3: Nutrient uptake calculations 
@@ -4315,15 +4414,20 @@ contains
           bact(1)%f_n(i,j,k)
        bact_uptake_ratio = ( cobalt%f_ldop(i,j,k)/max(cobalt%f_ldon(i,j,k),epsln) )
        bact(1)%juptake_ldop(i,j,k) = bact(1)%juptake_ldon(i,j,k)*bact_uptake_ratio
-       if (bact_uptake_ratio.lt.bact(1)%q_p_2_n) then
-          bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldop(i,j,k)*16.0 - &
-             bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                     &
-             bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
-       else
           bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldon(i,j,k) - &
              bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                &
              bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
-       endif
+       bact(1)%jprod_n(i,j,k) = min(bact(1)%jprod_n(i,j,k), &
+                                    bact(1)%juptake_ldop(i,j,k)/bact(1)%q_p_2_n)
+       !if (bact_uptake_ratio.lt.bact(1)%q_p_2_n) then
+       !   bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldop(i,j,k)*16.0 - &
+       !      bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                     &
+       !      bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
+       !else
+       !   bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldon(i,j,k) - &
+       !      bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                &
+       !      bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
+       !endif
     enddo; enddo ; enddo !} i,j,k
     call mpp_clock_end(id_clock_bacteria_growth)
 !
@@ -4692,7 +4796,8 @@ contains
        !
 
        do n = 1,NUM_PHYTO !{
-            phyto(n)%jaggloss_n(i,j,k) = phyto(n)%agg*phyto(n)%f_n(i,j,k)**2.0 
+            phyto(n)%agg_lim(i,j,k) = max(1.0 - phyto(n)%f_mu_mem(i,j,k)/(0.25*phyto(n)%P_C_max*cobalt%expkT(i,j,k)),0.0)
+            phyto(n)%jaggloss_n(i,j,k) = (phyto(n)%agg_lim(i,j,k)**2)*phyto(n)%agg*phyto(n)%f_n(i,j,k)**2.0 
             phyto(n)%jaggloss_p(i,j,k) = phyto(n)%jaggloss_n(i,j,k)*phyto(n)%q_p_2_n(i,j,k)
             phyto(n)%jaggloss_fe(i,j,k) = phyto(n)%jaggloss_n(i,j,k)*phyto(n)%q_fe_2_n(i,j,k)
             phyto(n)%jaggloss_sio2(i,j,k) = phyto(n)%jaggloss_n(i,j,k)*phyto(n)%q_si_2_n(i,j,k)
@@ -4910,21 +5015,29 @@ contains
        !
 
        do m = 1,NUM_ZOO
-
-          ingest_p2n = zoo(m)%jingest_p(i,j,k)/(zoo(m)%jingest_n(i,j,k)+epsln)
-
-          if (ingest_p2n .lt. zoo(m)%q_p_2_n) then
-             zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_p(i,j,k)*(1.0/zoo(m)%q_p_2_n)
-          else
-             zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_n(i,j,k)
-          endif
-
-          ! adjust production terms for basal respiration costs
-          !if (zoo(m)%f_n(i,j,k).gt.refuge_conc) then
-            zoo(m)%jprod_n(i,j,k) = zoo(m)%jprod_n(i,j,k) - &
+          assim_eff = 1.0-zoo(m)%phi_det-zoo(m)%phi_ldon-zoo(m)%phi_sldon-zoo(m)%phi_srdon
+          zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_n(i,j,k) - &
                                      zoo(m)%f_n(i,j,k)/(refuge_conc + zoo(m)%f_n(i,j,k))* &
                                      zoo(m)%temp_lim(i,j,k)*zoo(m)%bresp*zoo(m)%f_n(i,j,k)
+          zoo(m)%jprod_n(i,j,k) = min(zoo(m)%jprod_n(i,j,k), &
+                                      assim_eff*zoo(m)%jingest_p(i,j,k)/zoo(m)%q_p_2_n)
+
+       !   *OLD PRODUCTION CALCULATION*
+       !   ingest_p2n = zoo(m)%jingest_p(i,j,k)/(zoo(m)%jingest_n(i,j,k)+epsln)
+       !
+       !   if (ingest_p2n .lt. zoo(m)%q_p_2_n) then
+       !      zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_p(i,j,k)*(1.0/zoo(m)%q_p_2_n)
+       !   else
+       !      zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_n(i,j,k)
           !endif
+          !
+       !   ! adjust production terms for basal respiration costs
+       !   !if (zoo(m)%f_n(i,j,k).gt.refuge_conc) then
+       !     zoo(m)%jprod_n(i,j,k) = zoo(m)%jprod_n(i,j,k) - &
+       !                              zoo(m)%f_n(i,j,k)/(refuge_conc + zoo(m)%f_n(i,j,k))* &
+       !                              zoo(m)%temp_lim(i,j,k)*zoo(m)%bresp*zoo(m)%f_n(i,j,k)
+       !   !endif
+
           !
           ! Ingested material that does not go to zooplankton production, detrital production
           ! or production of dissolved organic material is excreted as nh4 or po4.  If production
@@ -5090,7 +5203,7 @@ contains
                cobalt%f_no3(i,j,k) / (phyto(SMALL)%k_no3 + cobalt%f_no3(i,j,k))* &
                max(0.0, cobalt%f_ndet(i,j,k) - &
                cobalt%rpcaco3*(cobalt%f_cadet_arag(i,j,k) + cobalt%f_cadet_calc(i,j,k)) - &
-               cobalt%rplith*cobalt%f_lithdet(i,j,k) + cobalt%rpsio2*cobalt%f_sidet(i,j,k) )
+               cobalt%rplith*cobalt%f_lithdet(i,j,k) - cobalt%rpsio2*cobalt%f_sidet(i,j,k) )
           cobalt%jno3denit_wc(i,j,k) = cobalt%jremin_ndet(i,j,k) * cobalt%n_2_n_denit
        endif !}
        !
@@ -5114,9 +5227,13 @@ contains
        !  Nitrification
        !
 
+       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
        cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
             phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
             (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k)))
+       else
+         cobalt%jnitrif(i,j,k) = 0.0
+       endif !}
 
        !
        ! Solve for free iron
@@ -5200,11 +5317,11 @@ contains
           ! Calcium carbonate flux and burial
           !
           cobalt%fcased_redis(i,j) = max(0.0, min(0.5 * cobalt%f_cased(i,j,1) * r_dt, min(0.5 *       &
-             cobalt%f_cadet_calc_btf(i,j,1), 0.165 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n) +        &
-             0.1244 / spery * max(0.0, 1.0 - cobalt%omega_calc(i,j,k) +   &
-             4.38 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n * spery)**(2.91) *                        &
+             cobalt%f_cadet_calc_btf(i,j,1), 0.14307 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n) +        &
+             0.03607 / spery * max(0.0, 1.0 - cobalt%omega_calc(i,j,k) +   &
+             4.1228 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n * spery)**(2.7488) *                        &
              max(1.0, cobalt%f_lithdet_btf(i,j,1) * spery + cobalt%f_cadet_calc_btf(i,j,1) * 100.0 *  &
-             spery)**(-2.55) * cobalt%f_cased(i,j,1)))
+             spery)**(-2.2185) * cobalt%f_cased(i,j,1)))*grid_tmask(i,j,k)
           cobalt%fcased_burial(i,j) = max(0.0, cobalt%f_cadet_calc_btf(i,j,1) * cobalt%f_cased(i,j,1) /&
              8.1e3)
           cobalt%f_cased(i,j,1) = cobalt%f_cased(i,j,1) + (cobalt%f_cadet_calc_btf(i,j,1) -            &
@@ -5557,6 +5674,9 @@ contains
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
           cobalt%jo2(i,j,k) = cobalt%jo2(i,j,k) - cobalt%o2_2_nh4*cobalt%jprod_nh4(i,j,k) &
                               - cobalt%o2_2_nitrif*cobalt%jnitrif(i,j,k) 
+       else
+          cobalt%jno3denit_wc(i,j,k) = cobalt%jno3denit_wc(i,j,k) + cobalt%jprod_nh4(i,j,k) * cobalt%n_2_n_denit
+
        endif  !}
        cobalt%p_o2(i,j,k,tau) = cobalt%p_o2(i,j,k,tau) + cobalt%jo2(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
@@ -5602,6 +5722,9 @@ contains
     call g_tracer_set_values(tracer_list,'chl',    'field',cobalt%f_chl      ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'irr_mem' ,'field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'mu_mem_ndi' ,'field',phyto(DIAZO)%f_mu_mem ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'mu_mem_nlg' ,'field',phyto(LARGE)%f_mu_mem ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'mu_mem_nsm' ,'field',phyto(SMALL)%f_mu_mem ,isd,jsd,ntau=1)
     !
     !-----------------------------------------------------------------------
     !       Save variables for diagnostics
@@ -6119,6 +6242,18 @@ contains
        if (phyto(n)%id_theta .gt. 0)           &
             used = send_data(phyto(n)%id_theta,      phyto(n)%theta,              &
             model_time, rmask = grid_tmask,& 
+            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_f_mu_mem .gt. 0)           &
+            used = send_data(phyto(n)%id_f_mu_mem,      phyto(n)%f_mu_mem,              &
+            model_time, rmask = grid_tmask,&
+            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_mu_mix .gt. 0)           &
+            used = send_data(phyto(n)%id_mu_mix,      phyto(n)%mu_mix,              &
+            model_time, rmask = grid_tmask,&
+            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_agg_lim .gt. 0)           &
+            used = send_data(phyto(n)%id_agg_lim,      phyto(n)%agg_lim,              &
+            model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     enddo
     !--------------------------------------------------------------------------------------
@@ -7108,7 +7243,7 @@ contains
     !      This zeroing is done for non-generic TOPAZ by calling zero_ocean_sfc.
     !      Since the coupler values here are non-cumulative there is no need to zero them out anyway.
 
-    if (cobalt%init ) then
+    if (cobalt%init .OR. cobalt%force_update_fluxes) then
        !Get necessary fields
        call g_tracer_get_pointer(tracer_list,'dic'   ,'field', dic_field)
        call g_tracer_get_pointer(tracer_list,'po4'   ,'field', po4_field)
@@ -7202,13 +7337,17 @@ contains
        !
        !  o2_saturation is defined between T(freezing) <= T <= 40 deg C and
        !                                   0 permil <= S <= 42 permil
+       ! 2015/05/15  jgj ESM2.6 has values of 60+ in Red Sea - impose
+       ! bounds on salinity to keep it in 0-42 range
        !
        ! check value: T = 10 deg C, S = 35 permil,
        !              o2_saturation = 0.282015 mol m-3
        !---------------------------------------------------------------------
        !
-       tt = 298.15 - ST
-       tk = 273.15 + ST
+       ! jgj 2015/05/14 impose temperature and salinity bounds for o2sat 
+       sal = min(42.0,max(0.0,sal))
+       tt = 298.15 - min(40.0,max(0.0,ST))
+       tk = 273.15 + min(40.0,max(0.0,ST))
        ts = log(tt / tk)
        ts2 = ts  * ts
        ts3 = ts2 * ts
@@ -7337,6 +7476,9 @@ contains
        allocate(phyto(n)%q_p_2_n(isd:ied,jsd:jed,nk))      ; phyto(n)%q_p_2_n        = 0.0
        allocate(phyto(n)%q_si_2_n(isd:ied,jsd:jed,nk))     ; phyto(n)%q_si_2_n       = 0.0
        allocate(phyto(n)%theta(isd:ied,jsd:jed,nk))        ; phyto(n)%theta          = 0.0
+       allocate(phyto(n)%f_mu_mem(isd:ied,jsd:jed,nk))     ; phyto(n)%f_mu_mem       = 0.0
+       allocate(phyto(n)%mu_mix(isd:ied,jsd:jed,nk))       ; phyto(n)%mu_mix         = 0.0
+       allocate(phyto(n)%agg_lim(isd:ied,jsd:jed,nk))      ; phyto(n)%agg_lim        = 0.0
     enddo
     !
     ! allocate and initialize array elements of only some phytoplankton groups
@@ -7682,6 +7824,9 @@ contains
        deallocate(phyto(n)%q_p_2_n)
        deallocate(phyto(n)%q_si_2_n)
        deallocate(phyto(n)%theta)
+       deallocate(phyto(n)%f_mu_mem)
+       deallocate(phyto(n)%mu_mix)
+       deallocate(phyto(n)%agg_lim)
     enddo
     do n = 2, NUM_PHYTO
        deallocate(phyto(n)%nh4lim)

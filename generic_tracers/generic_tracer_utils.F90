@@ -23,12 +23,13 @@ module g_tracer_utils
   use FMS_coupler_util,  only: extract_coupler_values, set_coupler_values
   use atmos_ocean_fluxes_mod, only: aof_set_coupler_flux
   use mpp_mod,           only: mpp_error, NOTE, WARNING, FATAL
-  use mpp_mod,           only: mpp_pe, mpp_root_pe
+  use mpp_mod,           only: mpp_pe, mpp_root_pe, mpp_sync
   use time_manager_mod,  only: time_type
   use diag_manager_mod,  only: register_diag_field, send_data 
 
 
   use field_manager_mod, only: fm_string_len, fm_path_name_len, fm_new_list, fm_change_list, fm_get_value
+  use field_manager_mod, only: fm_dump_list, fm_loop_over_list
 
   use fms_mod,           only: stdout
 
@@ -224,6 +225,7 @@ module g_tracer_utils
 
      ! IDs for using diag_manager tools
      integer :: diag_id_field=-1, diag_id_stf=-1, diag_id_stf_gas=-1, diag_id_deltap=-1, diag_id_kw=-1, diag_id_trunoff=-1
+     integer :: diag_id_stf_gas_aux=-1
      integer :: diag_id_alpha=-1, diag_id_csurf=-1, diag_id_sc_no=-1, diag_id_aux=-1
      integer :: diag_id_btf=-1,diag_id_btm=-1, diag_id_vmove=-1, diag_id_vdiff=-1
      integer :: diag_id_vdiffuse_impl = -1, diag_id_tendency = -1, diag_id_field_taup1 = -1
@@ -250,6 +252,14 @@ module g_tracer_utils
      integer :: flux_runoff_ind = -1
      integer :: flux_wetdep_ind = -1
      integer :: flux_drydep_ind = -1
+
+     ! Tracer source: filename, type, var name, units, record, gridfile  
+     character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
+     integer :: src_var_record
+     logical :: requires_src_info = .false.
+     real    :: src_var_unit_conversion = 1.0 !This factor depends on the tracer. Ask  Jasmin
+     real    :: src_var_valid_min = 0.0
+     real    :: src_var_valid_max  
 
   end type g_tracer_type
 
@@ -337,6 +347,9 @@ module g_tracer_utils
   public :: g_diag_type
   public :: g_diag_field_add
   public :: g_tracer_set_pointer
+  public :: g_tracer_print_info
+  public :: g_tracer_coupler_accumulate
+  public :: g_tracer_get_src_info
 
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
@@ -705,7 +718,7 @@ contains
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
-       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, flux_gas_type) 
+       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, flux_gas_type,requires_src_info) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -727,6 +740,7 @@ contains
     character(len=*),   intent(in), optional :: flux_gas_name
     character(len=*),   intent(in), optional :: flux_gas_type
     character(len=*),   intent(in), optional :: flux_gas_restart_file
+    logical,            intent(in), optional :: requires_src_info
 
     !
     !       Local parameters
@@ -836,6 +850,20 @@ contains
 
     if(present(sink_rate)) g_tracer%sink_rate = sink_rate
 
+    if(present(requires_src_info)) then
+       g_tracer%requires_src_info = requires_src_info 
+    elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' ) then !Niki: later we can make this just else
+       call  g_tracer_add_param('enforce_src_info', g_tracer%requires_src_info ,  .true.) 
+    endif
+       
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_file",         g_tracer%src_file ,        'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_name",     g_tracer%src_var_name ,    'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_unit",     g_tracer%src_var_unit ,    'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_record",   g_tracer%src_var_record ,  -1) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
+    
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
     !===================================================================    
@@ -1082,6 +1110,15 @@ contains
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+20)
 
+    string=trim(g_tracer%alias) // trim("_stf_gas_aux")
+    g_tracer%diag_id_stf_gas_aux = register_diag_field(g_tracer%package_name, &
+         trim(string),                 &
+         g_tracer_com%axes(1:2),       &
+         g_tracer_com%init_time,       &
+         trim('Auxilliary Gas exchange flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
+         trim('mole/m^2/sec'),         &
+         missing_value = -1.0e+20)
+
     string=trim(g_tracer%alias) // trim("_deltap")
     g_tracer%diag_id_deltap = register_diag_field(g_tracer%package_name, &
          trim(string),                 &
@@ -1270,10 +1307,12 @@ contains
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine g_tracer_coupler_get(g_tracer_list,IOB_struc)
+  subroutine g_tracer_coupler_get(g_tracer_list,IOB_struc, weight, model_time)
     type(g_tracer_type),          pointer :: g_tracer_list, g_tracer 
     type(coupler_2d_bc_type),    intent(in) :: IOB_struc
-
+    type(time_type),    optional,intent(in) :: model_time
+    real,               optional,intent(in) :: weight
+    logical :: used
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_get'
     real, dimension(:,:), allocatable :: temp_array,stf_array,stf_gas_array,deltap_array, kw_array
 
@@ -1350,10 +1389,10 @@ contains
                is=g_tracer_com%isc, ie=g_tracer_com%iec, &
                js=g_tracer_com%jsc, je=g_tracer_com%jec)
 
-          stf_array = stf_array+temp_array !flux_drydep contributes to %stf
+          stf_array = stf_array+temp_array !flux_drydep contributes to %stf 
 
           call g_tracer_set_values(g_tracer,g_tracer%name,'drydep',temp_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        if(g_tracer%flux_wetdep) then
@@ -1370,7 +1409,7 @@ contains
           stf_array = stf_array+temp_array  !flux_wetdep contributes to %stf
 
           call g_tracer_set_values(g_tracer,g_tracer%name,'wetdep',temp_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        if(g_tracer%flux_runoff) then
@@ -1385,7 +1424,7 @@ contains
                js=g_tracer_com%jsc, je=g_tracer_com%jec)
 
           call g_tracer_set_values(g_tracer,g_tracer%name,'trunoff',temp_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        !Any of the following fluxes contribute to %stf
@@ -1395,18 +1434,27 @@ contains
 
        if(g_tracer%flux_gas .or. g_tracer%flux_drydep .or. g_tracer%flux_wetdep .or. g_tracer%flux_runoff ) then
           call g_tracer_set_values(g_tracer,g_tracer%name,'stf',stf_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
 
        if(g_tracer%flux_gas) then
           call g_tracer_set_values(g_tracer,g_tracer%name,'stf_gas',stf_gas_array,&
-               g_tracer_com%isd,g_tracer_com%jsd)
+               g_tracer_com%isd,g_tracer_com%jsd, weight)
           if(g_tracer%flux_gas_type .eq. 'air_sea_gas_flux_generic') then
              call g_tracer_set_values(g_tracer,g_tracer%name,'deltap',deltap_array,&
-                  g_tracer_com%isd,g_tracer_com%jsd)
+                  g_tracer_com%isd,g_tracer_com%jsd, weight)
              call g_tracer_set_values(g_tracer,g_tracer%name,'kw',kw_array,&
-                  g_tracer_com%isd,g_tracer_com%jsd)
+                  g_tracer_com%isd,g_tracer_com%jsd, weight)
           endif
+       endif
+
+       if(present(model_time)) then
+       if (g_tracer%diag_id_stf_gas_aux .gt. 0 .and. _ALLOCATED(g_tracer%stf_gas)) then
+          used = send_data(g_tracer%diag_id_stf_gas_aux, g_tracer%stf_gas(:,:), model_time,&
+               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+       endif
        endif
 
        !traverse the linked list till hit NULL
@@ -1417,6 +1465,19 @@ contains
     deallocate(temp_array, stf_array, stf_gas_array, deltap_array, kw_array)
 
   end subroutine g_tracer_coupler_get
+
+  subroutine g_tracer_coupler_accumulate(g_tracer_list,IOB_struc, weight, model_time)
+    type(g_tracer_type),          pointer    :: g_tracer_list, g_tracer 
+    type(coupler_2d_bc_type),    intent(in)  :: IOB_struc
+    real,                        intent(in)  :: weight
+    type(time_type), optional,   intent(in)  :: model_time
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_coupler_accumulate'
+
+    call g_tracer_coupler_get(g_tracer_list,IOB_struc, weight = weight, model_time=model_time )
+
+  end subroutine g_tracer_coupler_accumulate
+
 
   ! <SUBROUTINE NAME="g_tracer_set_common">
   !  <OVERVIEW>
@@ -1877,13 +1938,15 @@ contains
 
   !Overload interface g_tracer_set_values for 2D fields
 
-  subroutine g_tracer_set_2D(g_tracer_list,name,member,array,isd,jsd)
+  subroutine g_tracer_set_2D(g_tracer_list,name,member,array,isd,jsd,weight)
     character(len=*),         intent(in) :: name
     character(len=*),         intent(in) :: member
-    type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer
-    integer,                  intent(in) :: isd,jsd
+    type(g_tracer_type),      pointer    :: g_tracer_list, g_tracer
+    integer,                   intent(in) :: isd,jsd
     real, dimension(isd:,jsd:),intent(in) :: array
+    real, optional            ,intent(in) :: weight
 
+    real :: w0,w1
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_set_2D'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
@@ -1896,33 +1959,40 @@ contains
     if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list with name="//trim(name))
 
+    w0=0
+    w1=1
+    if(present(weight)) then
+       w1=weight
+       w0=1.-w1
+    endif
+
     select case(member)
     case ('alpha') 
-       g_tracer%alpha  = array 
+       g_tracer%alpha  = w0*g_tracer%alpha + w1*array
     case ('csurf')
-       g_tracer%csurf  = array
+       g_tracer%csurf  = w0*g_tracer%csurf + w1*array
     case ('sc_no')
-       g_tracer%sc_no  = array
+       g_tracer%sc_no  = w0*g_tracer%sc_no + w1*array
     case ('stf') 
-       g_tracer%stf    = array
+       g_tracer%stf    = w0*g_tracer%stf + w1*array
     case ('stf_gas') 
-       g_tracer%stf_gas= array
+       g_tracer%stf_gas= w0*g_tracer%stf_gas + w1*array
     case ('deltap') 
-       g_tracer%deltap = array
+       g_tracer%deltap = w0*g_tracer%deltap + w1*array
     case ('kw') 
-       g_tracer%kw     = array
+       g_tracer%kw     = w0*g_tracer%kw + w1*array
     case ('btf') 
-       g_tracer%btf    = array
+       g_tracer%btf    = w0*g_tracer%btf + w1*array
     case ('btm_reservoir') 
-       g_tracer%btm_reservoir = array
+       g_tracer%btm_reservoir = w0*g_tracer%btm_reservoir + w1*array
     case ('trunoff')
-       g_tracer%trunoff = array
+       g_tracer%trunoff = w0*g_tracer%trunoff + w1*array
     case ('runoff_tracer_flux')
-       g_tracer%runoff_tracer_flux = array
+       g_tracer%runoff_tracer_flux = w0*g_tracer%runoff_tracer_flux + w1*array
     case ('drydep')
-       g_tracer%drydep = array
+       g_tracer%drydep = w0*g_tracer%drydep + w1*array
     case ('wetdep')
-       g_tracer%wetdep = array
+       g_tracer%wetdep = w0*g_tracer%wetdep + w1*array
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -3400,5 +3470,154 @@ contains
     node_ptr => g_diag 
   end subroutine g_diag_field_add
 
+
+  subroutine g_tracer_print_info(g_tracer_list)
+    type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
+    integer               :: num_prog,num_diag
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_print_info'
+    character(len=256) :: errorstring
+
+    if(.NOT. associated(g_tracer_list)) return
+
+    write(errorstring, '(a)')  ': Dumping generic tracer namelists tree: '
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+
+    if (.not. fm_dump_list('/ocean_mod/namelists', recursive = .true.)) then
+       call mpp_error(FATAL, trim(sub_name) // ': Problem dumping generic tracer namelists tree')
+    endif
+
+    num_prog = 0
+    num_diag = 0
+    write(errorstring, '(a)')  ''
+    !Go through the list of tracers 
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+    do  
+       if(g_tracer%prog) then
+          num_prog = num_prog +1
+       else
+          num_diag = num_diag +1
+       endif
+
+       !Check that the required source information is set 
+       if(g_tracer%requires_src_info) then 
+          if(g_tracer%src_file .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_file is not set in the field_table'
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+          if(g_tracer%src_var_name .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_name is not set in the field_table'
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+
+          if(g_tracer%src_var_unit .eq. 'NULL') then
+             write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is not set in the field_table'
+             call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          elseif(g_tracer%src_var_unit .eq. 'none') then
+             g_tracer%src_var_unit_conversion = 1.0
+          elseif(g_tracer%src_var_unit .eq. 'ppt') then
+             g_tracer%src_var_unit_conversion = 1.0e-12
+          elseif(g_tracer%src_var_unit .eq. 'milliliters_per_liter') then
+             select case (trim(g_tracer%name))
+             case('o2')  
+                g_tracer%src_var_unit_conversion = (1000.0/22391.6)/1035.0
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          elseif(g_tracer%src_var_unit .eq. 'micromoles_per_liter') then
+             select case (trim(g_tracer%name))
+             case('no3')
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
+             case('po4')
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
+             case('sio4')
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          elseif(g_tracer%src_var_unit .eq. 'micromoles_per_kg') then
+             select case (trim(g_tracer%name))
+             case('alk')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dic')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          else 
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is set in the field_table to '//&
+                trim(g_tracer%src_var_unit)//". Cannot determine how to convert this!"
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring))              
+          endif
+
+          if(g_tracer%src_var_record == -1) then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_record is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+          if(g_tracer%src_var_gridspec .eq. 'NULL') then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_gridspec is not set in the field_table'
+              call mpp_error(NOTE, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+
+          if(g_tracer%src_var_valid_min == -99.0 ) then
+              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_valid_min is not set in the field_table'
+              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+          endif
+!          if(g_tracer%src_var_valid_max == -99.0 ) then
+!              write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_valid_max is not set in the field_table'
+!              call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+!          endif
+
+
+       endif
+       !traverse the linked list till hit NULL
+       if(.NOT. associated(g_tracer%next))  exit
+
+       g_tracer => g_tracer%next
+    enddo
+
+    if(errorstring .ne. '') then
+       !The following cannot be FATAL for backward compatibility with MOM5 and GOLD
+       call mpp_error(WARNING, trim(sub_name) // ' : there are tracers with required source properties that are not set in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!'  )
+    endif
+
+    write(errorstring, '(a,i4)')  ': Number of prognostic generic tracers = ',num_prog
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+    write(errorstring, '(a,i4)')  ': Number of diagnostic generic tracers = ',num_diag
+    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))     
+
+  end subroutine g_tracer_print_info
+
+  subroutine g_tracer_get_src_info(g_tracer_list,name,src_file, src_var_name, src_var_unit, src_var_gridspec,&
+                                   src_var_record, src_var_valid_min, src_var_valid_max)
+    type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
+    character(len=*),         intent(in) :: name
+    character(len=*),         intent(out):: src_file, src_var_name, src_var_unit, src_var_gridspec
+    integer,                  intent(out):: src_var_record
+    real,                     intent(out):: src_var_valid_min, src_var_valid_max
+
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_src_info'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+    !Find the node which has name=name
+    call g_tracer_find(g_tracer,name)
+    if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list with name="//trim(name))
+
+    src_file = g_tracer%src_file
+    src_var_name = g_tracer%src_var_name
+    src_var_unit = g_tracer%src_var_unit
+    src_var_gridspec = g_tracer%src_var_gridspec
+    src_var_record = g_tracer%src_var_record
+    src_var_valid_min = g_tracer%src_var_valid_min
+    src_var_valid_max = g_tracer%src_var_valid_max
+
+  end subroutine g_tracer_get_src_info
 
 end module g_tracer_utils
