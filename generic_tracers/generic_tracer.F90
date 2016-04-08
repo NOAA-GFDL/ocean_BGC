@@ -77,8 +77,8 @@ module generic_tracer
   use generic_BLING,  only : generic_BLING_update_from_bottom,generic_BLING_update_from_coupler
   use generic_BLING,  only : generic_BLING_set_boundary_values, generic_BLING_end, do_generic_BLING
 
-  use generic_miniBLING_mod,  only : generic_miniBLING_register
-  use generic_miniBLING_mod,  only : generic_miniBLING_init, generic_miniBLING_update_from_source,generic_miniBLING_register_diag
+  use generic_miniBLING_mod,  only : generic_miniBLING_init, generic_miniBLING_register
+  use generic_miniBLING_mod,  only : generic_miniBLING_update_from_source,generic_miniBLING_register_diag
   use generic_miniBLING_mod,  only : generic_miniBLING_update_from_bottom,generic_miniBLING_update_from_coupler
   use generic_miniBLING_mod,  only : generic_miniBLING_set_boundary_values, generic_miniBLING_end, do_generic_miniBLING
   use generic_miniBLING_mod,  only : generic_miniBLING_diag
@@ -121,8 +121,8 @@ module generic_tracer
   logical :: do_generic_tracer = .false.
   logical :: force_update_fluxes = .false.
 
-  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_age, do_generic_argon, do_generic_CFC, do_generic_SF6, do_generic_TOPAZ,    &
-       do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, force_update_fluxes
+  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_age, do_generic_argon, do_generic_CFC, do_generic_SF6,  &
+      do_generic_TOPAZ,do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, force_update_fluxes
 
 contains
 
@@ -187,7 +187,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Reads the namelist generic_tracer_nml to find the requested tracer packages
-  !   Sets the common properties to be used by ALL generic tracers: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,init_time
+  !   Sets the common properties to be used by ALL generic tracers: 
+  !    isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes,grid_tmask,init_time
   !   Initialize each requested generic tracer package by calling their init routine
   !  </DESCRIPTION>
   !  <TEMPLATE>
@@ -221,7 +222,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     !Allocate and initialize all registered generic tracers
     !JGJ 2013/05/31  merged COBALT into siena_201303
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
+    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
        g_tracer => tracer_list        
        !Go through the list of tracers 
        do  
@@ -272,7 +274,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !Diagnostics register for the fields common to All generic tracers
     !JGJ 2013/05/31  merged COBALT into siena_201303
 
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
+    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -572,7 +575,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
+    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -612,7 +616,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
+    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM &
+       .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -703,7 +708,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !for each tracer in the tracer_list that has been marked by the user routine above
     !JGJ 2013/05/31  merged COBALT into siena_201303
     !
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) &
+    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+      .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) &
        call g_tracer_coupler_set(tracer_list,IOB_struc)
 
   end subroutine generic_tracer_coupler_set
