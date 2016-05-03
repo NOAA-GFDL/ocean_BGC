@@ -3545,6 +3545,8 @@ contains
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case('dic')
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('di14c')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
                 call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 

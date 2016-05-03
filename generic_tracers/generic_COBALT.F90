@@ -40,11 +40,13 @@
 !       cadet_arag: calcium carbonate detritus (aragonite)                
 !       cadet_calc: calcium carbonate detritus (calcite)                  
 !       dic: dissolved inorganic carbon                                   
+!       fec: colloidal iron                                               
 !       fed: dissolved iron                                               
 !       fedi: diazotroph iron                                             
 !       felg: large phytoplankton iron
 !       fedet: iron detritus                                              
 !       fesm: small phytoplankton iron
+!       h2o2: hydrogen peroxide
 !       ldon: labile dissolved organic nitrogen                           
 !       ldop: labile dissolved organic phosphorous
 !       lith: lithogenic aluminosilicate particles                        
@@ -74,10 +76,40 @@
 !       nmdz: medium zooplankton nitrogen
 !       nlgz: large zooplankton nitrogen
 !   
+!<NAMELIST NAME="generic_COBALT_nml">
+!
+!  <DATA NAME="do_fan_dunne_fe" TYPE="logical">
+!  If true, then simulate radiocarbon. Includes 2 prognostic tracers, DI14C
+! and DO14C. Requires that do_carbon = .true. Note that 14C is not taken up
+! by CaCO3 at the current time, but cycles only through the soft tissue.
+! This is a mistake that will be fixed later.
+!  </DATA> 
+!
+!  <DATA NAME="do_14c" TYPE="logical">
+!  If true, then simulate radiocarbon. Includes 2 prognostic tracers, DI14C
+! and DO14C. Requires that do_carbon = .true. Note that 14C is not taken up
+! by CaCO3 at the current time, but cycles only through the soft tissue.
+! This is a mistake that will be fixed later.
+!  </DATA> 
+!
+!</NAMELIST>
+!
 !</DESCRIPTION>
 !
 ! <INFO>
 ! <REFERENCE>
+! Stock, Charles A., John P Dunne, and Jasmin G John, 2014: Global-scale carbon and energy flows
+! through the marine food web: an analysis with a coupled physical-biological mode. Progress in Oceanography,
+! 120, DOI:10.1016/j.pocean.2013.07.001.
+!
+! Stock, Charles A., and John P Dunne, 2010: Controls on the ratio of mesozooplankton production to
+! primary production in marine ecosystems. Deep-Sea Research, Part I, 57(1), DOI:10.1016/j.dsr.2009.10.006.
+!
+! Dunne, John P., Jasmin G John, Elena Shevliakova, Ronald J Stouffer, John P Krasting, Sergey Malyshev, 
+! P C D Milly, Lori T Sentman, Alistair Adcroft, William F Cooke, Krista A Dunne, Stephen M Griffies,
+! Robert Hallberg, Matthew J Harrison, Hiram Levy II, Andrew T Wittenberg, Peter Phillipps, and Niki Zadeh,
+! 2013: GFDL's ESM2 global coupled climate-carbon Earth System Models Part II: Carbon system formulation and
+! baseline simulation characteristics. Journal of Climate, 26(7), DOI:10.1175/JCLI-D-12-00150.1.
 ! </REFERENCE>
 ! <DEVELOPER_NOTES>
 ! </DEVELOPER_NOTES>
@@ -90,11 +122,13 @@ module generic_COBALT
   use field_manager_mod, only: fm_string_len, fm_path_name_len
   use mpp_mod,           only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_mod,           only: CLOCK_COMPONENT, CLOCK_SUBCOMPONENT, CLOCK_MODULE
+  use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
   use diag_manager_mod,  only: register_diag_field, send_data 
   use constants_mod,     only: WTMCO2, WTMO2
   use fms_mod,           only: write_version_number, FATAL, WARNING, stdout, stdlog
+  use fms_mod,           only: open_namelist_file, check_nml_error, close_file
 
   use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
   use g_tracer_utils, only : g_tracer_add,g_tracer_add_param, g_tracer_set_files
@@ -133,6 +167,13 @@ module generic_COBALT
   real, parameter :: epsln=1.0e-30
   real,parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
+
+! Namelist Options
+
+  logical :: do_14c             = .false.
+  logical :: do_fan_dunne_fe    = .false.
+
+namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -331,8 +372,8 @@ module generic_COBALT
           jprod_srdop,      & ! production of semi-refractory dissolved organic P by zooplankton group 
           jprod_sldon,      & ! production of semi-labile dissolved organic N by zooplankton group
           jprod_sldop,      & ! production of semi-labile dissolved organic P by zooplankton group
-          jprod_fedet,      & ! production of iron detritus
           jprod_fed,	    & ! production of dissolved iron
+          jprod_fedet,      & ! production of iron detritus
           jprod_sidet,	    & ! production of silica detritus
           jprod_sio4,       & ! production of silicate via rapid dissolution at surface
           jprod_po4,        & ! phosphate production by zooplankton
@@ -350,14 +391,15 @@ module generic_COBALT
           id_jingest_fe     = -1, &
           id_jprod_ndet     = -1, &
           id_jprod_pdet     = -1, &
+          id_jprod_h2o2     = -1, &
           id_jprod_ldon     = -1, &
           id_jprod_ldop     = -1, &
           id_jprod_srdon    = -1, &
           id_jprod_srdop    = -1, &
           id_jprod_sldon    = -1, &
           id_jprod_sldop    = -1, &
-          id_jprod_fedet    = -1, &
           id_jprod_fed      = -1, &
+          id_jprod_fedet    = -1, &
           id_jprod_sidet    = -1, &
           id_jprod_sio4     = -1, &
           id_jprod_po4      = -1, &
@@ -489,6 +531,8 @@ module generic_COBALT
           ki_fescav,        & 
           io_fescav,        &
           remin_eff_fedet,  &
+          half_life_14c,    &
+          lambda_14c,       &
           k_lith,           &
           phi_lith,         &
           mass_2_n,         &
@@ -559,8 +603,10 @@ module generic_COBALT
           f_cadet_arag,&
           f_cadet_calc,&
           f_dic,&
+          f_fec,&
           f_fed,&
           f_fedet,&
+          f_h2o2,&
           f_ldon,&
           f_ldop,&
           f_lith,&
@@ -582,6 +628,8 @@ module generic_COBALT
           co3_sol_calc,&
           f_chl,&
           f_co3_ion,&
+          f_fe2,&
+          f_fe3,&
           f_htotal,&
           f_irr_mem,&
           f_cased,&
@@ -603,11 +651,13 @@ module generic_COBALT
           jcadet_arag,&
           jcadet_calc,&
           jdic,&
+          jfec,&
           jfed,&
           jfedi,&
           jfelg,&
           jfesm,&
           jfedet,&
+          jh2o2,&
           jldon,&
           jldop,&
           jlith,&
@@ -633,8 +683,10 @@ module generic_COBALT
           jprod_sldop,&
           jprod_srdon,&
           jprod_srdop,&
-          jprod_fedet,&
+          jprod_fec,&
           jprod_fed,&
+          jprod_fedet,&
+          jprod_h2o2, &
           jprod_sidet,&
           jprod_sio4, &
           jprod_lithdet,&
@@ -682,11 +734,20 @@ module generic_COBALT
           nlg_diatoms,&
           q_si_2_n_lg_diatoms,&
           zt, &
-          zm
+          zm, &
+          c14_2_n,&
+          f_di14c,&
+          f_do14c,&
+          fpo14c,&
+          j14c_decay_dic,&
+          j14c_decay_doc,&
+          j14c_reminp,&
+          jdi14c,&
+          jdo14c
 
      real, dimension(:,:), ALLOCATABLE :: &
-          b_alk,b_dic,b_fed,b_nh4,b_no3,b_o2,b_po4,b_sio4,&	! bottom flux terms
-          co2_csurf,pco2_csurf,co2_alpha,&
+          b_alk,b_dic,b_fed,b_nh4,b_no3,b_o2,b_po4,b_sio4,b_di14c,&	! bottom flux terms
+          co2_csurf,pco2_csurf,co2_alpha,c14o2_csurf,c14o2_alpha,&
           fcadet_arag_btm,&
           fcadet_calc_btm,&
           ffedet_btm,&
@@ -738,11 +799,15 @@ module generic_COBALT
           p_cadet_arag,&
           p_cadet_calc,&
           p_dic,&
+          p_di14c,&
+          p_do14c,&
+          p_fec,&
           p_fed,&
+          p_fedet,&
           p_fedi,&
           p_felg,&
-          p_fedet,&
           p_fesm,&
+          p_h2o2,&
           p_ldon,&
           p_ldop,&
           p_lith,&
@@ -774,6 +839,7 @@ module generic_COBALT
           runoff_flux_lith,&
           runoff_flux_fed,&
           runoff_flux_no3,&
+          runoff_flux_h2o2,&
           runoff_flux_ldon,&
           runoff_flux_sldon,&
           runoff_flux_srdon,&
@@ -783,6 +849,7 @@ module generic_COBALT
           runoff_flux_sldop,&
           runoff_flux_srdop,&
           dry_fed, wet_fed,&
+          dry_h2o2, wet_h2o2,&
           dry_lith, wet_lith,&
           dry_no3, wet_no3,&
           dry_nh4, wet_nh4,&
@@ -805,11 +872,13 @@ module generic_COBALT
           id_cadet_arag    = -1,       &
           id_cadet_calc    = -1,       &
           id_dic           = -1,       &
+          id_fec           = -1,       &
           id_fed           = -1,       &
+          id_fedet         = -1,       &
           id_fedi          = -1,       &
           id_felg          = -1,       &
           id_fesm          = -1,       &
-          id_fedet         = -1,       &
+          id_h2o2          = -1,       &
           id_ldon          = -1,       &
           id_ldop          = -1,       &
           id_lith          = -1,       &
@@ -830,10 +899,12 @@ module generic_COBALT
           id_co3_sol_arag  = -1,       &
           id_co3_sol_calc  = -1,       &
           id_dep_dry_fed   = -1,       &
+          id_dep_dry_h2o2  = -1,       &
           id_dep_dry_nh4   = -1,       & 
           id_dep_dry_no3   = -1,       &
           id_dep_dry_po4   = -1,       & 
           id_dep_wet_fed   = -1,       & 
+          id_dep_wet_h2o2  = -1,       & 
           id_dep_wet_nh4   = -1,       &
           id_dep_wet_no3   = -1,       &
           id_dep_wet_po4   = -1,       &
@@ -843,6 +914,8 @@ module generic_COBALT
           id_omega_calc    = -1,       &
           id_chl           = -1,       &
           id_co3_ion       = -1,       &
+          id_fe2           = -1,       &
+          id_fe3           = -1,       &
           id_htotal        = -1,       &
           id_irr_mem       = -1,       &
           id_cased         = -1,       &
@@ -853,6 +926,8 @@ module generic_COBALT
           id_ndet_btf      = -1,       & 
           id_pdet_btf      = -1,       & 
           id_sidet_btf     = -1,       &
+          id_jfec          = -1,       &
+          id_jfed          = -1,       &
           id_jprod_ndet    = -1,       &
           id_jprod_pdet    = -1,       &
           id_jprod_sldon   = -1,       &
@@ -861,8 +936,10 @@ module generic_COBALT
           id_jprod_sldop   = -1,       &
           id_jprod_ldop    = -1,       &
           id_jprod_srdop   = -1,       &
-          id_jprod_fedet   = -1,       &
+          id_jprod_fec     = -1,       &
           id_jprod_fed     = -1,       &
+          id_jprod_fedet   = -1,       &
+          id_jprod_h2o2    = -1,       &
           id_jprod_sidet   = -1,       &
           id_jprod_sio4    = -1,       &
           id_jprod_lithdet = -1,       &
@@ -931,7 +1008,9 @@ module generic_COBALT
           id_sfc_cadet_arag= -1,       & 
           id_sfc_cadet_calc= -1,       & 
           id_sfc_dic       = -1,       & 
+          id_sfc_fec       = -1,       & 
           id_sfc_fed       = -1,       & 
+          id_sfc_h2o2      = -1,       &
           id_sfc_ldon      = -1,       &
           id_sfc_sldon     = -1,       &
           id_sfc_srdon     = -1,       &
@@ -950,11 +1029,14 @@ module generic_COBALT
           id_sfc_co3_ion   = -1,       &
           id_sfc_co3_sol_arag = -1,    &
           id_sfc_co3_sol_calc = -1,    &
+          id_sfc_fe2       = -1,       &
+          id_sfc_fe3       = -1,       &
           id_runoff_flux_alk = -1,     &
           id_runoff_flux_dic = -1,     &
           id_runoff_flux_fed = -1,     &
           id_runoff_flux_lith = -1,    &
           id_runoff_flux_no3 = -1,     &
+          id_runoff_flux_h2o2 = -1,    &
           id_runoff_flux_ldon = -1,    &
           id_runoff_flux_sldon = -1,   &
           id_runoff_flux_srdon = -1,   &
@@ -997,8 +1079,20 @@ module generic_COBALT
           id_o2min         = -1,       &
           id_z_o2min       = -1,       &
           id_z_sat_arag    = -1,       & ! Depth of Aragonite saturation
-          id_z_sat_calc    = -1          ! Depth of Calcite saturation
-  end type generic_COBALT_type
+          id_z_sat_calc    = -1,       & ! Depth of Calcite saturation
+          id_b_di14c       = -1,       & ! Bottom flux of DI14C
+          id_c14_2_n       = -1,       & ! DI14C to PO4 uptake ratio
+          id_c14o2_csurf   = -1,       & ! Surface water 14CO2*
+          id_c14o2_alpha   = -1,       & ! Surface water 14CO2* solubility 
+          id_fpo14c        = -1,       & ! PO14C sinking flux
+          id_j14c_decay_dic= -1,       & ! Radioactive decay of DI14C
+          id_j14c_decay_doc= -1,       & ! Radioactive decay of DO14C
+          id_j14c_reminp   = -1,       & ! 14C particle remineralization layer integral
+          id_jdi14c        = -1,       & ! DI14C source layer integral
+          id_jdo14c        = -1,       & ! Semilabile DO14C source layer integral
+          id_di14c         = -1,       & ! Dissolved inorganic radiocarbon Prognostic tracer
+          id_do14c         = -1          ! Dissolved inorganic radiocarbon Prognostic tracer
+ end type generic_COBALT_type
 
   !An auxiliary type for storing varible names
   type, public :: vardesc
@@ -1036,8 +1130,51 @@ contains
 
   subroutine generic_COBALT_register(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
-
+integer                                                 :: ioun
+integer                                                 :: ierr
+integer                                                 :: io_status
+integer                                                 :: stdoutunit,stdlogunit
+!-----------------------------------------------------------------------
+!     local parameters
+!-----------------------------------------------------------------------
+!
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_register'
+character(len=256), parameter   :: error_header =                               &
+     '==>Error from ' // trim(mod_name) // '(' // trim(sub_name) // '): '
+character(len=256), parameter   :: warn_header =                                &
+     '==>Warning from ' // trim(mod_name) // '(' // trim(sub_name) // '): '
+character(len=256), parameter   :: note_header =                                &
+     '==>Note from ' // trim(mod_name) // '(' // trim(sub_name) // '): '
+
+
+
+! provide for namelist over-ride
+! This needs to go before the add_tracers in order to allow the namelist 
+! settings to switch tracers on and off.
+!
+stdoutunit=stdout();stdlogunit=stdlog()
+
+#ifdef INTERNAL_FILE_NML
+read (input_nml_file, nml=generic_COBALT_nml, iostat=io_status)
+ierr = check_nml_error(io_status,'generic_COBALT_nml')
+#else
+ioun = open_namelist_file()
+read  (ioun, generic_COBALT_nml,iostat=io_status)
+ierr = check_nml_error(io_status,'generic_COBALT_nml')
+call close_file (ioun)
+#endif
+
+write (stdoutunit,'(/)')
+write (stdoutunit, generic_COBALT_nml)
+write (stdlogunit, generic_COBALT_nml)
+
+  if (do_14c) then
+    write (stdoutunit,*) trim(note_header), 'Simulating radiocarbon'
+  endif
+
+  if (do_fan_dunne_fe) then
+    write (stdoutunit,*) trim(note_header), 'Using Fan and Dunne 2011 Chemistry'
+  endif
   
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
@@ -1651,77 +1788,65 @@ contains
     ! Register dissolved organic/inorganic production terms for zooplankton
     !
     ! Labile dissolved organic nitrogen 
-    vardesc_temp = vardesc("jprod_ldon_Smz",&
-                   "Production of labile dissolved organic nitrogen by small zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_ldon_Smz","Production of labile dissolved organic nitrogen by small zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(1)%id_jprod_ldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ldon_Mdz",&
-                   "Production of labile dissolved organic nitrogen by medium zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_ldon_Mdz","Production of labile dissolved organic nitrogen by medium zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(2)%id_jprod_ldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ldon_Lgz",&
-                   "Production of labile dissolved organic nitrogen by large zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_ldon_Lgz","Production of labile dissolved organic nitrogen by large zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(3)%id_jprod_ldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     ! Labile dissolved organic phosphorous
-    vardesc_temp = vardesc("jprod_ldop_Smz",&
-                   "Production of labile dissolved organic phosphorous by small zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_ldop_Smz","Production of labile dissolved organic phosphorous by small zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(1)%id_jprod_ldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ldop_Mdz",&
-                   "Production of labile dissolved organic phosphorous by medium zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_ldop_Mdz","Production of labile dissolved organic phosphorous by medium zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(2)%id_jprod_ldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ldop_Lgz",&
-                   "Production of labile dissolved organic phosphorous by large zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_ldop_Lgz","Production of labile dissolved organic phosphorous by large zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(3)%id_jprod_ldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     ! Refractory dissolved organic nitrogen
-    vardesc_temp = vardesc("jprod_srdon_Smz",&
-                   "Production of semi-refractory dissolved organic nitrogen by small zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_srdon_Smz","Production of semi-refractory dissolved organic nitrogen by small zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(1)%id_jprod_srdon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_srdon_Mdz",&
-                   "Production of semi-refractory dissolved organic nitrogen by medium zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_srdon_Mdz","Production of semi-refractory dissolved organic nitrogen by medium zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(2)%id_jprod_srdon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_srdon_Lgz",&
-                   "Production of semi-refractory dissolved organic nitrogen by large zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_srdon_Lgz","Production of semi-refractory dissolved organic nitrogen by large zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(3)%id_jprod_srdon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     ! Labile dissolved organic phosphorous
-    vardesc_temp = vardesc("jprod_srdop_Smz",&
-                   "Production of semi-refractory dissolved organic phosphorous by small zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_srdop_Smz","Production of semi-refractory dissolved organic phosphorous by small zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(1)%id_jprod_srdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_srdop_Mdz",&
-                   "Production of semi-refractory dissolved organic phosphorous by medium zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_srdop_Mdz","Production of semi-refractory dissolved organic phosphorous by medium zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(2)%id_jprod_srdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_srdop_Lgz",&
-                   "Production of semi-refractory dissolved organic phosphorous by large zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_srdop_Lgz","Production of semi-refractory dissolved organic phosphorous by large zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(3)%id_jprod_srdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -1732,33 +1857,28 @@ contains
     zoo(1)%id_jprod_sldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_sldon_Mdz",&
-                   "Production of semi-labile dissolved organic nitrogen by medium zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_sldon_Mdz","Production of semi-labile dissolved organic nitrogen by medium zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(2)%id_jprod_sldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_sldon_Lgz",&
-                   "Production of semi-labile dissolved organic nitrogen by large zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_sldon_Lgz","Production of semi-labile dissolved organic nitrogen by large zooplankton, layer integral",&
                    'h','L','s','mol N m-2 s-1','f')
     zoo(3)%id_jprod_sldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     ! semi-labile dissolved organic phosphorous
-    vardesc_temp = vardesc("jprod_sldop_Smz",&
-                   "Production of semi-labile dissolved organic phosphorous by small zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_sldop_Smz","Production of semi-labile dissolved organic phosphorous by small zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(1)%id_jprod_sldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_sldop_Mdz",&
-                   "Production of semi-labile dissolved organic phosphorous by medium zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_sldop_Mdz","Production of semi-labile dissolved organic phosphorous by medium zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(2)%id_jprod_sldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_sldop_Lgz",&
-                   "Production of semi-labile dissolved organic phosphorous by large zooplankton, layer integral",&
+    vardesc_temp = vardesc("jprod_sldop_Lgz","Production of semi-labile dissolved organic phosphorous by large zooplankton, layer integral",&
                    'h','L','s','mol P m-2 s-1','f')
     zoo(3)%id_jprod_sldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -1945,84 +2065,79 @@ contains
     cobalt%id_jprod_lithdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
     
-    !vardesc_temp = vardesc("jprod_sidet","opal detritus production layer integral",'h','L','s','mol SiO2 m-2 s-1','f')
-    !cobalt%id_jprod_sidet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_sio4","sio4 production layer integral",'h','L','s','mol SiO2 m-2 s-1','f')
-    !cobalt%id_jprod_sio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_fedet","Detrital Fedet production layer integral",'h','L','s','mol Fe m-2 s-1','f')
-    !cobalt%id_jprod_fedet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_ndet","Detrital PON production layer integral",'h','L','s','mol N m-2 s-1','f')
-    !cobalt%id_jprod_ndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_pdet","Detrital phosphorus production layer integral",'h','L','s','mol P m-2 s-1','f')
-    !cobalt%id_jprod_pdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_ldon","labile dissolved organic nitrogen production layer integral",&
-    !                        'h','L','s','mol N m-2 s-1','f')
-    !cobalt%id_jprod_ldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    ! 
-    !vardesc_temp = vardesc("jprod_ldop","labile dissolved organic phosphorous production layer integral",&
-    !                        'h','L','s','mol P m-2 s-1','f')
-    !cobalt%id_jprod_ldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_srdon","refractory dissolved organic nitrogen production layer integral",&
-    !                        'h','L','s','mol N m-2 s-1','f')
-    !cobalt%id_jprod_srdon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_srdop","refractory dissolved organic phosphorous production layer integral",&
-    !                        'h','L','s','mol P m-2 s-1','f')
-    !cobalt%id_jprod_srdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_sldon","semi-labile dissolved organic nitrogen production layer integral",&
-    !                        'h','L','s','mol N m-2 s-1','f')
-    !cobalt%id_jprod_sldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_sldop","semi-labile dissolved organic phosphorous production layer integral",&
-    !                        'h','L','s','mol P m-2 s-1','f')
-    !cobalt%id_jprod_sldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_fed","dissolved iron production layer integral",&
-    !                        'h','L','s','mol Fe m-2 s-1','f')
-    !cobalt%id_jprod_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_po4","phosphate production layer integral",&
-    !                        'h','L','s','mol PO4 m-2 s-1','f')
-    !cobalt%id_jprod_po4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("jprod_nh4","NH4 production layer integral",'h','L','s','mol NH4 m-2 s-1','f')
-    !cobalt%id_jprod_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !     init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
+    vardesc_temp = vardesc("jprod_sidet","opal detritus production layer integral",'h','L','s','mol SiO2 m-2 s-1','f')
+    cobalt%id_jprod_sidet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_sio4","sio4 production layer integral",'h','L','s','mol SiO2 m-2 s-1','f')
+    cobalt%id_jprod_sio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_fedet","Detrital Fedet production layer integral",'h','L','s','mol Fe m-2 s-1','f')
+    cobalt%id_jprod_fedet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_ndet","Detrital PON production layer integral",'h','L','s','mol N m-2 s-1','f')
+    cobalt%id_jprod_ndet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_pdet","Detrital phosphorus production layer integral",'h','L','s','mol P m-2 s-1','f')
+    cobalt%id_jprod_pdet = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_ldon","labile dissolved organic nitrogen production layer integral",&
+                            'h','L','s','mol N m-2 s-1','f')
+    cobalt%id_jprod_ldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+     
+    vardesc_temp = vardesc("jprod_ldop","labile dissolved organic phosphorous production layer integral",&
+                            'h','L','s','mol P m-2 s-1','f')
+    cobalt%id_jprod_ldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_srdon","refractory dissolved organic nitrogen production layer integral",&
+                            'h','L','s','mol N m-2 s-1','f')
+    cobalt%id_jprod_srdon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_srdop","refractory dissolved organic phosphorous production layer integral",&
+                            'h','L','s','mol P m-2 s-1','f')
+    cobalt%id_jprod_srdop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_sldon","semi-labile dissolved organic nitrogen production layer integral",&
+                            'h','L','s','mol N m-2 s-1','f')
+    cobalt%id_jprod_sldon = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_sldop","semi-labile dissolved organic phosphorous production layer integral",&
+                            'h','L','s','mol P m-2 s-1','f')
+    cobalt%id_jprod_sldop = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jprod_po4","phosphate production layer integral",&
+                            'h','L','s','mol PO4 m-2 s-1','f')
+    cobalt%id_jprod_po4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_nh4","NH4 production layer integral",'h','L','s','mol NH4 m-2 s-1','f')
+    cobalt%id_jprod_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
     !
     ! loss diagnostics: detrital loss terms
     !
-    !
-    !vardesc_temp = vardesc("det_jzloss_n","nitrogen detritus loss to zooplankton layer integral",&
-    !                       'h','L','s','mol N m-2 s-1','f')
-    !cobalt%id_det_jzloss_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !   init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
-    !vardesc_temp = vardesc("det_jhploss_n","nitrogen detritus loss to higher predators layer integral",&
-    !                       'h','L','s','mol N m-2 s-1','f')
-    !cobalt%id_det_jhploss_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-    !   init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    !
+    
+    vardesc_temp = vardesc("det_jzloss_n","nitrogen detritus loss to zooplankton layer integral",&
+                           'h','L','s','mol N m-2 s-1','f')
+    cobalt%id_det_jzloss_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+       init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("det_jhploss_n","nitrogen detritus loss to higher predators layer integral",&
+                           'h','L','s','mol N m-2 s-1','f')
+    cobalt%id_det_jhploss_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+       init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
     !
     ! Loss diagnostics: dissolution and remineralization
     !
@@ -2060,12 +2175,35 @@ contains
     !
     ! iron cycling diagnostics 
     !
+    
+    vardesc_temp = vardesc("jprod_fec","colloidal iron production layer integral",&
+                            'h','L','s','mol Fe m-2 s-1','f')
+    cobalt%id_jprod_fec = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    
+    vardesc_temp = vardesc("jprod_fed","dissolved iron production layer integral",&
+                            'h','L','s','mol Fe m-2 s-1','f')
+    cobalt%id_jprod_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+        
+    vardesc_temp = vardesc("jprod_h2o2","Hydrogen Peroxide production layer integral",&
+                            'h','L','s','mol H2O2 m-2 s-1','f')
+    cobalt%id_jprod_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jfe_ads","Iron adsorption layer integral",'h','L','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jfec","Colloidal Iron Change layer integral",'h','L','s','mol Fe m-2 s-1','f')
+    cobalt%id_jfec = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jfed","Dissolved Iron Change layer integral",'h','L','s','mol Fe m-2 s-1','f')
+    cobalt%id_jfed = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("jfe_ads","Iron adsorption layer integral",'h','L','s','mol Fe m-2 s-1','f')
     cobalt%id_jfe_ads = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jfe_coast","Coastal iron efflux layer integral",'h','L','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jfe_coast","Coastal iron efflux layer integral",'h','L','s','mol Fe m-2 s-1','f')
     cobalt%id_jfe_coast = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2158,6 +2296,10 @@ contains
     cobalt%id_dep_dry_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("dep_dry_h2o2","Dry Deposition of H2O2 to the ocean",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_dep_dry_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("dep_dry_lith","Dry Deposition of Lithogenic Material",'h','1','s','g m-2 s-1','f')
     cobalt%id_dep_dry_lith = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -2176,6 +2318,10 @@ contains
 
     vardesc_temp = vardesc("dep_wet_fed","Wet Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_wet_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("dep_wet_h2o2","Wet Deposition of H2O2 to the ocean",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_dep_wet_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("dep_wet_lith","Wet Deposition of Lithogenic Material",'h','1','s','g m-2 s-1','f')
@@ -2212,6 +2358,10 @@ contains
 
     vardesc_temp = vardesc("runoff_flux_no3","Nitrate runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_runoff_flux_no3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("runoff_flux_h2o2","h2o2 runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_runoff_flux_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("runoff_flux_ldon","LDON runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
@@ -2374,8 +2524,16 @@ contains
     cobalt%id_sfc_dic = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("sfc_fec","Surface Colloidal Iron",'h','1','s','mol kg-1','f')
+    cobalt%id_sfc_fec = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("sfc_fed","Surface Dissolved Iron",'h','1','s','mol kg-1','f')
     cobalt%id_sfc_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+  
+    vardesc_temp = vardesc("sfc_h2o2","Surface Hydrogen Peroxide",'h','1','s','mol kg-1','f')
+    cobalt%id_sfc_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("sfc_ldon","Surface Labile Dissolved Organic Nitrogen",'h','1','s','mol kg-1','f')
@@ -2448,6 +2606,14 @@ contains
 
     vardesc_temp = vardesc("sfc_co3_sol_calc","Surface Carbonate Ion Solubility for Calcite ",'h','1','s','mol kg-1','f')
     cobalt%id_sfc_co3_sol_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_fe2","Surface Iron(II)",'h','1','s','mol kg-1','f')
+    cobalt%id_sfc_fe2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("sfc_fe3","Surface Iron(III)",'h','1','s','mol kg-1','f')
+    cobalt%id_sfc_fe3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("sfc_nsmp","Surface small phyto. nitrogen",'h','1','s','mol kg-1','f')
@@ -2586,28 +2752,23 @@ contains
     phyto(DIAZO)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nsmp_100","Small phyto. nitrogen  prim. prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nsmp_100","Small phyto. nitrogen  prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nlgp_100","Large phyto. nitrogen  prim. prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nlgp_100","Large phyto. nitrogen  prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(LARGE)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ndi_new_100","Diazotroph new (NO3-based) prim. prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_ndi_new_100","Diazotroph new (NO3-based) prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(DIAZO)%id_jprod_n_new_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nsmp_new_100","Small phyto. new (NO3-based) prim. prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nsmp_new_100","Small phyto. new (NO3-based) prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jprod_n_new_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nlgp_new_100","Large phyto. new (NO3-based) prim. prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nlgp_new_100","Large phyto. new (NO3-based) prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(LARGE)%id_jprod_n_new_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2615,93 +2776,75 @@ contains
     phyto(DIAZO)%id_jprod_n_n2_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jzloss_ndi_100","Diazotroph nitrogen loss to zooplankton integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jzloss_ndi_100","Diazotroph nitrogen loss to zooplankton integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(DIAZO)%id_jzloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jzloss_nsmp_100","Small phyto. nitrogen loss to zooplankton integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jzloss_nsmp_100","Small phyto. nitrogen loss to zooplankton integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jzloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jzloss_nlgp_100","Large phyto. nitrogen loss to zooplankton integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jzloss_nlgp_100","Large phyto. nitrogen loss to zooplankton integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(LARGE)%id_jzloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jaggloss_nsmp_100","Small phyto. nitrogen aggregation loss integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jaggloss_nsmp_100","Small phyto. nitrogen aggregation loss integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jaggloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jaggloss_nlgp_100","Large phyto. nitrogen aggregation loss integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jaggloss_nlgp_100","Large phyto. nitrogen aggregation loss integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(LARGE)%id_jaggloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jvirloss_nsmp_100","Small phyto. nitrogen virus loss integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jvirloss_nsmp_100","Small phyto. nitrogen virus loss integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jvirloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jexuloss_ndi_100","Diazotroph nitrogen exudation loss integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jexuloss_ndi_100","Diazotroph nitrogen exudation loss integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(DIAZO)%id_jexuloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jexuloss_nsmp_100","Small phyto. nitrogen exudation loss integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jexuloss_nsmp_100","Small phyto. nitrogen exudation loss integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(SMALL)%id_jexuloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jexuloss_nlgp_100","Large phyto. nitrogen exudation loss integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jexuloss_nlgp_100","Large phyto. nitrogen exudation loss integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     phyto(LARGE)%id_jexuloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nsmz_100","Small zooplankton nitrogen prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nsmz_100","Small zooplankton nitrogen prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(1)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nmdz_100","Medium zooplankton nitrogen prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nmdz_100","Medium zooplankton nitrogen prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_nlgz_100","Large zooplankton nitrogen prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_nlgz_100","Large zooplankton nitrogen prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(3)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jingest_n_nsmz_100","Small zooplankton nitrogen ingestion integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jingest_n_nsmz_100","Small zooplankton nitrogen ingestion integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(1)%id_jingest_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jingest_n_nmdz_100","Medium zooplankton nitrogen ingestion integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jingest_n_nmdz_100","Medium zooplankton nitrogen ingestion integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jingest_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jingest_n_nlgz_100","Large zooplankton nitrogen ingestion integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jingest_n_nlgz_100","Large zooplankton nitrogen ingestion integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(3)%id_jingest_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jzloss_nsmz_100","Small zooplankton nitrogen loss to zooplankton integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jzloss_nsmz_100","Small zooplankton nitrogen loss to zooplankton integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(1)%id_jzloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jzloss_nmdz_100","Medium zooplankton nitrogen loss to zooplankton integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jzloss_nmdz_100","Medium zooplankton nitrogen loss to zooplankton integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jzloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jhploss_nmdz_100","Medium zooplankton nitrogen loss to higher preds. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jhploss_nmdz_100","Medium zooplankton nitrogen loss to higher preds. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jhploss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2709,53 +2852,43 @@ contains
     zoo(3)%id_jhploss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ndet_nmdz_100","Medium zooplankton nitrogen detritus prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_ndet_nmdz_100","Medium zooplankton nitrogen detritus prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jprod_ndet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ndet_nlgz_100","Large zooplankton nitrogen detritus prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_ndet_nlgz_100","Large zooplankton nitrogen detritus prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(3)%id_jprod_ndet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_don_nsmz_100","Small zooplankton dissolved org. nitrogen prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_don_nsmz_100","Small zooplankton dissolved org. nitrogen prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(1)%id_jprod_don_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_don_nmdz_100","Medium zooplankton dissolved org. nitrogen prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_don_nmdz_100","Medium zooplankton dissolved org. nitrogen prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jprod_don_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jremin_n_nsmz_100","Small zooplankton nitrogen remineralization integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jremin_n_nsmz_100","Small zooplankton nitrogen remineralization integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(1)%id_jremin_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jremin_n_nmdz_100","Medium zooplankton nitrogen remineralization integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jremin_n_nmdz_100","Medium zooplankton nitrogen remineralization integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(2)%id_jremin_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jremin_n_nlgz_100","Large zooplankton nitrogen remineralization integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jremin_n_nlgz_100","Large zooplankton nitrogen remineralization integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     zoo(3)%id_jremin_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jremin_n_hp_100","Higher predator nitrogen remineralization integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jremin_n_hp_100","Higher predator nitrogen remineralization integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_hp_jremin_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jingest_n_hp_100","Higher predator ingestion of nitrogen integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jingest_n_hp_100","Higher predator ingestion of nitrogen integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_hp_jingest_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_ndet_hp_100","Higher predator nitrogen detritus prod. integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_ndet_hp_100","Higher predator nitrogen detritus prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_hp_jprod_ndet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2763,28 +2896,23 @@ contains
     bact(1)%id_jprod_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jzloss_nbact_100","Bacteria nitrogen loss to zooplankton integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jzloss_nbact_100","Bacteria nitrogen loss to zooplankton integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     bact(1)%id_jzloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jvirloss_nbact_100","Bacteria nitrogen loss to viruses integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jvirloss_nbact_100","Bacteria nitrogen loss to viruses integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     bact(1)%id_jvirloss_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jremin_n_nbact_100","Bacteria nitrogen remineralization integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jremin_n_nbact_100","Bacteria nitrogen remineralization integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     bact(1)%id_jremin_n_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("juptake_ldon_nbact_100","Bacterial uptake of labile dissolved org. nitrogen in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("juptake_ldon_nbact_100","Bacterial uptake of labile dissolved org. nitrogen in upper 100m",'h','1','s','mol m-2 s-1','f')
     bact(1)%id_juptake_ldon_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_lithdet_100","Lithogenic detritus production integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_lithdet_100","Lithogenic detritus production integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_jprod_lithdet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2792,18 +2920,15 @@ contains
     cobalt%id_jprod_sidet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_cadet_calc_100","Calcite detritus production integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_cadet_calc_100","Calcite detritus production integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_jprod_cadet_calc_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jprod_cadet_arag_100","Aragonite detritus production integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jprod_cadet_arag_100","Aragonite detritus production integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_jprod_cadet_arag_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jremin_ndet_100","Remineralization of nitrogen detritus integral in upper 100m",&
-                           'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jremin_ndet_100","Remineralization of nitrogen detritus integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_jremin_ndet_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2915,6 +3040,48 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          mask_variant=.TRUE.)
 
+      if (do_14c) then                                        !<<RADIOCARBON
+    vardesc_temp = vardesc&
+    ("b_di14c","Bottom flux of DI14C into sediment",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_b_di14c = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("c14_2_n","Ratio of DI14C to N-nutrients",'h','L','s','mol kg-1','f')
+    cobalt%id_c14_2_n = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("c14o2_alpha","Saturation surface 14CO2* per uatm",'h','1','s','mol kg-1 atm-1','f')
+    cobalt%id_c14o2_alpha = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("c14o2_csurf","14CO2* concentration at surface",'h','1','s','mol kg-1','f')
+    cobalt%id_c14o2_csurf = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("fpo14c","PO14C sinking flux at layer bottom",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_fpo14c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("j14c_decay_dic","DI14C radioactive decay layer integral",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_j14c_decay_dic = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("j14c_decay_doc","DO14C radioactive decay layer integral",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_j14c_decay_doc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("j14c_reminp","Sinking PO14C remineralization layer integral",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_j14c_reminp = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("jdi14c","DI14C source layer integral",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_jdi14c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
+    ("jdo14c","DO14C source layer integral",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_jdo14c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+      endif                                                   !RADIOCARBON>>
 
 
   end subroutine generic_COBALT_register_diag
@@ -3284,7 +3451,10 @@ contains
     call g_tracer_add_param('gamma_fescav',cobalt%gamma_fescav, 1.0 )                        ! watts m-2
     call g_tracer_add_param('kfe_eq_lig_ll',cobalt%kfe_eq_lig_ll, 1.0e12)                    ! mol lig-1 kg
     call g_tracer_add_param('kfe_eq_lig_hl',cobalt%kfe_eq_lig_hl, 1e8)                       ! mol lig-1 kg
-    !
+
+    ! Radiocarbon
+    call g_tracer_add_param('half_life_14c', cobalt%half_life_14c, 5730.0 )                  ! s
+    call g_tracer_add_param('lambda_14c', cobalt%lambda_14c, log(2.0) / (cobalt%half_life_14c * spery)) ! s-1
     !-------------------------------------------------------------------------
     ! Remineralization
     !-------------------------------------------------------------------------
@@ -3426,7 +3596,7 @@ contains
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMCO2,                                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',   &
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
          flux_bottom= .true.,                                          &
@@ -3478,12 +3648,39 @@ contains
          longname   = 'Small Phytoplankton Iron', &
          units      = 'mol/kg',     &
          prog       = .true.        )
+
+    if (do_fan_dunne_fe) then  !{
+      !
+      ! Initialize additional tracers for Fan and Dunne (2011) Iron formulation
+      !
+      !       Colloidal Fe (assumed to be all unavailable to phytoplankton)
+      !
+      call g_tracer_add(tracer_list,package_name,&
+         name       = 'fec',            &
+         longname   = 'Colloidal Iron', & 
+         units      = 'mol/kg',         &
+         prog       = .true.,           &
+         flux_param = (/ 55.847e-03 /), &
+         flux_bottom= .false.            )
+      !
+      !       H2O2 (Hydrogen Peroxide)
+      !
+      call g_tracer_add(tracer_list,package_name,&
+         name       = 'h2o2',           &
+         longname   = 'Hydrogen Peroxide', &
+         units      = 'mol/kg',         &
+         flux_runoff= .true.,           &
+         flux_wetdep= .true.,           &
+         flux_drydep= .true.,           &
+         flux_param = (/ 34.0147e-03 /),&
+         prog       = .true.            ) 
+    endif !}
     !
     !       LDON (Labile dissolved organic nitrogen)
     !
     call g_tracer_add(tracer_list,package_name,&
          name       = 'ldon',           &
-         flux_runoff= .true.,         &
+         flux_runoff= .true.,           &
          longname   = 'labile DON',     &
          units      = 'mol/kg',         &
          prog       = .true.,           &
@@ -3727,6 +3924,34 @@ contains
          units      = 'mol/kg',   &
          prog       = .true.     ) 
 
+      if (do_14c) then                                        !<<RADIOCARBON
+      !       D14IC (Dissolved inorganic radiocarbon)
+      !
+      call g_tracer_add(tracer_list,package_name,       &
+         name       = 'di14c',                          &
+         longname   = 'Dissolved Inorganic Radiocarbon',&
+         units      = 'mol/kg',                         &
+         prog       = .true.,                           &
+         flux_gas       = .true.,                       &
+         flux_gas_name  = 'c14o2_flux',                 &
+         flux_gas_type  = 'air_sea_gas_flux',           &
+         flux_gas_molwt = WTMCO2,                       &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),   &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc', &
+         flux_runoff= .true.,                           &
+         flux_param     = (/14.e-03  /),                &
+         flux_bottom    = .true.,                       &
+         init_value     = 0.001)
+      !
+      !       DO14C (Dissolved organic radiocarbon)
+      !
+      call g_tracer_add(tracer_list,package_name, &
+         name       = 'do14c',                    &
+         longname   = 'DO14C',                    &
+         units      = 'mol/kg',                   &
+         prog       = .true.)
+      endif                                                   !RADIOCARBON>>
+
     !===========================================================
     !Diagnostic Tracers
     !===========================================================
@@ -3838,6 +4063,25 @@ contains
          longname   = 'Growth memory', &
          units      = 'sec-1',         &
          prog       = .false.              )
+
+    if (do_fan_dunne_fe) then  !{
+       !
+       !       Fe2 (Iron (II))
+       !
+       call g_tracer_add(tracer_list,package_name,&
+          name       = 'fe2',       &
+          longname   = 'Iron(II)', &
+          units      = 'mol/kg',        &
+          prog       = .false.          )
+       !
+       !       Fe3 (Iron (III))
+       !
+       call g_tracer_add(tracer_list,package_name,&
+          name       = 'fe3',       &
+          longname   = 'Iron(III)', &
+          units      = 'mol/kg',        &
+          prog       = .false.          )
+    endif !}
 
   end subroutine user_add_tracers
 
@@ -4091,6 +4335,12 @@ contains
     real :: bact_ldon_lim, bact_uptake_ratio, vmax_bact
     real :: fpoc_btm, log_fpoc_btm
 
+    real :: Ltotal, kfe_oxid_night, kfe_des, kfe_f_lig, kfe_r_lig, kfe_f_col, kfe_r_col
+    real :: kfe_ads, kfe_r_lig_bact, irr_scaled, O2minus
+    real :: kfe_oxid, kfe_f_red, kfe_flig_red, kfe_fcol_red, kfe_fdet_red
+    real :: ads_fecol, a_quad, b_quad, c_quad
+
+
     r_dt = 1.0 / dt
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
@@ -4155,6 +4405,27 @@ contains
 
     call mpp_clock_end(id_clock_carbon_calculations)
 
+    
+      if (do_14c) then                                        !<<RADIOCARBON
+      
+      ! Normally, the alpha would be multiplied by the atmospheric 14C/12C ratio. However,
+      ! here that is set to 1, so that alpha_14C = alpha_12C. This needs to be changed!
+
+   call g_tracer_get_values(tracer_list,'di14c' ,'field', cobalt%f_di14c,isd,jsd,ntau=tau,positive=.true.)
+
+    ! This is not used until later, but get it now
+    call g_tracer_get_values(tracer_list,'do14c' ,'field', cobalt%f_do14c,isd,jsd,ntau=tau,positive=.true.)
+    
+       do j = jsc, jec ; do i = isc, iec  !{
+       cobalt%c14o2_csurf(i,j) =  cobalt%co2_csurf(i,j) *                &
+         cobalt%f_di14c(i,j,1) / (cobalt%f_dic(i,j,1) + epsln)
+       cobalt%c14o2_alpha(i,j) =  cobalt%co2_alpha(i,j)
+       enddo; enddo ; !} i, j
+
+    call g_tracer_set_values(tracer_list,'di14c','alpha',cobalt%c14o2_alpha      ,isd,jsd)
+    call g_tracer_set_values(tracer_list,'di14c','csurf',cobalt%c14o2_csurf      ,isd,jsd)
+
+      endif                                                   !RADIOCARBON>>
 
     !---------------------------------------------------------------------
     ! Get positive tracer concentrations
@@ -4182,6 +4453,10 @@ contains
     call g_tracer_get_values(tracer_list,'sldop'   ,'field',cobalt%f_sldop   ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sidet'  ,'field',cobalt%f_sidet    ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sio4'   ,'field',cobalt%f_sio4     ,isd,jsd,ntau=tau,positive=.true.)
+    if (do_fan_dunne_fe) then  !{
+       call g_tracer_get_values(tracer_list,'fec'    ,'field',cobalt%f_fec      ,isd,jsd,ntau=tau,positive=.true.)
+       call g_tracer_get_values(tracer_list,'h2o2'   ,'field',cobalt%f_h2o2     ,isd,jsd,ntau=tau,positive=.true.)
+    endif !}
     !
     ! phytoplankton fields
     !
@@ -4212,6 +4487,10 @@ contains
     call g_tracer_get_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1,positive=.true.)
     call g_tracer_get_values(tracer_list,'cadet_arag_btf','field',cobalt%f_cadet_arag_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'cadet_calc_btf','field',cobalt%f_cadet_calc_btf,isd,jsd,ntau=1)
+    if (do_fan_dunne_fe) then  !{
+       call g_tracer_get_values(tracer_list,'fe2','field',cobalt%f_fe2  ,isd,jsd,ntau=1,positive=.true.)
+       call g_tracer_get_values(tracer_list,'fe3','field',cobalt%f_fe3  ,isd,jsd,ntau=1,positive=.true.)
+    endif !}
     call g_tracer_get_values(tracer_list,'lithdet_btf','field',cobalt%f_lithdet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'ndet_btf','field',cobalt%f_ndet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'pdet_btf','field',cobalt%f_pdet_btf,isd,jsd,ntau=1)
@@ -4908,6 +5187,9 @@ contains
        !
 
        ! initialize some cumulative COBALT-wide production diagnostics
+       cobalt%jprod_fec(i,j,k) = 0.0
+       cobalt%jprod_fed(i,j,k) = 0.0
+       cobalt%jprod_fedet(i,j,k) = 0.0
        cobalt%jprod_ndet(i,j,k) = 0.0
        cobalt%jprod_pdet(i,j,k) = 0.0
        cobalt%jprod_sldon(i,j,k) = 0.0
@@ -4916,8 +5198,6 @@ contains
        cobalt%jprod_sldop(i,j,k) = 0.0
        cobalt%jprod_ldop(i,j,k) = 0.0
        cobalt%jprod_srdop(i,j,k) = 0.0
-       cobalt%jprod_fedet(i,j,k) = 0.0
-       cobalt%jprod_fed(i,j,k) = 0.0
        cobalt%jprod_sidet(i,j,k) = 0.0
        cobalt%jprod_sio4(i,j,k) = 0.0
        cobalt%jprod_po4(i,j,k) = 0.0
@@ -5219,6 +5499,8 @@ contains
                                     cobalt%phi_lith + cobalt%k_lith ) * cobalt%f_lith(i,j,k)
     enddo; enddo ; enddo !} i,j,k
 
+
+
 !
 !---------------------------------------------------------------------------------------------------------
 ! 5: Detrital dissolution and remineralization calculation
@@ -5273,19 +5555,16 @@ contains
        cobalt%jremin_fedet(i,j,k) = cobalt%jremin_ndet(i,j,k) / (cobalt%f_ndet(i,j,k) + epsln) * &
          cobalt%remin_eff_fedet*cobalt%f_fedet(i,j,k)
     enddo; enddo; enddo  !} i,j,k
-
 !
 !--------------------------------------------------------------------------------------------
 ! 6: Miscellaneous sources and sinks: Nitrification, Iron Scavenging, Coastal Iron inputs
 !--------------------------------------------------------------------------------------------
 !
 
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-
        !
        !  Nitrification
        !
-
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
        cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
             phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
@@ -5293,38 +5572,102 @@ contains
        else
          cobalt%jnitrif(i,j,k) = 0.0
        endif !}
-
+    enddo; enddo; enddo  !} i,j,k
+    !
+    ! Solve for free iron
+    !
+    if (do_fan_dunne_fe) then  !{
+       ! If do_fan_dunne_fed, then calculate dissolved iron based on light, temperature, and ligands from redox and photochemistry.
        !
-       ! Solve for free iron
+       !Fan, Song-Miao, and John P Dunne, 2011: Models of iron speciation and concentration in the stratified epipelagic ocean.
+       ! Geophysical Research Letters, 38, L15611, DOI:10.1029/2011GL048219.
        !
-
-       !cobalt%kfe_eq_lig(i,j,k) = 10**( log10(cobalt%kfe_eq_lig_ll) - &
-       !     ( cobalt%irr_inst(i,j,k)/(cobalt%ki_fescav+cobalt%irr_inst(i,j,k)) ) * &
-       !     (log10(cobalt%kfe_eq_lig_ll) - log10(cobalt%kfe_eq_lig_hl)) )
-       cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10**( log10(cobalt%kfe_eq_lig_hl) + &
-            max(0.0,cobalt%gamma_fescav*log10(cobalt%io_fescav/cobalt%irr_inst(i,j,k))) ) ) 
-
-       feprime = 1.0 + cobalt%kfe_eq_lig(i,j,k) * (cobalt%felig_bkg + cobalt%felig_2_don * &
-            (cobalt%f_sldon(i,j,k) + cobalt%f_srdon(i,j,k)) - cobalt%f_fed(i,j,k))
-       feprime = (-feprime + (feprime * feprime + 4.0 * cobalt%kfe_eq_lig(i,j,k) * &
-            cobalt%f_fed(i,j,k))**(0.5)) / (2.0 * cobalt%kfe_eq_lig(i,j,k))
-
-       !
-       ! Iron adsorption to detrital particles
-       !
-
-       cobalt%jfe_ads(i,j,k) = min(r_dt,cobalt%alpha_fescav*feprime)
-       if (cobalt%f_fed(i,j,k).gt.1.0e-9) then !{
-          cobalt%jfe_ads(i,j,k) = min(r_dt,5.0*cobalt%alpha_fescav*cobalt%f_fed(i,j,k))
-       endif !}
+       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        !
        ! Coastal iron inputs (proxy for sediment inputs for areas with poorly resolved shelves)
        !
-
-       cobalt%jfe_coast(i,j,k) = cobalt%fe_coast * mask_coast(i,j) * grid_tmask(i,j,k) / &
+          cobalt%jfe_coast(i,j,k) = cobalt%fe_coast * mask_coast(i,j) * grid_tmask(i,j,k) / &
             sqrt(grid_dat(i,j))
 
-    enddo; enddo; enddo  !} i,j,k
+          Ltotal = cobalt%felig_bkg + cobalt%felig_2_don * (cobalt%f_sldon(i,j,k) + cobalt%f_srdon(i,j,k))
+          kfe_oxid_night = (10.0 * cobalt%f_o2(i,j,k) + cobalt%f_h2o2(i,j,k) * 7.2e4)
+          kfe_des = 0.0
+          kfe_f_lig = 2.0e6
+          kfe_r_lig = 1.0e-6
+          kfe_f_col = 2.0e6
+          kfe_r_col = 2.0e-5
+          kfe_ads = 1.5e-5 * cobalt%f_ndet(i,j,k) * 1000.0 * 106.0 / 16.0 * 12.0 * 1.87
+          kfe_r_lig_bact = 3.0e-6
+          irr_scaled = 0.02 * cobalt%irr_inst(i,j,k)
+          !
+          ! Hydrogen Peroxide production as a function of photochemistry and oxygen assuming a res time of 12 days
+          ! Yuan and Schiller (EST, 2004) and steady state surface concentration of 100 nM with a diurnal cycle 
+          ! and deep concentration of 2 nM Yuan and Schiller (EST, 2004)
+          !
+          cobalt%jprod_h2o2(i,j,k) = irr_scaled * 1.0e-7 * 2.0 / (12.0 * 86400) + (cobalt%o2_2_nh4 * &
+                                     cobalt%jprod_nh4(i,j,k) + cobalt%o2_2_nitrif*cobalt%jnitrif(i,j,k))     
+          O2minus=cobalt%jprod_h2o2(i,j,k) * 43.5                             ! assuming a res time of 43.5 seconds
+                                                                              ! Rose et al., EST, 2008
+          kfe_oxid = kfe_oxid_night+irr_scaled*O2minus*1.0e7
+          kfe_f_red = irr_scaled * (1.5e-5+O2minus*1.5e8)
+          kfe_flig_red = irr_scaled * (1.0e-3+O2minus*1.5e5)
+          kfe_fcol_red = irr_scaled * 1.5e-5
+          kfe_fdet_red = irr_scaled * 2.3e-8
+
+          ads_fecol = kfe_ads * cobalt%f_ndet(i,j,k);
+          a_quad = kfe_f_lig * (1+(kfe_f_red-kfe_flig_red-kfe_r_lig_bact) / max(epsln, kfe_oxid + &
+                   kfe_flig_red + kfe_r_lig_bact))
+          b_quad = kfe_f_lig * (Ltotal - cobalt%f_fed(i,j,k)) + kfe_r_lig + kfe_flig_red + kfe_r_lig_bact +      &
+                   (kfe_r_lig+kfe_flig_red+kfe_r_lig_bact) * (kfe_f_red-kfe_flig_red-kfe_r_lig_bact) /           &
+                   (kfe_oxid + kfe_flig_red+kfe_r_lig_bact)+kfe_f_lig * ((kfe_flig_red + kfe_r_lig_bact) *       &
+                   cobalt%f_fed(i,j,k) + (kfe_des + kfe_fdet_red) * cobalt%f_fedet(i,j,k) + kfe_r_col *          &
+                   cobalt%f_fec(i,j,k)) / max(epsln, kfe_oxid + kfe_flig_red + kfe_r_lig_bact)
+          c_quad = (kfe_r_lig + kfe_flig_red + kfe_r_lig_bact) * (((kfe_flig_red + kfe_r_lig_bact) *             &
+                   cobalt%f_fed(i,j,k) + (kfe_des + kfe_fdet_red) * cobalt%f_fedet(i,j,k) +kfe_r_col *           &
+                   cobalt%f_fec(i,j,k)) / max(epsln, kfe_oxid + kfe_flig_red + kfe_r_lig_bact) -                 &
+                   cobalt%f_fed(i,j,k))
+          cobalt%f_fe3(i,j,k) = (-b_quad + sqrt(b_quad * b_quad-4.0 * a_quad * c_quad)) / max(epsln, 2.0 * a_quad)
+          cobalt%f_fe2(i,j,k) = cobalt%f_fed(i,j,k)-cobalt%f_fe3(i,j,k) * (1 + 1.0/((kfe_r_lig + kfe_flig_red +  &
+                   kfe_r_lig_bact) / kfe_f_lig + cobalt%f_fe3(i,j,k)) * Ltotal)
+          cobalt%jfe_ads(i,j,k) = ads_fecol * cobalt%f_fec(i,j,k)
+          cobalt%jprod_fec(i,j,k) = kfe_f_col * (cobalt%f_fec(i,j,k) +1e-14) * cobalt%f_fe3(i,j,k)
+          cobalt%jfec(i,j,k) = cobalt%jprod_fec(i,j,k) - (kfe_fcol_red+kfe_r_col) * cobalt%f_fec(i,j,k) - &
+                               cobalt%jfe_ads(i,j,k)
+          cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) + cobalt%jremin_fedet(i,j,k) + &
+                                 (kfe_des+kfe_fdet_red) * cobalt%f_fedet(i,j,k) +   &
+                                 (kfe_r_col +kfe_fcol_red) * cobalt%f_fec(i,j,k) +  &
+                                 cobalt%jfe_coast(i,j,k)  
+
+       enddo; enddo; enddo  !} i,j,k
+    else
+       !
+       ! Otherwise use simple ligand exchange solubility calculation
+       !
+       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       !cobalt%kfe_eq_lig(i,j,k) = 10**( log10(cobalt%kfe_eq_lig_ll) - &
+       !     ( cobalt%irr_inst(i,j,k)/(cobalt%ki_fescav+cobalt%irr_inst(i,j,k)) ) * &
+       !     (log10(cobalt%kfe_eq_lig_ll) - log10(cobalt%kfe_eq_lig_hl)) )
+          cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10**( log10(cobalt%kfe_eq_lig_hl) + &
+            max(0.0,cobalt%gamma_fescav*log10(cobalt%io_fescav/cobalt%irr_inst(i,j,k))) ) ) 
+
+          feprime = 1.0 + cobalt%kfe_eq_lig(i,j,k) * (cobalt%felig_bkg + cobalt%felig_2_don * &
+            (cobalt%f_sldon(i,j,k) + cobalt%f_srdon(i,j,k)) - cobalt%f_fed(i,j,k))
+          feprime = (-feprime + (feprime * feprime + 4.0 * cobalt%kfe_eq_lig(i,j,k) * &
+            cobalt%f_fed(i,j,k))**(0.5)) / (2.0 * cobalt%kfe_eq_lig(i,j,k))
+       !
+       ! Iron adsorption to detrital particles
+       !
+          cobalt%jfe_ads(i,j,k) = min(r_dt,cobalt%alpha_fescav*feprime)
+          if (cobalt%f_fed(i,j,k).gt.1.0e-9) then !{
+            cobalt%jfe_ads(i,j,k) = min(r_dt,5.0*cobalt%alpha_fescav*cobalt%f_fed(i,j,k))
+          endif !}
+       !
+       ! Coastal iron inputs (proxy for sediment inputs for areas with poorly resolved shelves)
+       !
+          cobalt%jfe_coast(i,j,k) = cobalt%fe_coast * mask_coast(i,j) * grid_tmask(i,j,k) / &
+            sqrt(grid_dat(i,j))
+       enddo; enddo; enddo  !} i,j,k
+    endif !}
 
 !
 !-------------------------------------------------------------------------------------------------
@@ -5463,6 +5806,15 @@ contains
     call g_tracer_get_pointer(tracer_list,'nsmz'   ,'field',cobalt%p_nsmz   )
     call g_tracer_get_pointer(tracer_list,'nmdz'   ,'field',cobalt%p_nmdz   )
     call g_tracer_get_pointer(tracer_list,'nlgz'   ,'field',cobalt%p_nlgz   )
+
+    if (do_fan_dunne_fe) then  !{
+       call g_tracer_get_pointer(tracer_list,'fec'    ,'field',cobalt%p_fec    )
+       call g_tracer_get_pointer(tracer_list,'h2o2'   ,'field',cobalt%p_h2o2   )
+    endif !}
+    if (do_14c) then
+       call g_tracer_get_pointer(tracer_list,'di14c','field',cobalt%p_di14c)
+       call g_tracer_get_pointer(tracer_list,'do14c','field',cobalt%p_do14c)
+    endif 
 
 
     if (cobalt%id_no3_in_source .gt. 0)                &
@@ -5612,13 +5964,24 @@ contains
        !
        ! Fed
        !
-       cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) + &
-                                 cobalt%jremin_fedet(i,j,k) + cobalt%jfe_coast(i,j,k)  
        cobalt%jfed(i,j,k) = cobalt%jprod_fed(i,j,k) - phyto(DIAZO)%juptake_fe(i,j,k) - &
                             phyto(LARGE)%juptake_fe(i,j,k) -  phyto(SMALL)%juptake_fe(i,j,k) - &
-                            cobalt%jfe_ads(i,j,k)
+                            cobalt%jprod_fec(i,j,k)
        cobalt%p_fed(i,j,k,tau) = cobalt%p_fed(i,j,k,tau) + cobalt%jfed(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+    if (do_fan_dunne_fe) then  !{
+       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+          !
+          ! Fec
+          !
+          cobalt%p_fec(i,j,k,tau) = cobalt%p_fec(i,j,k,tau) + cobalt%jfec(i,j,k) * dt * grid_tmask(i,j,k)
+          !
+          ! H2O2
+          !
+          cobalt%jh2o2(i,j,k) = cobalt%jprod_h2o2(i,j,k) - 1. / (12.0 * 86400) * cobalt%f_h2o2(i,j,k)
+          cobalt%p_h2o2(i,j,k,tau) = cobalt%p_h2o2(i,j,k,tau) + cobalt%jh2o2(i,j,k) * dt * grid_tmask(i,j,k)
+       enddo; enddo ; enddo  !} i,j,k
+    endif !}
 
     call mpp_clock_end(id_clock_source_sink_loop5)
     !
@@ -5642,7 +6005,7 @@ contains
        ! Fedet
        !
        cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) + cobalt%jfe_ads(i,j,k)
-       cobalt%jfedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - &
+       cobalt%jfedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - (kfe_des+kfe_fdet_red) * cobalt%p_fedet(i,j,k,tau) - &
                               cobalt%jremin_fedet(i,j,k) - cobalt%det_jzloss_fe(i,j,k) - & 
                               cobalt%det_jhploss_fe(i,j,k)
        cobalt%p_fedet(i,j,k,tau) = cobalt%p_fedet(i,j,k,tau) + cobalt%jfedet(i,j,k)*dt*grid_tmask(i,j,k) 
@@ -5763,6 +6126,83 @@ contains
           cobalt%jprod_cadet_arag(i,j,k) - cobalt%jprod_cadet_calc(i,j,k))
        cobalt%p_dic(i,j,k,tau) = cobalt%p_dic(i,j,k,tau) + cobalt%jdic(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo !} i,j,k
+       
+    if (do_14c) then                                        !<<RADIOCARBON
+
+         do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+
+          cobalt%c14_2_n(i,j,k) = cobalt%c_2_n *                             &
+            cobalt%f_di14c(i,j,k) / (epsln + cobalt%f_dic(i,j,k))
+
+          cobalt%jdo14c(i,j,k) = (cobalt%c_2_n * (cobalt%jno3(i,j,k) + &
+          cobalt%jnh4(i,j,k) + cobalt%jno3denit_wc(i,j,k) - phyto(DIAZO)%juptake_n2(i,j,k)) + &
+          cobalt%jdiss_cadet_arag(i,j,k) + cobalt%jdiss_cadet_calc(i,j,k) - &
+          cobalt%jprod_cadet_arag(i,j,k) - cobalt%jprod_cadet_calc(i,j,k)) * cobalt%c14_2_n(i,j,k)
+            
+         enddo; enddo ; enddo !} i,j,k
+
+      ! Sinking particulate 14C is generated in the local ratio of 14C/12C
+      ! to sinking 12C, which itself is strictly tied to P through a fixed
+      ! C:P. Therefore, jpop can be used to calculate fpo14c.
+
+      do j = jsc, jec ;      do i = isc, iec   !{
+        cobalt%fpo14c(i,j,1) =  (cobalt%jprod_ndet(i,j,1) - (cobalt%jremin_ndet(i,j,1) +          &
+                             cobalt%det_jzloss_n(i,j,1) + cobalt%det_jhploss_n(i,j,1))) *         &
+                             cobalt%c14_2_n(i,j,1) * rho_dzt(i,j,1) 
+        cobalt%j14c_reminp(i,j,1) = 0.0
+      enddo; enddo !} i,j
+
+      do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
+        cobalt%fpo14c(i,j,k) = cobalt%fpo14c(i,j,k-1) - cobalt%jremin_ndet(i,j,k) *                &
+                             cobalt%fpo14c(i,j,k-1) / max(epsln,cobalt%fpo14c(i,j,k-1)) +          &
+                            (cobalt%jprod_ndet(i,j,k) - cobalt%det_jzloss_n(i,j,k) -               &
+                             cobalt%det_jhploss_n(i,j,k)) *  cobalt%c14_2_n(i,j,k) * rho_dzt(i,j,k)
+        cobalt%j14c_reminp(i,j,k) = cobalt%jremin_ndet(i,j,k) *                &
+                             cobalt%fpo14c(i,j,k-1) / max(epsln,cobalt%fpo14c(i,j,k-1)) 
+      enddo; enddo ; enddo !} i,j,k
+
+     ! Decay the radiocarbon in both DIC and DOC
+
+      do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{        
+
+        cobalt%j14c_decay_dic(i,j,k) = cobalt%f_di14c(i,j,k) *               &
+          cobalt%lambda_14c 
+
+        cobalt%j14c_decay_doc(i,j,k) = cobalt%f_do14c(i,j,k) *               &
+          cobalt%lambda_14c 
+
+      enddo; enddo ; enddo !} i,j,k
+
+      do j = jsc, jec ; do i = isc, iec  !{
+         k = grid_kmt(i,j)
+         if (k .gt. 0) then !{
+           cobalt%b_di14c(i,j) = - cobalt%fpo14c(i,j,k)
+         endif  
+      enddo; enddo  !} i, j
+
+     call g_tracer_set_values(tracer_list,'di14c','btf',cobalt%b_di14c,isd,jsd)
+!
+! Include only 14C in the semirefractory component of DOC
+!
+       cobalt%jdo14c(i,j,k) = cobalt%jprod_srdon(i,j,k) * cobalt%c14_2_n(i,j,k) - &
+           cobalt%gamma_srdon * cobalt%f_do14c(i,j,k)
+         
+       cobalt%p_do14c(i,j,k,tau) = cobalt%p_do14c(i,j,k,tau) +               &
+         (cobalt%jdo14c(i,j,k) - cobalt%j14c_decay_doc(i,j,k)) * dt          &
+         * grid_tmask(i,j,k)
+!
+! Use the DIC budget except remove the srdon component and sinking detritus components which are treated separately
+!
+       cobalt%jdi14c(i,j,k) =(cobalt%c_2_n * (cobalt%jno3(i,j,k) + &
+          cobalt%jnh4(i,j,k) + cobalt%jno3denit_wc(i,j,k) - phyto(DIAZO)%juptake_n2(i,j,k)) + &
+          cobalt%jsrdon(i,j,k) + cobalt%jndet(i,j,k) + cobalt%jdiss_cadet_arag(i,j,k) + cobalt%jdiss_cadet_calc(i,j,k) - &
+          cobalt%jprod_cadet_arag(i,j,k) - cobalt%jprod_cadet_calc(i,j,k)) * cobalt%c14_2_n(i,j,k) +&
+          cobalt%gamma_srdon * cobalt%f_do14c(i,j,k) + cobalt%j14c_reminp(i,j,k)
+  
+       cobalt%p_di14c(i,j,k,tau) = cobalt%p_di14c(i,j,k,tau) +               &
+         (cobalt%jdi14c(i,j,k) - cobalt%j14c_decay_dic(i,j,k)) * dt          &
+         * grid_tmask(i,j,k)
+    endif                                                   !RADIOCARBON>>
     !
     !-----------------------------------------------------------------------
     !     Lithogenic aluminosilicate particulates
@@ -5780,6 +6220,10 @@ contains
     call g_tracer_set_values(tracer_list,'cased',  'field',cobalt%f_cased    ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'chl',    'field',cobalt%f_chl      ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1)
+    if (do_fan_dunne_fe) then  !{
+       call g_tracer_set_values(tracer_list,'fe2','field',cobalt%f_fe2  ,isd,jsd,ntau=1)
+       call g_tracer_set_values(tracer_list,'fe3','field',cobalt%f_fe3  ,isd,jsd,ntau=1)
+    endif !}
     call g_tracer_set_values(tracer_list,'irr_mem' ,'field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_ndi' ,'field',phyto(DIAZO)%f_mu_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_nlg' ,'field',phyto(LARGE)%f_mu_mem ,isd,jsd,ntau=1)
@@ -6169,9 +6613,14 @@ contains
     call g_tracer_get_pointer(tracer_list,'fed','runoff_tracer_flux',cobalt%runoff_flux_fed)
     call g_tracer_get_pointer(tracer_list,'fed','drydep',cobalt%dry_fed)
     call g_tracer_get_pointer(tracer_list,'fed','wetdep',cobalt%wet_fed)
+    if (do_fan_dunne_fe) then  !{
+       call g_tracer_get_pointer(tracer_list,'h2o2','runoff_tracer_flux',cobalt%runoff_flux_h2o2)
+       call g_tracer_get_pointer(tracer_list,'h2o2','drydep',cobalt%dry_h2o2)
+       call g_tracer_get_pointer(tracer_list,'h2o2','wetdep',cobalt%wet_h2o2)
+    endif !}
+    call g_tracer_get_pointer(tracer_list,'lith','runoff_tracer_flux',cobalt%runoff_flux_lith)
     call g_tracer_get_pointer(tracer_list,'lith','drydep',cobalt%dry_lith)
     call g_tracer_get_pointer(tracer_list,'lith','wetdep',cobalt%wet_lith)
-    call g_tracer_get_pointer(tracer_list,'lith','runoff_tracer_flux',cobalt%runoff_flux_lith)
     call g_tracer_get_pointer(tracer_list,'no3','runoff_tracer_flux',cobalt%runoff_flux_no3)
     call g_tracer_get_pointer(tracer_list,'no3','drydep',cobalt%dry_no3)
     call g_tracer_get_pointer(tracer_list,'no3','wetdep',cobalt%wet_no3)
@@ -6417,12 +6866,12 @@ contains
             used = send_data(zoo(n)%id_jprod_srdop, zoo(n)%jprod_srdop*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-       if (zoo(n)%id_jprod_fedet .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_fedet, zoo(n)%jprod_fedet*rho_dzt,           &
-            model_time, rmask = grid_tmask,&
-            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_fed .gt. 0)          &
             used = send_data(zoo(n)%id_jprod_fed,  zoo(n)%jprod_fed*rho_dzt,           &
+            model_time, rmask = grid_tmask,&
+            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (zoo(n)%id_jprod_fedet .gt. 0)          &
+            used = send_data(zoo(n)%id_jprod_fedet, zoo(n)%jprod_fedet*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_sidet .gt. 0)          &
@@ -6501,12 +6950,16 @@ contains
     !    used = send_data(cobalt%id_jprod_po4, cobalt%jprod_po4*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_jprod_fedet .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_fedet,  cobalt%jprod_fedet*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_fec .gt. 0)          &
+        used = send_data(cobalt%id_jprod_fec, cobalt%jprod_fec*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_fed .gt. 0)          &
     !    used = send_data(cobalt%id_jprod_fed, cobalt%jprod_fed*rho_dzt,           &
+    !    model_time, rmask = grid_tmask,&
+    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    !if (cobalt%id_jprod_fedet .gt. 0)          &
+    !    used = send_data(cobalt%id_jprod_fedet,  cobalt%jprod_fedet*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_sidet .gt. 0)          &
@@ -6553,6 +7006,22 @@ contains
         used = send_data(cobalt%id_jremin_fedet, cobalt%jremin_fedet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_fec .gt. 0)              &
+         used = send_data(cobalt%id_jprod_fec,       cobalt%jprod_fec*rho_dzt,       &
+         model_time, rmask = grid_tmask,&
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_h2o2 .gt. 0)              &
+         used = send_data(cobalt%id_jprod_h2o2,       cobalt%jprod_h2o2*rho_dzt,       &
+         model_time, rmask = grid_tmask,&
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jfec .gt. 0)              &
+         used = send_data(cobalt%id_jfec,       cobalt%jfec*rho_dzt,       &
+         model_time, rmask = grid_tmask,&
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jfed .gt. 0)              &
+         used = send_data(cobalt%id_jfed,       cobalt%jfed*rho_dzt,       &
+         model_time, rmask = grid_tmask,&
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jfe_ads .gt. 0)              &
          used = send_data(cobalt%id_jfe_ads,       cobalt%jfe_ads*rho_dzt,       &
          model_time, rmask = grid_tmask,&
@@ -6765,6 +7234,49 @@ contains
          cobalt%p_nlg(:,:,:,tau) + cobalt%p_nsm(:,:,:,tau)), &
          model_time, rmask = grid_tmask(:,:,:),& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+!
+! Radiocarbon fields
+!
+    if (cobalt%id_b_di14c .gt. 0)                                                 &
+         used = send_data(cobalt%id_b_di14c,        cobalt%b_di14c,                &
+         model_time, rmask = grid_tmask(:,:,1),                                  & 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_c14_2_n .gt. 0)                                                 &
+         used = send_data(cobalt%id_c14_2_n,        cobalt%c14_2_n,                &
+         model_time, rmask = grid_tmask,                                         & 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_c14o2_csurf .gt. 0)                                             &
+         used = send_data(cobalt%id_c14o2_csurf,    cobalt%c14o2_csurf,            &
+         model_time, rmask = grid_tmask(:,:,1),                                  & 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_c14o2_alpha .gt. 0)                                             &
+         used = send_data(cobalt%id_c14o2_alpha,    cobalt%c14o2_alpha,            &
+         model_time, rmask = grid_tmask(:,:,1),                                  & 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_fpo14c .gt. 0)                                                  &
+         used = send_data(cobalt%id_fpo14c,         cobalt%fpo14c,                 &
+         model_time, rmask = grid_tmask,                                         & 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_j14c_decay_dic .gt. 0)                                          &
+         used = send_data(cobalt%id_j14c_decay_dic, cobalt%j14c_decay_dic*rho_dzt, &
+         model_time, rmask = grid_tmask,                                         & 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_j14c_decay_doc .gt. 0)                                          &
+         used = send_data(cobalt%id_j14c_decay_doc, cobalt%j14c_decay_doc*rho_dzt, &
+         model_time, rmask = grid_tmask,& 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_j14c_reminp .gt. 0)                                             &
+         used = send_data(cobalt%id_j14c_reminp,    cobalt%j14c_reminp*rho_dzt,    &
+         model_time, rmask = grid_tmask,                                         & 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jdi14c .gt. 0)                                                  &
+         used = send_data(cobalt%id_jdi14c,         cobalt%jdi14c*rho_dzt,         &
+         model_time, rmask = grid_tmask,& 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jdo14c .gt. 0)                                                  &
+         used = send_data(cobalt%id_jdo14c,         cobalt%jdo14c*rho_dzt,         &
+         model_time, rmask = grid_tmask,                                         & 
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !
     ! 2D COBALT fields
     !
@@ -6786,6 +7298,10 @@ contains
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_dic .gt. 0)             &
        used = send_data(cobalt%id_sfc_dic,       cobalt%p_dic(:,:,1,tau),         &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_sfc_fec .gt. 0)             &
+       used = send_data(cobalt%id_sfc_fec,       cobalt%p_fec(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_fed .gt. 0)             &
@@ -6864,6 +7380,14 @@ contains
        used = send_data(cobalt%id_sfc_co3_sol_calc, cobalt%co3_sol_calc(:,:,1),  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_sfc_fe2 .gt. 0)            &
+       used = send_data(cobalt%id_sfc_fe2, cobalt%f_fe2(:,:,1),            &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_sfc_fe3 .gt. 0)            &
+       used = send_data(cobalt%id_sfc_fe3, cobalt%f_fe3(:,:,1),            &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     do n= 1, NUM_PHYTO
        if (phyto(n)%id_sfc_f_n .gt. 0)              &
           used = send_data(phyto(n)%id_sfc_f_n, phyto(n)%f_n(:,:,1),            & 
@@ -6923,6 +7447,10 @@ contains
        used = send_data(cobalt%id_dep_dry_fed, cobalt%dry_fed,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_dep_dry_h2o2 .gt. 0)     &
+       used = send_data(cobalt%id_dep_dry_h2o2, cobalt%dry_h2o2,                        &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_lith .gt. 0)     &
        used = send_data(cobalt%id_dep_dry_lith, cobalt%dry_lith,                        &
        model_time, rmask = grid_tmask(:,:,1),&
@@ -6941,6 +7469,10 @@ contains
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_fed .gt. 0)     &
        used = send_data(cobalt%id_dep_wet_fed, cobalt%wet_fed,                          &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_dep_wet_h2o2 .gt. 0)     &
+       used = send_data(cobalt%id_dep_wet_h2o2, cobalt%wet_h2o2,                        &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_lith .gt. 0)     &
@@ -7277,6 +7809,7 @@ contains
     real, dimension(:,:,:,:), pointer :: o2_field,dic_field,po4_field,sio4_field,alk_field
     real, dimension(:,:,:), ALLOCATABLE :: htotal_field,co3_ion_field
     real, dimension(:,:), ALLOCATABLE :: co2_alpha,co2_csurf,co2_sc_no,o2_alpha,o2_csurf,o2_sc_no
+    real, dimension(:,:), ALLOCATABLE :: c14o2_alpha,c14o2_csurf
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_set_boundary_values'
     !
     !
@@ -7289,6 +7822,8 @@ contains
     allocate(co2_alpha(isd:ied, jsd:jed)); co2_alpha=0.0
     allocate(co2_csurf(isd:ied, jsd:jed)); co2_csurf=0.0
     allocate(co2_sc_no(isd:ied, jsd:jed)); co2_sc_no=0.0
+    allocate(  c14o2_alpha(isd:ied, jsd:jed)); c14o2_alpha=0.0
+    allocate(  c14o2_csurf(isd:ied, jsd:jed)); c14o2_csurf=0.0
     allocate( o2_alpha(isd:ied, jsd:jed)); o2_alpha=0.0
     allocate( o2_csurf(isd:ied, jsd:jed)); o2_csurf=0.0
     allocate( o2_sc_no(isd:ied, jsd:jed)); o2_sc_no=0.0
@@ -7449,8 +7984,37 @@ contains
     call g_tracer_set_values(tracer_list,'o2', 'alpha',o2_alpha, isd,jsd)
     call g_tracer_set_values(tracer_list,'o2', 'csurf',o2_csurf, isd,jsd)
     call g_tracer_set_values(tracer_list,'o2', 'sc_no',o2_sc_no, isd,jsd)
+      if (do_14c) then                                      !<<RADIOCARBON
+      
+        call g_tracer_get_values(tracer_list,'di14c','alpha', c14o2_alpha ,isd,jsd)
+        call g_tracer_get_values(tracer_list,'di14c','csurf', c14o2_csurf ,isd,jsd)
 
-    deallocate(co2_alpha,co2_csurf,co2_sc_no,o2_alpha,o2_csurf,o2_sc_no)
+        do j=jsc,jec ; do i=isc,iec
+         !---------------------------------------------------------------------
+         !     14CO2 - schmidt number is calculated same as before, as is alpha.
+         !   Need to multiply alpha by frac_14catm to get the real alpha.
+         !   NOTE: FOR NOW, D14C fixed at 0 permil!! Need to fix this later.
+         !---------------------------------------------------------------------
+
+         sal = SSS(i,j) ; ST = SST(i,j)
+         co2_sc_no(i,j) = cobalt%a1_co2 + ST * (cobalt%a2_co2 + ST * (cobalt%a3_co2 + ST * cobalt%a4_co2)) * &
+            grid_tmask(i,j,1)
+       
+         c14o2_alpha(i,j) = c14o2_alpha(i,j) * cobalt%Rho_0 
+         c14o2_csurf(i,j) = c14o2_csurf(i,j) * cobalt%Rho_0 
+
+        enddo; enddo
+
+        call g_tracer_set_values(tracer_list,'di14c','alpha',c14o2_alpha,isd,jsd)
+        call g_tracer_set_values(tracer_list,'di14c','csurf',c14o2_csurf,isd,jsd)
+        call g_tracer_set_values(tracer_list,'di14c','sc_no',co2_sc_no,isd,jsd)
+
+      endif                                                  !RADIOCARBON>>
+
+    deallocate(co2_alpha,co2_csurf,&
+      co2_sc_no,o2_alpha,          &
+      c14o2_alpha,c14o2_csurf,     &
+      o2_csurf,o2_sc_no)
 
   end subroutine generic_COBALT_set_boundary_values
 
@@ -7582,21 +8146,21 @@ contains
        allocate(zoo(n)%jingest_p(isd:ied,jsd:jed,nk))     ; zoo(n)%jingest_p      = 0.0
        allocate(zoo(n)%jingest_sio2(isd:ied,jsd:jed,nk))  ; zoo(n)%jingest_sio2   = 0.0
        allocate(zoo(n)%jingest_fe(isd:ied,jsd:jed,nk))    ; zoo(n)%jingest_fe     = 0.0
+       allocate(zoo(n)%jprod_fed(isd:ied,jsd:jed,nk))     ; zoo(n)%jprod_fed      = 0.0
+       allocate(zoo(n)%jprod_fedet(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_fedet    = 0.0
        allocate(zoo(n)%jprod_ndet(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_ndet     = 0.0
        allocate(zoo(n)%jprod_pdet(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_pdet     = 0.0
        allocate(zoo(n)%jprod_ldon(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_ldon     = 0.0
        allocate(zoo(n)%jprod_ldop(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_ldop     = 0.0
-       allocate(zoo(n)%jprod_srdon(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_srdon     = 0.0
-       allocate(zoo(n)%jprod_srdop(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_srdop     = 0.0
-       allocate(zoo(n)%jprod_sldon(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_sldon     = 0.0
-       allocate(zoo(n)%jprod_sldop(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_sldop     = 0.0
-       allocate(zoo(n)%jprod_fedet(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_fedet    = 0.0
-       allocate(zoo(n)%jprod_fed(isd:ied,jsd:jed,nk))     ; zoo(n)%jprod_fed      = 0.0
+       allocate(zoo(n)%jprod_srdon(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_srdon    = 0.0
+       allocate(zoo(n)%jprod_srdop(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_srdop    = 0.0
+       allocate(zoo(n)%jprod_sldon(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_sldon    = 0.0
+       allocate(zoo(n)%jprod_sldop(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_sldop    = 0.0
        allocate(zoo(n)%jprod_sidet(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_sidet    = 0.0
-       allocate(zoo(n)%jprod_sio4(isd:ied,jsd:jed,nk))   ; zoo(n)%jprod_sio4      = 0.0
+       allocate(zoo(n)%jprod_sio4(isd:ied,jsd:jed,nk))    ; zoo(n)%jprod_sio4     = 0.0
        allocate(zoo(n)%jprod_po4(isd:ied,jsd:jed,nk))     ; zoo(n)%jprod_po4      = 0.0
        allocate(zoo(n)%jprod_nh4(isd:ied,jsd:jed,nk))     ; zoo(n)%jprod_nh4      = 0.0
-       allocate(zoo(n)%jprod_n(isd:ied,jsd:jed,nk))      ; zoo(n)%jprod_n       = 0.0
+       allocate(zoo(n)%jprod_n(isd:ied,jsd:jed,nk))       ; zoo(n)%jprod_n        = 0.0
        allocate(zoo(n)%temp_lim(isd:ied,jsd:jed,nk))      ; zoo(n)%temp_lim       = 0.0
     enddo
 
@@ -7610,6 +8174,7 @@ contains
     allocate(cobalt%f_cadet_arag(isd:ied, jsd:jed, 1:nk)) ; cobalt%f_cadet_arag=0.0
     allocate(cobalt%f_cadet_calc(isd:ied, jsd:jed, 1:nk)) ; cobalt%f_cadet_calc=0.0
     allocate(cobalt%f_dic(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_dic=0.0
+    allocate(cobalt%f_fec(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_fec=0.0
     allocate(cobalt%f_fed(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_fed=0.0
     allocate(cobalt%f_fedet(isd:ied, jsd:jed, 1:nk))      ; cobalt%f_fedet=0.0
     allocate(cobalt%f_ldon(isd:ied, jsd:jed, 1:nk))       ; cobalt%f_ldon=0.0
@@ -7635,6 +8200,8 @@ contains
     allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
     allocate(cobalt%f_chl(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_chl=0.0
     allocate(cobalt%f_co3_ion(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_co3_ion=0.0
+    allocate(cobalt%f_fe2(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_fe2=0.0
+    allocate(cobalt%f_fe3(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_fe3=0.0
     allocate(cobalt%f_htotal(isd:ied, jsd:jed, 1:nk))     ; cobalt%f_htotal=0.0
     allocate(cobalt%f_irr_mem(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_irr_mem=0.0
     allocate(cobalt%f_cased(isd:ied, jsd:jed, 1:nk))      ; cobalt%f_cased=0.0
@@ -7657,10 +8224,11 @@ contains
     allocate(cobalt%jcadet_arag(isd:ied, jsd:jed, 1:nk))  ; cobalt%jcadet_arag=0.0
     allocate(cobalt%jcadet_calc(isd:ied, jsd:jed, 1:nk))  ; cobalt%jcadet_calc=0.0
     allocate(cobalt%jdic(isd:ied, jsd:jed, 1:nk))         ; cobalt%jdic=0.0
+    allocate(cobalt%jfec(isd:ied, jsd:jed, 1:nk))         ; cobalt%jfec=0.0
     allocate(cobalt%jfed(isd:ied, jsd:jed, 1:nk))         ; cobalt%jfed=0.0
     allocate(cobalt%jfedi(isd:ied, jsd:jed, 1:nk))        ; cobalt%jfedi=0.0
     allocate(cobalt%jfelg(isd:ied, jsd:jed, 1:nk))        ; cobalt%jfelg=0.0
-    allocate(cobalt%jfesm(isd:ied, jsd:jed, 1:nk))     ; cobalt%jfesm=0.0
+    allocate(cobalt%jfesm(isd:ied, jsd:jed, 1:nk))        ; cobalt%jfesm=0.0
     allocate(cobalt%jfedet(isd:ied, jsd:jed, 1:nk))       ; cobalt%jfedet=0.0
     allocate(cobalt%jldon(isd:ied, jsd:jed, 1:nk))        ; cobalt%jldon=0.0
     allocate(cobalt%jldop(isd:ied, jsd:jed, 1:nk))        ; cobalt%jldop=0.0
@@ -7672,25 +8240,27 @@ contains
     allocate(cobalt%jo2(isd:ied, jsd:jed, 1:nk))          ; cobalt%jo2=0.0
     allocate(cobalt%jpdet(isd:ied, jsd:jed, 1:nk))        ; cobalt%jpdet=0.0
     allocate(cobalt%jpo4(isd:ied, jsd:jed, 1:nk))         ; cobalt%jpo4=0.0
-    allocate(cobalt%jsrdon(isd:ied, jsd:jed, 1:nk))        ; cobalt%jsrdon=0.0
-    allocate(cobalt%jsrdop(isd:ied, jsd:jed, 1:nk))        ; cobalt%jsrdop=0.0
-    allocate(cobalt%jsldon(isd:ied, jsd:jed, 1:nk))        ; cobalt%jsldon=0.0
-    allocate(cobalt%jsldop(isd:ied, jsd:jed, 1:nk))        ; cobalt%jsldop=0.0
+    allocate(cobalt%jsrdon(isd:ied, jsd:jed, 1:nk))       ; cobalt%jsrdon=0.0
+    allocate(cobalt%jsrdop(isd:ied, jsd:jed, 1:nk))       ; cobalt%jsrdop=0.0
+    allocate(cobalt%jsldon(isd:ied, jsd:jed, 1:nk))       ; cobalt%jsldon=0.0
+    allocate(cobalt%jsldop(isd:ied, jsd:jed, 1:nk))       ; cobalt%jsldop=0.0
     allocate(cobalt%jsidet(isd:ied, jsd:jed, 1:nk))       ; cobalt%jsidet=0.0
     allocate(cobalt%jsilg(isd:ied, jsd:jed, 1:nk))        ; cobalt%jsilg=0.0
     allocate(cobalt%jsio4(isd:ied, jsd:jed, 1:nk))        ; cobalt%jsio4=0.0
+    allocate(cobalt%jprod_fec(isd:ied, jsd:jed, 1:nk))    ; cobalt%jprod_fec=0.0
+    allocate(cobalt%jprod_fed(isd:ied, jsd:jed, 1:nk))    ; cobalt%jprod_fed=0.0
+    allocate(cobalt%jprod_fedet(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_fedet=0.0
+    allocate(cobalt%jprod_h2o2(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_h2o2=0.0
     allocate(cobalt%jprod_ndet(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_ndet=0.0
     allocate(cobalt%jprod_pdet(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_pdet=0.0
-    allocate(cobalt%jprod_srdon(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_srdon=0.0
-    allocate(cobalt%jprod_sldon(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_sldon=0.0
+    allocate(cobalt%jprod_srdon(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_srdon=0.0
+    allocate(cobalt%jprod_sldon(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_sldon=0.0
     allocate(cobalt%jprod_ldon(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_ldon=0.0
-    allocate(cobalt%jprod_srdop(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_srdop=0.0
-    allocate(cobalt%jprod_sldop(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_sldop=0.0
+    allocate(cobalt%jprod_srdop(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_srdop=0.0
+    allocate(cobalt%jprod_sldop(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_sldop=0.0
     allocate(cobalt%jprod_ldop(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_ldop=0.0
-    allocate(cobalt%jprod_fedet(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_fedet=0.0
-    allocate(cobalt%jprod_fed(isd:ied, jsd:jed, 1:nk))    ; cobalt%jprod_fed=0.0
     allocate(cobalt%jprod_sidet(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_sidet=0.0
-    allocate(cobalt%jprod_sio4(isd:ied, jsd:jed, 1:nk))  ; cobalt%jprod_sio4=0.0
+    allocate(cobalt%jprod_sio4(isd:ied, jsd:jed, 1:nk))   ; cobalt%jprod_sio4=0.0
     allocate(cobalt%jprod_lithdet(isd:ied, jsd:jed, 1:nk)); cobalt%jprod_lithdet=0.0
     allocate(cobalt%jprod_cadet_arag(isd:ied, jsd:jed, 1:nk)); cobalt%jprod_cadet_arag=0.0
     allocate(cobalt%jprod_cadet_calc(isd:ied, jsd:jed, 1:nk)); cobalt%jprod_cadet_calc=0.0
@@ -7833,6 +8403,20 @@ contains
    allocate(cobalt%z_sat_calc(isd:ied, jsd:jed)); cobalt%z_sat_calc=0.0
    allocate(cobalt%mask_z_sat_arag(isd:ied, jsd:jed)); cobalt%mask_z_sat_arag = .FALSE.
    allocate(cobalt%mask_z_sat_calc(isd:ied, jsd:jed)); cobalt%mask_z_sat_calc = .FALSE.
+   if (do_14c) then                                        !<<RADIOCARBON
+      allocate(cobalt%c14_2_n(isd:ied, jsd:jed, 1:nk));        cobalt%c14_2_n=0.0
+      allocate(cobalt%f_di14c(isd:ied, jsd:jed, 1:nk));        cobalt%f_di14c=0.0
+      allocate(cobalt%f_do14c(isd:ied, jsd:jed, 1:nk));        cobalt%f_do14c=0.0
+      allocate(cobalt%fpo14c(isd:ied, jsd:jed, 1:nk));         cobalt%fpo14c=0.0
+      allocate(cobalt%j14c_decay_dic(isd:ied, jsd:jed, 1:nk)); cobalt%j14c_decay_dic=0.0
+      allocate(cobalt%j14c_decay_doc(isd:ied, jsd:jed, 1:nk)); cobalt%j14c_decay_doc=0.0
+      allocate(cobalt%j14c_reminp(isd:ied, jsd:jed, 1:nk));    cobalt%j14c_reminp=0.0
+      allocate(cobalt%jdi14c(isd:ied, jsd:jed, 1:nk));         cobalt%jdi14c=0.0
+      allocate(cobalt%jdo14c(isd:ied, jsd:jed, 1:nk));         cobalt%jdo14c=0.0
+      allocate(cobalt%c14o2_csurf  (isd:ied, jsd:jed));        cobalt%c14o2_csurf=0.0
+      allocate(cobalt%c14o2_alpha  (isd:ied, jsd:jed));        cobalt%c14o2_alpha=0.0
+      allocate(cobalt%b_di14c      (isd:ied, jsd:jed));        cobalt%b_di14c=0.0
+   endif                                                   !RADIOCARBON>>
 
 
   end subroutine user_allocate_arrays
@@ -7950,6 +8534,7 @@ contains
     	cobalt%f_cadet_arag,&
         cobalt%f_cadet_calc,&
     	cobalt%f_dic,&
+    	cobalt%f_fec,&
     	cobalt%f_fed,&
     	cobalt%f_fedet,&
     	cobalt%f_ldon,&
@@ -7971,6 +8556,8 @@ contains
     	cobalt%f_sio4,&
     	cobalt%f_chl,&
     	cobalt%f_co3_ion,&
+    	cobalt%f_fe2,&
+    	cobalt%f_fe3,&
     	cobalt%f_htotal,&
     	cobalt%f_irr_mem,&
     	cobalt%f_cased,&
@@ -7991,6 +8578,7 @@ contains
     	cobalt%jcadet_arag,&
         cobalt%jcadet_calc,&
     	cobalt%jdic,&
+    	cobalt%jfec,&
     	cobalt%jfed,&
     	cobalt%jfedi,&
     	cobalt%jfelg,&
@@ -8021,8 +8609,10 @@ contains
         cobalt%jprod_srdop,&
     	cobalt%jprod_sldop,&
     	cobalt%jprod_ldop,&
-    	cobalt%jprod_fedet,&
+    	cobalt%jprod_fec,&
     	cobalt%jprod_fed,&
+    	cobalt%jprod_fedet,&
+    	cobalt%jprod_h2o2,&
     	cobalt%jprod_sidet,&
         cobalt%jprod_sio4,&
     	cobalt%jprod_lithdet,&
@@ -8166,6 +8756,21 @@ contains
     deallocate(cobalt%z_sat_calc)
     deallocate(cobalt%mask_z_sat_arag)
     deallocate(cobalt%mask_z_sat_calc)
+    if (do_14c) then                                        !<<RADIOCARBON
+    deallocate(&
+       cobalt%c14_2_n,&
+       cobalt%f_di14c,&
+       cobalt%f_do14c,&
+       cobalt%fpo14c,&
+       cobalt%j14c_decay_dic,&
+       cobalt%j14c_decay_doc,&
+       cobalt%j14c_reminp,&
+       cobalt%jdi14c,&
+       cobalt%jdo14c,&
+       cobalt%c14o2_alpha,&
+       cobalt%c14o2_csurf,&
+       cobalt%b_di14c )
+    endif                                                   !RADIOCARBON>>
 
   end subroutine user_deallocate_arrays
 
