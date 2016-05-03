@@ -38,9 +38,6 @@ module g_tracer_utils
 #else
     use diag_manager_mod, only : register_diag_field_FMS=>register_diag_field
     use diag_manager_mod, only : send_data_FMS=>send_data
-    type g_diag_ctrl
-       integer :: handle
-    end type g_diag_ctrl
 #endif
 
 
@@ -289,6 +286,12 @@ module g_tracer_utils
      real, pointer, dimension(:,:,:) :: field_ptr 
   end type g_diag_type
 
+#ifndef _USE_MOM6_DIAG
+  !dummy type
+  type g_diag_ctrl
+     integer :: handle
+  end type g_diag_ctrl
+#endif
 
   ! <DESCRIPTION>
   ! Public types:
@@ -3747,7 +3750,7 @@ contains
     call post_data_MOM(diag_field_id, field, diag_CS_ptr) 
     g_send_data_0d = .TRUE.
 #else
-    send_data_0d = send_data_FMS(diag_field_id, field, time, err_msg)
+    g_send_data_0d = send_data_FMS(diag_field_id, field, time, err_msg)
 #endif
 
   end FUNCTION g_send_data_0d
@@ -3774,7 +3777,7 @@ contains
     call post_data_1d_k(diag_field_id, field, diag_CS_ptr)     
     g_send_data_1d = .TRUE.
 #else
-    send_data_1d = send_data_FMS(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
+    g_send_data_1d = send_data_FMS(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
 #endif
 
   END FUNCTION g_send_data_1d
@@ -3802,7 +3805,7 @@ contains
     call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask)         
     g_send_data_2d = .TRUE.
 #else
-    send_data_2d = send_data_FMS(diag_field_id, field, time, is_in, js_in, &
+    g_send_data_2d = send_data_FMS(diag_field_id, field, time, is_in, js_in, &
        & mask, rmask, ie_in, je_in, weight, err_msg)
 #endif
 
@@ -3831,7 +3834,7 @@ contains
     call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask) 
     g_send_data_3d = .TRUE.
 #else
-    send_data_3d = send_data_FMS(diag_field_id, field, time, is_in, js_in, ks_in, &
+    g_send_data_3d = send_data_FMS(diag_field_id, field, time, is_in, js_in, ks_in, &
              & mask, rmask, ie_in, je_in, ke_in, weight, err_msg)
 #endif
 
