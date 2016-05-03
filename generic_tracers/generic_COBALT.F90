@@ -3506,6 +3506,7 @@ contains
          longname   = 'Lithogenic Aluminosilicate', &
          units      = 'g/kg',                       &
          prog       = .true.,                       &
+!         const_init_value = 0.0 ,                   &
          flux_runoff= .true.,                       &
          flux_wetdep= .true.,                       &
          flux_drydep= .true.,                       &
