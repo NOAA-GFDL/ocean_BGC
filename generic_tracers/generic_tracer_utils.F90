@@ -24,14 +24,24 @@ module g_tracer_utils
   use atmos_ocean_fluxes_mod, only: aof_set_coupler_flux
   use mpp_mod,           only: mpp_error, NOTE, WARNING, FATAL
   use mpp_mod,           only: mpp_pe, mpp_root_pe, mpp_sync
-  use time_manager_mod,  only: time_type
-  use diag_manager_mod,  only: register_diag_field, send_data 
-
+  use time_manager_mod, only : time_type
 
   use field_manager_mod, only: fm_string_len, fm_path_name_len, fm_new_list, fm_change_list, fm_get_value
   use field_manager_mod, only: fm_dump_list, fm_loop_over_list
 
   use fms_mod,           only: stdout
+
+#ifdef _USE_MOM6_DIAG
+    use MOM_diag_mediator, only : register_diag_field_MOM=>register_diag_field
+    use MOM_diag_mediator, only : post_data_MOM=>post_data, post_data_1d_k
+    use MOM_diag_mediator, only : g_diag_ctrl=>diag_ctrl
+#else
+    use diag_manager_mod, only : register_diag_field_FMS=>register_diag_field
+    use diag_manager_mod, only : send_data_FMS=>send_data
+    type g_diag_ctrl
+       integer :: handle
+    end type g_diag_ctrl
+#endif
 
 
   implicit none ; private
@@ -279,12 +289,14 @@ module g_tracer_utils
      real, pointer, dimension(:,:,:) :: field_ptr 
   end type g_diag_type
 
+
   ! <DESCRIPTION>
   ! Public types:
   !
   ! The following type fields are common to ALL generic tracers and hence has to be instantiated only once:
   ! </DESCRIPTION>
   type g_tracer_common
+     type(g_diag_ctrl) :: diag_CS
      !Domain extents
      integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk
 
@@ -312,8 +324,7 @@ module g_tracer_utils
 
   !Keep the state of this common type for ALL tracers
   type(g_tracer_common), target, save :: g_tracer_com
-
-
+  
 
   ! <DESCRIPTION>
   ! Public interfaces:
@@ -331,6 +342,7 @@ module g_tracer_utils
   public :: g_tracer_get_pointer
   public :: g_tracer_get_common
   public :: g_tracer_set_common
+  public :: g_tracer_set_csdiag
   public :: g_tracer_set_files
   public :: g_tracer_coupler_set
   public :: g_tracer_coupler_get
@@ -351,7 +363,8 @@ module g_tracer_utils
   public :: g_tracer_print_info
   public :: g_tracer_coupler_accumulate
   public :: g_tracer_get_src_info
-
+  public :: g_register_diag_field
+  public :: g_send_data
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
   !   Add a new parameter for the generic tracer package
@@ -399,6 +412,15 @@ module g_tracer_utils
     module procedure g_tracer_set_pointer_3d
     module procedure g_tracer_set_pointer_4d
   end interface g_tracer_set_pointer
+   
+  INTERFACE g_send_data
+     MODULE PROCEDURE g_send_data_0d
+     MODULE PROCEDURE g_send_data_1d
+     MODULE PROCEDURE g_send_data_2d
+     MODULE PROCEDURE g_send_data_3d
+  END INTERFACE
+
+  
 
   ! <INTERFACE NAME="g_tracer_set_values">
   !  <OVERVIEW>
@@ -1032,7 +1054,7 @@ contains
 
     character(len=fm_string_len) :: string
 
-    g_tracer%diag_id_field = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_field = g_register_diag_field(g_tracer%package_name, &
          trim(g_tracer%alias),         &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1041,7 +1063,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_taup1")
-    g_tracer%diag_id_field_taup1 = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_field_taup1 = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1050,7 +1072,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_aux")
-    g_tracer%diag_id_aux = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_aux = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1059,7 +1081,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_vmove")
-    g_tracer%diag_id_vmove = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_vmove = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1068,7 +1090,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_vdiffuse_impl")
-    g_tracer%diag_id_vdiffuse_impl = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_vdiffuse_impl = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1077,7 +1099,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_tendency")
-    g_tracer%diag_id_tendency = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_tendency = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1086,7 +1108,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_vdiff")
-    g_tracer%diag_id_vdiff = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_vdiff = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
@@ -1095,7 +1117,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_stf")
-    g_tracer%diag_id_stf = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_stf = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1104,7 +1126,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_stf_gas")
-    g_tracer%diag_id_stf_gas = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_stf_gas = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1113,7 +1135,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_stf_gas_aux")
-    g_tracer%diag_id_stf_gas_aux = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_stf_gas_aux = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1122,7 +1144,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_deltap")
-    g_tracer%diag_id_deltap = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_deltap = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1131,7 +1153,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_kw")
-    g_tracer%diag_id_kw = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_kw = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1140,7 +1162,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_btf")
-    g_tracer%diag_id_btf = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_btf = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1149,7 +1171,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_btm_reservoir")
-    g_tracer%diag_id_btm = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_btm = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1158,7 +1180,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_trunoff")
-    g_tracer%diag_id_trunoff = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_trunoff = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1167,7 +1189,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_alpha")
-    g_tracer%diag_id_alpha = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_alpha = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1176,7 +1198,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_csurf")
-    g_tracer%diag_id_csurf = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_csurf = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1185,7 +1207,7 @@ contains
          missing_value = -1.0e+20)
 
     string=trim(g_tracer%alias) // trim("_sc_no")
-    g_tracer%diag_id_sc_no = register_diag_field(g_tracer%package_name, &
+    g_tracer%diag_id_sc_no = g_register_diag_field(g_tracer%package_name, &
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
@@ -1450,14 +1472,14 @@ contains
           endif
        endif
 
-       if(present(model_time)) then
-       if (g_tracer%diag_id_stf_gas_aux .gt. 0 .and. _ALLOCATED(g_tracer%stf_gas)) then
-          used = send_data(g_tracer%diag_id_stf_gas_aux, g_tracer%stf_gas(:,:), model_time,&
-               rmask = g_tracer_com%grid_tmask(:,:,1),& 
-               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
-               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
-       endif
-       endif
+!       if(present(model_time)) then
+!       if (g_tracer%diag_id_stf_gas_aux .gt. 0 .and. _ALLOCATED(g_tracer%stf_gas)) then
+!          used = send_data(g_tracer%diag_id_stf_gas_aux, g_tracer%stf_gas(:,:), model_time,&
+!               rmask = g_tracer_com%grid_tmask(:,:,1),& 
+!               is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
+!               ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
+!       endif
+!       endif
 
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next)) exit
@@ -1480,6 +1502,10 @@ contains
 
   end subroutine g_tracer_coupler_accumulate
 
+  subroutine g_tracer_set_csdiag(diag_CS)
+    type(g_diag_ctrl),  target,intent(in) :: diag_CS
+    g_tracer_com%diag_CS = diag_CS 
+  end subroutine g_tracer_set_csdiag
 
   ! <SUBROUTINE NAME="g_tracer_set_common">
   !  <OVERVIEW>
@@ -1564,7 +1590,7 @@ contains
   ! </SUBROUTINE>
 
   subroutine g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
-       axes,grid_tmask,grid_mask_coast,grid_kmt,init_time)
+       axes,grid_tmask,grid_mask_coast,grid_kmt,init_time,diag_CS)
 
     integer,               intent(out) :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau
     integer,optional,      intent(out) :: axes(3)
@@ -1572,6 +1598,7 @@ contains
     real, optional, dimension(:,:,:),pointer    :: grid_tmask
     integer, optional, dimension(:,:),  pointer :: grid_mask_coast
     integer, optional, dimension(:,:),  pointer :: grid_kmt
+    type(g_diag_ctrl), optional,        pointer :: diag_CS
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_common'
 
@@ -1592,10 +1619,17 @@ contains
     if(present(grid_tmask))       grid_tmask => g_tracer_com%grid_tmask
     if(present(grid_mask_coast))  grid_mask_coast=> g_tracer_com%grid_mask_coast
     if(present(grid_kmt))         grid_kmt => g_tracer_com%grid_kmt
+    if(present(diag_CS))          diag_CS => g_tracer_com%diag_CS
 !    if(present(ice_restart_file)) ice_restart_file    = g_tracer_com%ice_restart_file
 !    if(present(ocean_restart_file)) ocean_restart_file  = g_tracer_com%ocean_restart_file
 
   end subroutine g_tracer_get_common
+
+  subroutine g_tracer_get_diagCS(diag_CS)
+    type(g_diag_ctrl),        pointer :: diag_CS
+    
+    diag_CS => g_tracer_com%diag_CS
+  end subroutine g_tracer_get_diagCS
 
   subroutine g_tracer_set_files(ice_restart_file,ocean_restart_file)
     character(len=*),   intent(in) :: ice_restart_file
@@ -2620,8 +2654,8 @@ contains
 
   subroutine g_tracer_send_diag(g_tracer_list,model_time,tau)
     type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer
-    type(time_type),          intent(in) :: model_time
-    integer,                  intent(in) :: tau
+    type(time_type),      intent(in) :: model_time
+    integer,                intent(in) :: tau
     integer :: tau_1
     logical :: used
 
@@ -2639,12 +2673,12 @@ contains
           if(.NOT. g_tracer_is_prog(g_tracer)) tau_1=1
 
        if(associated(g_tracer%field)) then 
-          used = send_data(g_tracer%diag_id_field, g_tracer%field(:,:,:,tau_1), model_time,&
+          used = g_send_data(g_tracer%diag_id_field, g_tracer%field(:,:,:,tau_1), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        elseif(associated(g_tracer%field3d_ptr)) then 
-          used = send_data(g_tracer%diag_id_field, g_tracer%field3d_ptr(:,:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_field, g_tracer%field3d_ptr(:,:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
@@ -2657,91 +2691,91 @@ contains
        endif
 
        if (g_tracer%diag_id_vmove .gt. 0 .and. _ALLOCATED(g_tracer%vmove)) then
-          used = send_data(g_tracer%diag_id_vmove, g_tracer%vmove(:,:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_vmove, g_tracer%vmove(:,:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        endif
 
        if (g_tracer%diag_id_vdiff .gt. 0 .and. _ALLOCATED(g_tracer%vdiff)) then
-          used = send_data(g_tracer%diag_id_vdiff, g_tracer%vdiff(:,:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_vdiff, g_tracer%vdiff(:,:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        endif
 
        if (g_tracer%diag_id_aux .gt. 0) then
-          used = send_data(g_tracer%diag_id_aux, g_tracer%tendency(:,:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_aux, g_tracer%tendency(:,:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        endif
 
        if (g_tracer%diag_id_stf .gt. 0 .and. _ALLOCATED(g_tracer%stf)) then
-          used = send_data(g_tracer%diag_id_stf, g_tracer%stf(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_stf, g_tracer%stf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_stf_gas .gt. 0 .and. _ALLOCATED(g_tracer%stf_gas)) then
-          used = send_data(g_tracer%diag_id_stf_gas, g_tracer%stf_gas(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_stf_gas, g_tracer%stf_gas(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_deltap .gt. 0 .and. _ALLOCATED(g_tracer%deltap)) then
-          used = send_data(g_tracer%diag_id_deltap, g_tracer%deltap(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_deltap, g_tracer%deltap(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_kw .gt. 0 .and. _ALLOCATED(g_tracer%kw)) then
-          used = send_data(g_tracer%diag_id_kw, g_tracer%kw(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_kw, g_tracer%kw(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_btf .gt. 0 .and. _ALLOCATED(g_tracer%btf)) then
-          used = send_data(g_tracer%diag_id_btf, g_tracer%btf(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_btf, g_tracer%btf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_btm .gt. 0 .and. _ALLOCATED(g_tracer%btm_reservoir)) then
-          used = send_data(g_tracer%diag_id_btm, g_tracer%btm_reservoir(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_btm, g_tracer%btm_reservoir(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_trunoff .gt. 0 .and. _ALLOCATED(g_tracer%trunoff)) then
-          used = send_data(g_tracer%diag_id_trunoff, g_tracer%trunoff(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_trunoff, g_tracer%trunoff(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_alpha .gt. 0 .and. _ALLOCATED(g_tracer%alpha)) then
-          used = send_data(g_tracer%diag_id_alpha, g_tracer%alpha(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_alpha, g_tracer%alpha(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_csurf .gt. 0 .and. _ALLOCATED(g_tracer%csurf)) then
-          used = send_data(g_tracer%diag_id_csurf, g_tracer%csurf(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_csurf, g_tracer%csurf(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
        endif
 
        if (g_tracer%diag_id_sc_no .gt. 0 .and. _ALLOCATED(g_tracer%sc_no)) then
-          used = send_data(g_tracer%diag_id_sc_no, g_tracer%sc_no(:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_sc_no, g_tracer%sc_no(:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,1),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec )
@@ -2782,7 +2816,7 @@ contains
     integer,                  intent(in) :: jlb
     real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt_tau
     real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt_taup1
-    type(time_type),          intent(in) :: model_time
+    type(time_type),        intent(in) :: model_time
     integer,                  intent(in) :: tau
     integer,                  intent(in) :: taup1
     real,                     intent(in) :: dtts
@@ -2803,14 +2837,14 @@ contains
        tau_1=taup1
        if (g_tracer%diag_id_field_taup1 .gt. 0) then
           if(.NOT. g_tracer_is_prog(g_tracer)) tau_1=1
-          used = send_data(g_tracer%diag_id_field_taup1, g_tracer%field(:,:,:,tau_1), model_time,&
+          used = g_send_data(g_tracer%diag_id_field_taup1, g_tracer%field(:,:,:,tau_1), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        endif
 
        if (g_tracer%diag_id_tendency .gt. 0  .and. g_tracer%prog) then
-          used = send_data(g_tracer%diag_id_tendency,&
+          used = g_send_data(g_tracer%diag_id_tendency,&
                (g_tracer%field(:,:,:,taup1)*rho_dzt_taup1(:,:,:) - g_tracer%field(:,:,:,tau)*rho_dzt_tau(:,:,:))/dtts, model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
@@ -2818,7 +2852,7 @@ contains
        endif
 
        if (g_tracer%diag_id_vdiffuse_impl .gt. 0 .and. _ALLOCATED(g_tracer%vdiffuse_impl)) then
-          used = send_data(g_tracer%diag_id_vdiffuse_impl, g_tracer%vdiffuse_impl(:,:,:), model_time,&
+          used = g_send_data(g_tracer%diag_id_vdiffuse_impl, g_tracer%vdiffuse_impl(:,:,:), model_time,&
                rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
@@ -3441,7 +3475,7 @@ contains
     type(g_diag_type), pointer :: g_diag => NULL()
     
     !diag register with the original name
-    diag_id = register_diag_field(package_name, name, axes, init_time, longname,units, missing_value = missing_value)
+    diag_id = g_register_diag_field(package_name, name, axes, init_time, longname,units, missing_value = missing_value)
 
     !===================================================================
     !Add this diagnostics to the list that is going to be used later (by GOLD) 
@@ -3623,5 +3657,185 @@ contains
     src_var_valid_max = g_tracer%src_var_valid_max
 
   end subroutine g_tracer_get_src_info
+
+  function g_register_diag_field(module_name, field_name, axes, init_time,         &
+       long_name, units, missing_value, range, mask_variant, standard_name,      &
+       verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+       cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+       x_cell_method, y_cell_method, v_cell_method, diag_CS)
+
+    integer :: g_register_diag_field !< An integer handle for a diagnostic array.
+    character(len=*), intent(in) :: module_name !< Name of this module, usually "ocean_model" or "ice_shelf_model"
+    character(len=*), intent(in) :: field_name !< Name of the diagnostic field
+    type(time_type),intent(in)  :: init_time !< Time at which a field is first available?
+    type(g_diag_ctrl),optional, pointer :: diag_CS
+    integer,          optional, intent(in) :: axes(:)
+    character(len=*), optional, intent(in) :: long_name !< Long name of a field.
+    character(len=*), optional, intent(in) :: units !< Units of a field.
+    character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
+    real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+    real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+    logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with post_data calls (not used in MOM?)
+    logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
+    logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
+    character(len=*), optional, intent(out):: err_msg !< String into which an error message might be placed (not used in MOM?)
+    character(len=*), optional, intent(in) :: interp_method !< no clue (not used in MOM?)
+    integer,          optional, intent(in) :: tile_count !< no clue (not used in MOM?)
+    character(len=*), optional, intent(in) :: cmor_field_name !< CMOR name of a field
+    character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
+    character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
+    character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
+    character(len=*), optional, intent(in) :: cell_methods !< String to append as cell_methods attribute. Use '' to have no attribute.
+    !! If present, this overrides the default constructed from the default for
+    !! each individual axis direction.
+    character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction. Use '' have no method.
+    character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction. Use '' have no method.
+    character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction. Use '' have no method.
+    ! Local variables
+    character(len=fm_string_len), parameter :: sub_name = 'g_register_diag_field'
+
+#ifdef _USE_MOM6_DIAG
+    type(g_diag_ctrl), pointer :: diag_CS_ptr 
+    real :: MOM_missing_value
+    
+    if(present(diag_CS)) then
+       diag_CS_ptr => diag_CS
+    else
+!       call mpp_error(NOTE, trim(sub_name)//&
+!            ": the diag_CD argument is not present and the model is compiled with _USE_MOM6_DIAG for "//trim(field_name))
+       !This is not thread-safe. It has to be fixed later.
+       call g_tracer_get_diagCS(diag_CS_ptr)
+    endif
+    MOM_missing_value = diag_CS_ptr%missing_value
+    if(size(axes) .eq. 3) then
+       g_register_diag_field = register_diag_field_MOM(trim(module_name), field_name, diag_CS_ptr%axesTL, init_time,&
+            long_name, units, MOM_missing_value, range, mask_variant, standard_name,      &
+            verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+            cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+            x_cell_method, y_cell_method, v_cell_method)
+    elseif(size(axes) .eq. 2) then
+       g_register_diag_field = register_diag_field_MOM(trim(module_name), field_name, diag_CS_ptr%axesT1, init_time,&
+            long_name, units, MOM_missing_value, range, mask_variant, standard_name,      &
+            verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+            cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+            x_cell_method, y_cell_method, v_cell_method)
+    endif
+#else
+    g_register_diag_field = register_diag_field_FMS(module_name, field_name, axes, init_time,         &
+       long_name, units, missing_value, range, mask_variant, standard_name,      &
+       verbose, do_not_log, err_msg, interp_method, tile_count)
+
+#endif    
+
+  end function g_register_diag_field
+
+  LOGICAL FUNCTION g_send_data_0d(diag_field_id, field, time, err_msg, diag_CS)
+    INTEGER, INTENT(in) :: diag_field_id
+    REAL, INTENT(in) :: field
+    TYPE(time_type), INTENT(in), OPTIONAL :: time
+    CHARACTER(len=*), INTENT(out), OPTIONAL :: err_msg
+    type(g_diag_ctrl),optional, pointer :: diag_CS
+
+#ifdef _USE_MOM6_DIAG
+    type(g_diag_ctrl), pointer :: diag_CS_ptr 
+    
+    if(present(diag_CS)) then
+       diag_CS_ptr => diag_CS
+    else
+       call g_tracer_get_diagCS(diag_CS_ptr)
+    endif
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr) 
+    g_send_data_0d = .TRUE.
+#else
+    send_data_0d = send_data_FMS(diag_field_id, field, time, err_msg)
+#endif
+
+  end FUNCTION g_send_data_0d
+
+  LOGICAL FUNCTION g_send_data_1d(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg, diag_CS)
+    INTEGER, INTENT(in) :: diag_field_id
+    REAL, DIMENSION(:), INTENT(in) :: field
+    REAL, INTENT(in), OPTIONAL :: weight
+    REAL, INTENT(in), DIMENSION(:), OPTIONAL :: rmask
+    TYPE (time_type), INTENT(in), OPTIONAL :: time
+    INTEGER, INTENT(in), OPTIONAL :: is_in, ie_in
+    LOGICAL, INTENT(in), DIMENSION(:), OPTIONAL :: mask
+    CHARACTER(len=*), INTENT(out), OPTIONAL :: err_msg
+    type(g_diag_ctrl),optional, pointer :: diag_CS
+
+#ifdef _USE_MOM6_DIAG
+    type(g_diag_ctrl), pointer :: diag_CS_ptr 
+    
+    if(present(diag_CS)) then
+       diag_CS_ptr => diag_CS
+    else
+       call g_tracer_get_diagCS(diag_CS_ptr)
+    endif
+    call post_data_1d_k(diag_field_id, field, diag_CS_ptr)     
+    g_send_data_1d = .TRUE.
+#else
+    send_data_1d = send_data_FMS(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
+#endif
+
+  END FUNCTION g_send_data_1d
+
+  LOGICAL FUNCTION g_send_data_2d(diag_field_id, field, time, is_in, js_in, &
+       & mask, rmask, ie_in, je_in, weight, err_msg, diag_CS)
+    INTEGER, INTENT(in) :: diag_field_id
+    REAL, INTENT(in), DIMENSION(:,:) :: field
+    REAL, INTENT(in), OPTIONAL :: weight
+    TYPE (time_type), INTENT(in), OPTIONAL :: time
+    INTEGER, INTENT(in), OPTIONAL :: is_in, js_in, ie_in, je_in
+    LOGICAL, INTENT(in), DIMENSION(:,:), OPTIONAL :: mask
+    REAL, INTENT(in), DIMENSION(:,:),OPTIONAL :: rmask
+    CHARACTER(len=*), INTENT(out), OPTIONAL :: err_msg
+    type(g_diag_ctrl),optional, pointer :: diag_CS
+
+#ifdef _USE_MOM6_DIAG
+    type(g_diag_ctrl), pointer :: diag_CS_ptr 
+    
+    if(present(diag_CS)) then
+       diag_CS_ptr => diag_CS
+    else
+       call g_tracer_get_diagCS(diag_CS_ptr)
+    endif
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask)         
+    g_send_data_2d = .TRUE.
+#else
+    send_data_2d = send_data_FMS(diag_field_id, field, time, is_in, js_in, &
+       & mask, rmask, ie_in, je_in, weight, err_msg)
+#endif
+
+  END FUNCTION g_send_data_2d
+
+  LOGICAL FUNCTION g_send_data_3d(diag_field_id, field, time, is_in, js_in, ks_in, &
+             & mask, rmask, ie_in, je_in, ke_in, weight, err_msg, diag_CS)
+    INTEGER, INTENT(in) :: diag_field_id
+    REAL, DIMENSION(:,:,:), INTENT(in) :: field
+    REAL, INTENT(in), OPTIONAL :: weight
+    TYPE (time_type), INTENT(in), OPTIONAL :: time
+    INTEGER, INTENT(in), OPTIONAL :: is_in, js_in, ks_in,ie_in,je_in, ke_in
+    LOGICAL, DIMENSION(:,:,:), INTENT(in), OPTIONAL :: mask
+    REAL, DIMENSION(:,:,:), INTENT(in), OPTIONAL :: rmask
+    CHARACTER(len=*), INTENT(out), OPTIONAL :: err_msg
+    type(g_diag_ctrl),optional, pointer :: diag_CS
+
+#ifdef _USE_MOM6_DIAG
+    type(g_diag_ctrl), pointer :: diag_CS_ptr 
+    
+    if(present(diag_CS)) then
+       diag_CS_ptr => diag_CS
+    else
+       call g_tracer_get_diagCS(diag_CS_ptr)
+    endif
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask) 
+    g_send_data_3d = .TRUE.
+#else
+    send_data_3d = send_data_FMS(diag_field_id, field, time, is_in, js_in, ks_in, &
+             & mask, rmask, ie_in, je_in, ke_in, weight, err_msg)
+#endif
+
+  END FUNCTION g_send_data_3d
+
 
 end module g_tracer_utils

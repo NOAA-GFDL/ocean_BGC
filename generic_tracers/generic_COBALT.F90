@@ -125,7 +125,6 @@ module generic_COBALT
   use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
-  use diag_manager_mod,  only: register_diag_field, send_data 
   use constants_mod,     only: WTMCO2, WTMO2
   use fms_mod,           only: write_version_number, FATAL, WARNING, stdout, stdlog
   use fms_mod,           only: open_namelist_file, check_nml_error, close_file
@@ -135,8 +134,10 @@ module generic_COBALT
   use g_tracer_utils, only : g_tracer_set_values,g_tracer_get_pointer
   use g_tracer_utils, only : g_tracer_get_common,g_tracer_set_common 
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get
-  use g_tracer_utils, only : g_tracer_send_diag, g_tracer_get_values  
+  use g_tracer_utils, only : g_tracer_get_values  
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
+  use g_tracer_utils, only : register_diag_field=>g_register_diag_field
+  use g_tracer_utils, only : send_data=>g_send_data
 
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
