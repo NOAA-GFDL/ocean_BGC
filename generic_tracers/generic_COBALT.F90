@@ -137,7 +137,7 @@ module generic_COBALT
   use g_tracer_utils, only : g_tracer_get_values  
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
   use g_tracer_utils, only : register_diag_field=>g_register_diag_field
-  use g_tracer_utils, only : send_data=>g_send_data
+  use g_tracer_utils, only : g_send_data
 
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
@@ -4172,7 +4172,7 @@ write (stdlogunit, generic_COBALT_nml)
     temp_field(:,:,1) = cobalt%fcadet_arag_btm(:,:)
     call g_tracer_set_values(tracer_list,'cadet_arag','btm_reservoir',0.0)
     if (cobalt%id_fcadet_arag_btm .gt. 0)           &
-         used = send_data(cobalt%id_fcadet_arag_btm,cobalt%fcadet_arag_btm, &
+         used = g_send_data(cobalt%id_fcadet_arag_btm,cobalt%fcadet_arag_btm, &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -4182,7 +4182,7 @@ write (stdlogunit, generic_COBALT_nml)
     temp_field(:,:,1) = cobalt%fcadet_calc_btm(:,:)
     call g_tracer_set_values(tracer_list,'cadet_calc','btm_reservoir',0.0)
     if (cobalt%id_fcadet_calc_btm .gt. 0)           &
-         used = send_data(cobalt%id_fcadet_calc_btm, cobalt%fcadet_calc_btm, &
+         used = g_send_data(cobalt%id_fcadet_calc_btm, cobalt%fcadet_calc_btm, &
          model_time, rmask = grid_tmask(:,:,1), &
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     !
@@ -4193,7 +4193,7 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%ffedet_btm = cobalt%ffedet_btm/dt
     call g_tracer_set_values(tracer_list,'fedet','btm_reservoir',0.0)
     if (cobalt%id_ffedet_btm .gt. 0)           &
-         used = send_data(cobalt%id_ffedet_btm, cobalt%ffedet_btm, &
+         used = g_send_data(cobalt%id_ffedet_btm, cobalt%ffedet_btm, &
          model_time, rmask = grid_tmask(:,:,1), & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     !
@@ -4205,7 +4205,7 @@ write (stdlogunit, generic_COBALT_nml)
     temp_field(:,:,1) = cobalt%flithdet_btm(:,:)
     call g_tracer_set_values(tracer_list,'lithdet','btm_reservoir',0.0)
     if (cobalt%id_flithdet_btm .gt. 0)           &
-         used = send_data(cobalt%id_flithdet_btm, cobalt%flithdet_btm, &
+         used = g_send_data(cobalt%id_flithdet_btm, cobalt%flithdet_btm, &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     !
@@ -4218,7 +4218,7 @@ write (stdlogunit, generic_COBALT_nml)
     temp_field(:,:,1) = cobalt%fndet_btm(:,:)
     call g_tracer_set_values(tracer_list,'ndet','btm_reservoir',0.0)
     if (cobalt%id_fndet_btm .gt. 0)           &
-         used = send_data(cobalt%id_fndet_btm,cobalt%fndet_btm,          &
+         used = g_send_data(cobalt%id_fndet_btm,cobalt%fndet_btm,          &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -4228,7 +4228,7 @@ write (stdlogunit, generic_COBALT_nml)
     temp_field(:,:,1) = cobalt%fpdet_btm(:,:)
     call g_tracer_set_values(tracer_list,'pdet','btm_reservoir',0.0)
     if (cobalt%id_fpdet_btm .gt. 0)           &
-         used = send_data(cobalt%id_fpdet_btm,cobalt%fpdet_btm,          &
+         used = g_send_data(cobalt%id_fpdet_btm,cobalt%fpdet_btm,          &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -4238,7 +4238,7 @@ write (stdlogunit, generic_COBALT_nml)
     temp_field(:,:,1) = cobalt%fsidet_btm(:,:)
     call g_tracer_set_values(tracer_list,'sidet','btm_reservoir',0.0)
     if (cobalt%id_fsidet_btm .gt. 0)           &
-         used = send_data(cobalt%id_fsidet_btm,    cobalt%fsidet_btm,          &
+         used = g_send_data(cobalt%id_fsidet_btm,    cobalt%fsidet_btm,          &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -5819,7 +5819,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 
     if (cobalt%id_no3_in_source .gt. 0)                &
-         used = send_data(cobalt%id_no3_in_source,         cobalt%f_no3,          &
+         used = g_send_data(cobalt%id_no3_in_source,         cobalt%f_no3,          &
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -6653,115 +6653,115 @@ write (stdlogunit, generic_COBALT_nml)
 
     do n= 1, NUM_PHYTO
        if (phyto(n)%id_def_fe .gt. 0)          &
-            used = send_data(phyto(n)%id_def_fe,     phyto(n)%def_fe,           &
+            used = g_send_data(phyto(n)%id_def_fe,     phyto(n)%def_fe,           &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_felim .gt. 0)           &
-            used = send_data(phyto(n)%id_felim,      phyto(n)%felim,            &
+            used = g_send_data(phyto(n)%id_felim,      phyto(n)%felim,            &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_irrlim .gt. 0)          &
-            used = send_data(phyto(n)%id_irrlim,     phyto(n)%irrlim,           &
+            used = g_send_data(phyto(n)%id_irrlim,     phyto(n)%irrlim,           &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_jzloss_n .gt. 0)          &
-            used = send_data(phyto(n)%id_jzloss_n, phyto(n)%jzloss_n*rho_dzt,      &
+            used = g_send_data(phyto(n)%id_jzloss_n, phyto(n)%jzloss_n*rho_dzt,      &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_jaggloss_n .gt. 0)          &
-            used = send_data(phyto(n)%id_jaggloss_n, phyto(n)%jaggloss_n*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_jaggloss_n, phyto(n)%jaggloss_n*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_jvirloss_n .gt. 0)          &
-            used = send_data(phyto(n)%id_jvirloss_n, phyto(n)%jvirloss_n*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_jvirloss_n, phyto(n)%jvirloss_n*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_jexuloss_n .gt. 0)          &
-            used = send_data(phyto(n)%id_jexuloss_n, phyto(n)%jexuloss_n*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_jexuloss_n, phyto(n)%jexuloss_n*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 !       if (phyto(n)%id_jhploss_n .gt. 0)          &
-!            used = send_data(phyto(n)%id_jhploss_n, phyto(n)%jhploss_n*rho_dzt,     &
+!            used = g_send_data(phyto(n)%id_jhploss_n, phyto(n)%jhploss_n*rho_dzt,     &
 !            model_time, rmask = grid_tmask,&
 !            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_fe .gt. 0)          &
-            used = send_data(phyto(n)%id_juptake_fe, phyto(n)%juptake_fe*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_juptake_fe, phyto(n)%juptake_fe*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_nh4 .gt. 0)          &
-            used = send_data(phyto(n)%id_juptake_nh4, phyto(n)%juptake_nh4*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_juptake_nh4, phyto(n)%juptake_nh4*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_no3 .gt. 0)          &
-            used = send_data(phyto(n)%id_juptake_no3, phyto(n)%juptake_no3*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_juptake_no3, phyto(n)%juptake_no3*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_po4 .gt. 0)          &
-            used = send_data(phyto(n)%id_juptake_po4, phyto(n)%juptake_po4*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_juptake_po4, phyto(n)%juptake_po4*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_sio4 .gt. 0)          &
-            used = send_data(phyto(n)%id_juptake_sio4, phyto(n)%juptake_sio4*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_juptake_sio4, phyto(n)%juptake_sio4*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_n2 .gt. 0)          &
-            used = send_data(phyto(n)%id_juptake_n2, phyto(n)%juptake_n2*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_juptake_n2, phyto(n)%juptake_n2*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_jprod_n .gt. 0)          &
-            used = send_data(phyto(n)%id_jprod_n, phyto(n)%jprod_n*rho_dzt,   &
+            used = g_send_data(phyto(n)%id_jprod_n, phyto(n)%jprod_n*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 !       if (phyto(n)%id_liebig_lim .gt. 0)      &
-!            used = send_data(phyto(n)%id_liebig_lim,phyto(n)%liebig_lim,          &
+!            used = g_send_data(phyto(n)%id_liebig_lim,phyto(n)%liebig_lim,          &
 !            model_time, rmask = grid_tmask,& 
 !            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_mu .gt. 0)              &
-            used = send_data(phyto(n)%id_mu,        phyto(n)%mu,                  &
+            used = g_send_data(phyto(n)%id_mu,        phyto(n)%mu,                  &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_nh4lim .gt. 0)          &
-            used = send_data(phyto(n)%id_nh4lim,     phyto(n)%nh4lim,             &
+            used = g_send_data(phyto(n)%id_nh4lim,     phyto(n)%nh4lim,             &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_no3lim .gt. 0)          &
-            used = send_data(phyto(n)%id_no3lim,     phyto(n)%no3lim,             &
+            used = g_send_data(phyto(n)%id_no3lim,     phyto(n)%no3lim,             &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_po4lim .gt. 0)          &
-            used = send_data(phyto(n)%id_po4lim,     phyto(n)%po4lim,             &
+            used = g_send_data(phyto(n)%id_po4lim,     phyto(n)%po4lim,             &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_o2lim .gt. 0)          &
-            used = send_data(phyto(n)%id_o2lim,     phyto(n)%o2lim,             &
+            used = g_send_data(phyto(n)%id_o2lim,     phyto(n)%o2lim,             &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_q_fe_2_n .gt. 0)        &
-            used = send_data(phyto(n)%id_q_fe_2_n,   phyto(n)%q_fe_2_n,           &
+            used = g_send_data(phyto(n)%id_q_fe_2_n,   phyto(n)%q_fe_2_n,           &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_silim .gt. 0)     &
-            used = send_data(phyto(n)%id_silim, phyto(n)%silim,       &
+            used = g_send_data(phyto(n)%id_silim, phyto(n)%silim,       &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_q_si_2_n .gt. 0)     &
-            used = send_data(phyto(n)%id_q_si_2_n, phyto(n)%q_si_2_n,       &
+            used = g_send_data(phyto(n)%id_q_si_2_n, phyto(n)%q_si_2_n,       &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_theta .gt. 0)           &
-            used = send_data(phyto(n)%id_theta,      phyto(n)%theta,              &
+            used = g_send_data(phyto(n)%id_theta,      phyto(n)%theta,              &
             model_time, rmask = grid_tmask,& 
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_f_mu_mem .gt. 0)           &
-            used = send_data(phyto(n)%id_f_mu_mem,      phyto(n)%f_mu_mem,              &
+            used = g_send_data(phyto(n)%id_f_mu_mem,      phyto(n)%f_mu_mem,              &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_mu_mix .gt. 0)           &
-            used = send_data(phyto(n)%id_mu_mix,      phyto(n)%mu_mix,              &
+            used = g_send_data(phyto(n)%id_mu_mix,      phyto(n)%mu_mix,              &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_agg_lim .gt. 0)           &
-            used = send_data(phyto(n)%id_agg_lim,      phyto(n)%agg_lim,              &
+            used = g_send_data(phyto(n)%id_agg_lim,      phyto(n)%agg_lim,              &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     enddo
@@ -6770,39 +6770,39 @@ write (stdlogunit, generic_COBALT_nml)
     !
 
     if (bact(1)%id_jzloss_n .gt. 0)          &
-       used = send_data(bact(1)%id_jzloss_n, bact(1)%jzloss_n*rho_dzt,           &
+       used = g_send_data(bact(1)%id_jzloss_n, bact(1)%jzloss_n*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 !    if (bact(1)%id_jhploss_n .gt. 0)          &
-!       used = send_data(bact(1)%id_jhploss_n, bact(1)%jhploss_n*rho_dzt,           &
+!       used = g_send_data(bact(1)%id_jhploss_n, bact(1)%jhploss_n*rho_dzt,           &
 !       model_time, rmask = grid_tmask,&
 !       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_jvirloss_n .gt. 0)          &
-       used = send_data(bact(1)%id_jvirloss_n, bact(1)%jvirloss_n*rho_dzt,           &
+       used = g_send_data(bact(1)%id_jvirloss_n, bact(1)%jvirloss_n*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_juptake_ldon .gt. 0)          &
-       used = send_data(bact(1)%id_juptake_ldon, bact(1)%juptake_ldon*rho_dzt,           &
+       used = g_send_data(bact(1)%id_juptake_ldon, bact(1)%juptake_ldon*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_juptake_ldop .gt. 0)          &
-       used = send_data(bact(1)%id_juptake_ldop, bact(1)%juptake_ldop*rho_dzt,           &
+       used = g_send_data(bact(1)%id_juptake_ldop, bact(1)%juptake_ldop*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_jprod_nh4 .gt. 0)          &
-       used = send_data(bact(1)%id_jprod_nh4, bact(1)%jprod_nh4*rho_dzt,           &
+       used = g_send_data(bact(1)%id_jprod_nh4, bact(1)%jprod_nh4*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_jprod_po4 .gt. 0)          &
-       used = send_data(bact(1)%id_jprod_po4, bact(1)%jprod_po4*rho_dzt,           &
+       used = g_send_data(bact(1)%id_jprod_po4, bact(1)%jprod_po4*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_jprod_n .gt. 0)          &
-       used = send_data(bact(1)%id_jprod_n, bact(1)%jprod_n*rho_dzt,           &
+       used = g_send_data(bact(1)%id_jprod_n, bact(1)%jprod_n*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_temp_lim .gt. 0)          &
-       used = send_data(bact(1)%id_temp_lim, bact(1)%temp_lim,           &
+       used = g_send_data(bact(1)%id_temp_lim, bact(1)%temp_lim,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -6812,91 +6812,91 @@ write (stdlogunit, generic_COBALT_nml)
 
     do n= 1, NUM_ZOO
        if (zoo(n)%id_jzloss_n .gt. 0)          &
-            used = send_data(zoo(n)%id_jzloss_n, zoo(n)%jzloss_n*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jzloss_n, zoo(n)%jzloss_n*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jhploss_n .gt. 0)          &
-            used = send_data(zoo(n)%id_jhploss_n, zoo(n)%jhploss_n*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jhploss_n, zoo(n)%jhploss_n*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jingest_n .gt. 0)          &
-            used = send_data(zoo(n)%id_jingest_n, zoo(n)%jingest_n*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jingest_n, zoo(n)%jingest_n*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jingest_p .gt. 0)          &
-            used = send_data(zoo(n)%id_jingest_p, zoo(n)%jingest_p*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jingest_p, zoo(n)%jingest_p*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jingest_sio2 .gt. 0)          &
-            used = send_data(zoo(n)%id_jingest_sio2, zoo(n)%jingest_sio2*rho_dzt,      &
+            used = g_send_data(zoo(n)%id_jingest_sio2, zoo(n)%jingest_sio2*rho_dzt,      &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jingest_fe .gt. 0)          &
-            used = send_data(zoo(n)%id_jingest_fe, zoo(n)%jingest_fe*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jingest_fe, zoo(n)%jingest_fe*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_ndet .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_ndet, zoo(n)%jprod_ndet*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_ndet, zoo(n)%jprod_ndet*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_pdet .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_pdet, zoo(n)%jprod_pdet*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_pdet, zoo(n)%jprod_pdet*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_ldon .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_ldon, zoo(n)%jprod_ldon*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_ldon, zoo(n)%jprod_ldon*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_ldop .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_ldop, zoo(n)%jprod_ldop*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_ldop, zoo(n)%jprod_ldop*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_sldon .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_sldon, zoo(n)%jprod_sldon*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_sldon, zoo(n)%jprod_sldon*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_sldop .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_sldop, zoo(n)%jprod_sldop*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_sldop, zoo(n)%jprod_sldop*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
       if (zoo(n)%id_jprod_srdon .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_srdon, zoo(n)%jprod_srdon*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_srdon, zoo(n)%jprod_srdon*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_srdop .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_srdop, zoo(n)%jprod_srdop*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_srdop, zoo(n)%jprod_srdop*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_fed .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_fed,  zoo(n)%jprod_fed*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_fed,  zoo(n)%jprod_fed*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_fedet .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_fedet, zoo(n)%jprod_fedet*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_fedet, zoo(n)%jprod_fedet*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_sidet .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_sidet, zoo(n)%jprod_sidet*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_sidet, zoo(n)%jprod_sidet*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_sio4 .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_sio4, zoo(n)%jprod_sio4*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_sio4, zoo(n)%jprod_sio4*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_po4 .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_po4,  zoo(n)%jprod_po4*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_po4,  zoo(n)%jprod_po4*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_nh4 .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_nh4,  zoo(n)%jprod_nh4*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_nh4,  zoo(n)%jprod_nh4*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_jprod_n .gt. 0)          &
-            used = send_data(zoo(n)%id_jprod_n,   zoo(n)%jprod_n*rho_dzt,           &
+            used = g_send_data(zoo(n)%id_jprod_n,   zoo(n)%jprod_n*rho_dzt,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (zoo(n)%id_temp_lim .gt. 0)          &
-            used = send_data(zoo(n)%id_temp_lim, zoo(n)%temp_lim,           &
+            used = g_send_data(zoo(n)%id_temp_lim, zoo(n)%temp_lim,           &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     enddo
@@ -6904,334 +6904,334 @@ write (stdlogunit, generic_COBALT_nml)
     ! Production diagnostics
     !
     if (cobalt%id_jprod_cadet_arag .gt. 0)    &
-       used = send_data(cobalt%id_jprod_cadet_arag, cobalt%jprod_cadet_arag * rho_dzt, &
+       used = g_send_data(cobalt%id_jprod_cadet_arag, cobalt%jprod_cadet_arag * rho_dzt, &
        model_time, rmask = grid_tmask(:,:,:),&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jprod_cadet_calc .gt. 0)    &
-       used = send_data(cobalt%id_jprod_cadet_calc, cobalt%jprod_cadet_calc * rho_dzt, &
+       used = g_send_data(cobalt%id_jprod_cadet_calc, cobalt%jprod_cadet_calc * rho_dzt, &
        model_time, rmask = grid_tmask(:,:,:),&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_ndet .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_ndet, cobalt%jprod_ndet*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_ndet, cobalt%jprod_ndet*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_pdet .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_pdet, cobalt%jprod_pdet*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_pdet, cobalt%jprod_pdet*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_srdon .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_srdon, cobalt%jprod_srdon*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_srdon, cobalt%jprod_srdon*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_sldon .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_sldon, cobalt%jprod_sldon*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_sldon, cobalt%jprod_sldon*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_ldon .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_ldon, cobalt%jprod_ldon*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_ldon, cobalt%jprod_ldon*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_srdop .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_srdop, cobalt%jprod_srdop*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_srdop, cobalt%jprod_srdop*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_sldop .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_sldop, cobalt%jprod_sldop*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_sldop, cobalt%jprod_sldop*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_ldop .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_ldop, cobalt%jprod_ldop*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_ldop, cobalt%jprod_ldop*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_nh4 .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_nh4, cobalt%jprod_nh4*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_nh4, cobalt%jprod_nh4*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_po4 .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_po4, cobalt%jprod_po4*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_po4, cobalt%jprod_po4*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jprod_fec .gt. 0)          &
-        used = send_data(cobalt%id_jprod_fec, cobalt%jprod_fec*rho_dzt,           &
+        used = g_send_data(cobalt%id_jprod_fec, cobalt%jprod_fec*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_fed .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_fed, cobalt%jprod_fed*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_fed, cobalt%jprod_fed*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_fedet .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_fedet,  cobalt%jprod_fedet*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_fedet,  cobalt%jprod_fedet*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_sidet .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_sidet, cobalt%jprod_sidet*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_sidet, cobalt%jprod_sidet*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_jprod_sio4 .gt. 0)          &
-    !    used = send_data(cobalt%id_jprod_sio4, cobalt%jprod_sio4*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_jprod_sio4, cobalt%jprod_sio4*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jprod_lithdet .gt. 0)          &
-        used = send_data(cobalt%id_jprod_lithdet, cobalt%jprod_lithdet*rho_dzt,           &
+        used = g_send_data(cobalt%id_jprod_lithdet, cobalt%jprod_lithdet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_det_jzloss_n .gt. 0)          &
-    !    used = send_data(cobalt%id_det_jzloss_n, cobalt%det_jzloss_n*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_det_jzloss_n, cobalt%det_jzloss_n*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !if (cobalt%id_det_jhploss_n .gt. 0)          &
-    !    used = send_data(cobalt%id_det_jhploss_n, cobalt%det_jhploss_n*rho_dzt,           &
+    !    used = g_send_data(cobalt%id_det_jhploss_n, cobalt%det_jhploss_n*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jdiss_cadet_arag .gt. 0)          &
-        used = send_data(cobalt%id_jdiss_cadet_arag, cobalt%jdiss_cadet_arag*rho_dzt,           &
+        used = g_send_data(cobalt%id_jdiss_cadet_arag, cobalt%jdiss_cadet_arag*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jdiss_cadet_calc .gt. 0)          &
-        used = send_data(cobalt%id_jdiss_cadet_calc, cobalt%jdiss_cadet_calc*rho_dzt,           &
+        used = g_send_data(cobalt%id_jdiss_cadet_calc, cobalt%jdiss_cadet_calc*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jdiss_sidet .gt. 0)          &
-        used = send_data(cobalt%id_jdiss_sidet, cobalt%jdiss_sidet*rho_dzt,           &
+        used = g_send_data(cobalt%id_jdiss_sidet, cobalt%jdiss_sidet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jremin_ndet .gt. 0)          &
-        used = send_data(cobalt%id_jremin_ndet, cobalt%jremin_ndet*rho_dzt,           &
+        used = g_send_data(cobalt%id_jremin_ndet, cobalt%jremin_ndet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jremin_pdet .gt. 0)          &
-        used = send_data(cobalt%id_jremin_pdet, cobalt%jremin_pdet*rho_dzt,           &
+        used = g_send_data(cobalt%id_jremin_pdet, cobalt%jremin_pdet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jremin_fedet .gt. 0)          &
-        used = send_data(cobalt%id_jremin_fedet, cobalt%jremin_fedet*rho_dzt,           &
+        used = g_send_data(cobalt%id_jremin_fedet, cobalt%jremin_fedet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jprod_fec .gt. 0)              &
-         used = send_data(cobalt%id_jprod_fec,       cobalt%jprod_fec*rho_dzt,       &
+         used = g_send_data(cobalt%id_jprod_fec,       cobalt%jprod_fec*rho_dzt,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jprod_h2o2 .gt. 0)              &
-         used = send_data(cobalt%id_jprod_h2o2,       cobalt%jprod_h2o2*rho_dzt,       &
+         used = g_send_data(cobalt%id_jprod_h2o2,       cobalt%jprod_h2o2*rho_dzt,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jfec .gt. 0)              &
-         used = send_data(cobalt%id_jfec,       cobalt%jfec*rho_dzt,       &
+         used = g_send_data(cobalt%id_jfec,       cobalt%jfec*rho_dzt,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jfed .gt. 0)              &
-         used = send_data(cobalt%id_jfed,       cobalt%jfed*rho_dzt,       &
+         used = g_send_data(cobalt%id_jfed,       cobalt%jfed*rho_dzt,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jfe_ads .gt. 0)              &
-         used = send_data(cobalt%id_jfe_ads,       cobalt%jfe_ads*rho_dzt,       &
+         used = g_send_data(cobalt%id_jfe_ads,       cobalt%jfe_ads*rho_dzt,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jfe_coast .gt. 0)            &
-         used = send_data(cobalt%id_jfe_coast, cobalt%jfe_coast*rho_dzt,         &
+         used = g_send_data(cobalt%id_jfe_coast, cobalt%jfe_coast*rho_dzt,         &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_kfe_eq_lig .gt. 0)            &
-         used = send_data(cobalt%id_kfe_eq_lig, log10(cobalt%kfe_eq_lig),         &
+         used = g_send_data(cobalt%id_kfe_eq_lig, log10(cobalt%kfe_eq_lig),         &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_expkT .gt. 0)              &
-         used = send_data(cobalt%id_expkT,       cobalt%expkT,       &
+         used = g_send_data(cobalt%id_expkT,       cobalt%expkT,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_hp_temp_lim .gt. 0)            &
-         used = send_data(cobalt%id_hp_temp_lim, cobalt%hp_temp_lim,         &
+         used = g_send_data(cobalt%id_hp_temp_lim, cobalt%hp_temp_lim,         &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_irr_inst .gt. 0)           &
-         used = send_data(cobalt%id_irr_inst,      cobalt%irr_inst,              &
+         used = g_send_data(cobalt%id_irr_inst,      cobalt%irr_inst,              &
          model_time, rmask = grid_tmask(:,:,:),&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)             
     if (cobalt%id_irr_mix .gt. 0)           &
-         used = send_data(cobalt%id_irr_mix,       cobalt%irr_mix,               &
+         used = g_send_data(cobalt%id_irr_mix,       cobalt%irr_mix,               &
          model_time, rmask = grid_tmask(:,:,:),&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jno3denit_wc .gt. 0)            &
-         used = send_data(cobalt%id_jno3denit_wc,  cobalt%jno3denit_wc*rho_dzt,  &
+         used = g_send_data(cobalt%id_jno3denit_wc,  cobalt%jno3denit_wc*rho_dzt,  &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jnitrif .gt. 0)              &
-         used = send_data(cobalt%id_jnitrif,       cobalt%jnitrif*rho_dzt,       &
+         used = g_send_data(cobalt%id_jnitrif,       cobalt%jnitrif*rho_dzt,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_tot_layer_int_c .gt. 0)  &
-         used = send_data(cobalt%id_tot_layer_int_c, cobalt%tot_layer_int_c,&
+         used = g_send_data(cobalt%id_tot_layer_int_c, cobalt%tot_layer_int_c,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_tot_layer_int_fe .gt. 0)  &
-         used = send_data(cobalt%id_tot_layer_int_fe,cobalt%tot_layer_int_fe,&
+         used = g_send_data(cobalt%id_tot_layer_int_fe,cobalt%tot_layer_int_fe,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_tot_layer_int_n .gt. 0)  &
-         used = send_data(cobalt%id_tot_layer_int_n,cobalt%tot_layer_int_n,&
+         used = g_send_data(cobalt%id_tot_layer_int_n,cobalt%tot_layer_int_n,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_tot_layer_int_p .gt. 0)  &
-         used = send_data(cobalt%id_tot_layer_int_p,cobalt%tot_layer_int_p,&
+         used = g_send_data(cobalt%id_tot_layer_int_p,cobalt%tot_layer_int_p,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_tot_layer_int_si .gt. 0)  &
-         used = send_data(cobalt%id_tot_layer_int_si,cobalt%tot_layer_int_si,&
+         used = g_send_data(cobalt%id_tot_layer_int_si,cobalt%tot_layer_int_si,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_total_filter_feeding .gt. 0)  &
-         used = send_data(cobalt%id_total_filter_feeding,cobalt%total_filter_feeding,&
+         used = g_send_data(cobalt%id_total_filter_feeding,cobalt%total_filter_feeding,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_net_prim_prod .gt. 0)  &
-         used = send_data(cobalt%id_net_prim_prod,cobalt%net_prim_prod*rho_dzt,&
+         used = g_send_data(cobalt%id_net_prim_prod,cobalt%net_prim_prod*rho_dzt,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_gross_prim_prod.gt. 0)  &
-         used = send_data(cobalt%id_gross_prim_prod,cobalt%gross_prim_prod*rho_dzt,&
+         used = g_send_data(cobalt%id_gross_prim_prod,cobalt%gross_prim_prod*rho_dzt,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_nlg_diatoms.gt. 0)  &
-         used = send_data(cobalt%id_nlg_diatoms,cobalt%nlg_diatoms,&
+         used = g_send_data(cobalt%id_nlg_diatoms,cobalt%nlg_diatoms,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_q_si_2_n_lg_diatoms.gt. 0)  &
-         used = send_data(cobalt%id_q_si_2_n_lg_diatoms,cobalt%q_si_2_n_lg_diatoms,&
+         used = g_send_data(cobalt%id_q_si_2_n_lg_diatoms,cobalt%q_si_2_n_lg_diatoms,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_co2_csurf .gt. 0)             &
-         used = send_data(cobalt%id_co2_csurf,      cobalt%co2_csurf,              &
+         used = g_send_data(cobalt%id_co2_csurf,      cobalt%co2_csurf,              &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_pco2_csurf .gt. 0)             &
-         used = send_data(cobalt%id_pco2_csurf,      cobalt%pco2_csurf,              &
+         used = g_send_data(cobalt%id_pco2_csurf,      cobalt%pco2_csurf,              &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_co2_alpha .gt. 0)             &
-         used = send_data(cobalt%id_co2_alpha,      cobalt%co2_alpha,              &
+         used = g_send_data(cobalt%id_co2_alpha,      cobalt%co2_alpha,              &
          model_time, rmask = grid_tmask(:,:,1),& 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fcadet_arag_btm .gt. 0)           &  
-         used = send_data(cobalt%id_fcadet_arag_btm,   cobalt%fcadet_arag_btm,      &
+         used = g_send_data(cobalt%id_fcadet_arag_btm,   cobalt%fcadet_arag_btm,      &
          model_time, rmask = grid_tmask(:,:,1),&  
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fcadet_calc_btm .gt. 0)           &
-         used = send_data(cobalt%id_fcadet_calc_btm,   cobalt%fcadet_calc_btm,      &
+         used = g_send_data(cobalt%id_fcadet_calc_btm,   cobalt%fcadet_calc_btm,      &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_ffedet_btm .gt. 0)           &
-         used = send_data(cobalt%id_ffedet_btm,   cobalt%ffedet_btm,             &
+         used = g_send_data(cobalt%id_ffedet_btm,   cobalt%ffedet_btm,             &
          model_time, rmask = grid_tmask(:,:,1),&  
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fndet_btm .gt. 0)            &
-         used = send_data(cobalt%id_fndet_btm,    cobalt%fndet_btm,              &
+         used = g_send_data(cobalt%id_fndet_btm,    cobalt%fndet_btm,              &
          model_time, rmask = grid_tmask(:,:,1),&  
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fpdet_btm .gt. 0)            &
-         used = send_data(cobalt%id_fpdet_btm,    cobalt%fpdet_btm,              &
+         used = g_send_data(cobalt%id_fpdet_btm,    cobalt%fpdet_btm,              &
          model_time, rmask = grid_tmask(:,:,1),&  
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fsidet_btm .gt. 0)           &
-         used = send_data(cobalt%id_fsidet_btm,   cobalt%fsidet_btm,             &
+         used = g_send_data(cobalt%id_fsidet_btm,   cobalt%fsidet_btm,             &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_flithdet_btm .gt. 0)           &
-         used = send_data(cobalt%id_flithdet_btm,   cobalt%flithdet_btm,             &
+         used = g_send_data(cobalt%id_flithdet_btm,   cobalt%flithdet_btm,             &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fcased_burial .gt. 0)        &
-         used = send_data(cobalt%id_fcased_burial, cobalt%fcased_burial,         &
+         used = g_send_data(cobalt%id_fcased_burial, cobalt%fcased_burial,         &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fcased_input .gt. 0)           &
-         used = send_data(cobalt%id_fcased_input,  cobalt%fcased_input,          &
+         used = g_send_data(cobalt%id_fcased_input,  cobalt%fcased_input,          &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fcased_redis .gt. 0)         &
-         used = send_data(cobalt%id_fcased_redis,  cobalt%fcased_redis,          &
+         used = g_send_data(cobalt%id_fcased_redis,  cobalt%fcased_redis,          &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_ffe_sed .gt. 0)              &
-         used = send_data(cobalt%id_ffe_sed,       cobalt%ffe_sed,               &
+         used = g_send_data(cobalt%id_ffe_sed,       cobalt%ffe_sed,               &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fnfeso4red_sed .gt. 0)           &
-         used = send_data(cobalt%id_fnfeso4red_sed,cobalt%fnfeso4red_sed,        &
+         used = g_send_data(cobalt%id_fnfeso4red_sed,cobalt%fnfeso4red_sed,        &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fno3denit_sed .gt. 0)           &
-         used = send_data(cobalt%id_fno3denit_sed, cobalt%fno3denit_sed,         &
+         used = g_send_data(cobalt%id_fno3denit_sed, cobalt%fno3denit_sed,         &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fnoxic_sed .gt. 0)           &
-         used = send_data(cobalt%id_fnoxic_sed,    cobalt%fnoxic_sed,            &
+         used = g_send_data(cobalt%id_fnoxic_sed,    cobalt%fnoxic_sed,            &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_frac_burial .gt. 0)           &
-         used = send_data(cobalt%id_frac_burial,    cobalt%frac_burial,          &
+         used = g_send_data(cobalt%id_frac_burial,    cobalt%frac_burial,          &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fndet_burial .gt. 0)           &
-         used = send_data(cobalt%id_fndet_burial,    cobalt%fndet_burial,        &
+         used = g_send_data(cobalt%id_fndet_burial,    cobalt%fndet_burial,        &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fpdet_burial .gt. 0)           &
-         used = send_data(cobalt%id_fpdet_burial,    cobalt%fpdet_burial,            &
+         used = g_send_data(cobalt%id_fpdet_burial,    cobalt%fpdet_burial,            &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_co3_sol_arag .gt. 0)        &
-       used = send_data(cobalt%id_co3_sol_arag,  cobalt%co3_sol_arag,             &
+       used = g_send_data(cobalt%id_co3_sol_arag,  cobalt%co3_sol_arag,             &
        model_time, rmask = grid_tmask(:,:,:),&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_co3_sol_calc .gt. 0)        &
-       used = send_data(cobalt%id_co3_sol_calc,  cobalt%co3_sol_calc,             &
+       used = g_send_data(cobalt%id_co3_sol_calc,  cobalt%co3_sol_calc,             &
        model_time, rmask = grid_tmask(:,:,:),&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_omega_arag .gt. 0)          &
-       used = send_data(cobalt%id_omega_arag,  cobalt%omega_arag,                 &
+       used = g_send_data(cobalt%id_omega_arag,  cobalt%omega_arag,                 &
        model_time, rmask = grid_tmask(:,:,:),&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_omega_calc .gt. 0)          &
-       used = send_data(cobalt%id_omega_calc,  cobalt%omega_calc,                 &
+       used = g_send_data(cobalt%id_omega_calc,  cobalt%omega_calc,                 &
        model_time, rmask = grid_tmask(:,:,:),&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_fcadet_arag .gt. 0)               &
-         used = send_data(cobalt%id_fcadet_arag, cobalt%p_cadet_arag(:,:,:,tau) * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_fcadet_arag, cobalt%p_cadet_arag(:,:,:,tau) * cobalt%Rho_0 * &
          cobalt%wsink * grid_tmask(:,:,:), &
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_fcadet_calc .gt. 0)               &
-         used = send_data(cobalt%id_fcadet_calc, cobalt%p_cadet_calc(:,:,:,tau) * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_fcadet_calc, cobalt%p_cadet_calc(:,:,:,tau) * cobalt%Rho_0 * &
          cobalt%wsink*grid_tmask(:,:,:), &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_ffedet .gt. 0)                &
-         used = send_data(cobalt%id_ffedet,        cobalt%p_fedet(:,:,:,tau) * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_ffedet,        cobalt%p_fedet(:,:,:,tau) * cobalt%Rho_0 * &
          cobalt%wsink * grid_tmask(:,:,:),&
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_flithdet .gt. 0)                &
-         used = send_data(cobalt%id_flithdet,      cobalt%p_lithdet(:,:,:,tau) * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_flithdet,      cobalt%p_lithdet(:,:,:,tau) * cobalt%Rho_0 * &
          cobalt%wsink * grid_tmask(:,:,:),&
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_fndet .gt. 0)                 &
-         used = send_data(cobalt%id_fndet,         cobalt%p_ndet(:,:,:,tau) * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_fndet,         cobalt%p_ndet(:,:,:,tau) * cobalt%Rho_0 * &
          cobalt%wsink * grid_tmask(:,:,:),&
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_fpdet .gt. 0)                 &
-         used = send_data(cobalt%id_fpdet,         cobalt%p_pdet(:,:,:,tau) * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_fpdet,         cobalt%p_pdet(:,:,:,tau) * cobalt%Rho_0 * &
          cobalt%wsink * grid_tmask(:,:,:),&
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_fsidet .gt. 0)                &
-         used = send_data(cobalt%id_fsidet,        cobalt%p_sidet(:,:,:,tau)  * cobalt%Rho_0 * &
+         used = g_send_data(cobalt%id_fsidet,        cobalt%p_sidet(:,:,:,tau)  * cobalt%Rho_0 * &
          cobalt%wsink  *grid_tmask(:,:,:),&
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_nphyto_tot .gt. 0)                &
-         used = send_data(cobalt%id_nphyto_tot,   (cobalt%p_ndi(:,:,:,tau) +  &
+         used = g_send_data(cobalt%id_nphyto_tot,   (cobalt%p_ndi(:,:,:,tau) +  &
          cobalt%p_nlg(:,:,:,tau) + cobalt%p_nsm(:,:,:,tau)), &
          model_time, rmask = grid_tmask(:,:,:),& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
@@ -7239,203 +7239,203 @@ write (stdlogunit, generic_COBALT_nml)
 ! Radiocarbon fields
 !
     if (cobalt%id_b_di14c .gt. 0)                                                 &
-         used = send_data(cobalt%id_b_di14c,        cobalt%b_di14c,                &
+         used = g_send_data(cobalt%id_b_di14c,        cobalt%b_di14c,                &
          model_time, rmask = grid_tmask(:,:,1),                                  & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_c14_2_n .gt. 0)                                                 &
-         used = send_data(cobalt%id_c14_2_n,        cobalt%c14_2_n,                &
+         used = g_send_data(cobalt%id_c14_2_n,        cobalt%c14_2_n,                &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_c14o2_csurf .gt. 0)                                             &
-         used = send_data(cobalt%id_c14o2_csurf,    cobalt%c14o2_csurf,            &
+         used = g_send_data(cobalt%id_c14o2_csurf,    cobalt%c14o2_csurf,            &
          model_time, rmask = grid_tmask(:,:,1),                                  & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_c14o2_alpha .gt. 0)                                             &
-         used = send_data(cobalt%id_c14o2_alpha,    cobalt%c14o2_alpha,            &
+         used = g_send_data(cobalt%id_c14o2_alpha,    cobalt%c14o2_alpha,            &
          model_time, rmask = grid_tmask(:,:,1),                                  & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fpo14c .gt. 0)                                                  &
-         used = send_data(cobalt%id_fpo14c,         cobalt%fpo14c,                 &
+         used = g_send_data(cobalt%id_fpo14c,         cobalt%fpo14c,                 &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_j14c_decay_dic .gt. 0)                                          &
-         used = send_data(cobalt%id_j14c_decay_dic, cobalt%j14c_decay_dic*rho_dzt, &
+         used = g_send_data(cobalt%id_j14c_decay_dic, cobalt%j14c_decay_dic*rho_dzt, &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_j14c_decay_doc .gt. 0)                                          &
-         used = send_data(cobalt%id_j14c_decay_doc, cobalt%j14c_decay_doc*rho_dzt, &
+         used = g_send_data(cobalt%id_j14c_decay_doc, cobalt%j14c_decay_doc*rho_dzt, &
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_j14c_reminp .gt. 0)                                             &
-         used = send_data(cobalt%id_j14c_reminp,    cobalt%j14c_reminp*rho_dzt,    &
+         used = g_send_data(cobalt%id_j14c_reminp,    cobalt%j14c_reminp*rho_dzt,    &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jdi14c .gt. 0)                                                  &
-         used = send_data(cobalt%id_jdi14c,         cobalt%jdi14c*rho_dzt,         &
+         used = g_send_data(cobalt%id_jdi14c,         cobalt%jdi14c*rho_dzt,         &
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jdo14c .gt. 0)                                                  &
-         used = send_data(cobalt%id_jdo14c,         cobalt%jdo14c*rho_dzt,         &
+         used = g_send_data(cobalt%id_jdo14c,         cobalt%jdo14c*rho_dzt,         &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     !
     ! 2D COBALT fields
     !
    if (cobalt%id_pco2surf .gt. 0)              &
-         used = send_data(cobalt%id_pco2surf,      cobalt%pco2_csurf,           &
+         used = g_send_data(cobalt%id_pco2surf,      cobalt%pco2_csurf,           &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_alk .gt. 0)             &
-       used = send_data(cobalt%id_sfc_alk,       cobalt%p_alk(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_alk,       cobalt%p_alk(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_cadet_arag .gt. 0)      &
-       used = send_data(cobalt%id_sfc_cadet_arag,cobalt%p_cadet_arag(:,:,1,tau),  &
+       used = g_send_data(cobalt%id_sfc_cadet_arag,cobalt%p_cadet_arag(:,:,1,tau),  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_cadet_calc .gt. 0)      &
-       used = send_data(cobalt%id_sfc_cadet_calc,cobalt%p_cadet_calc(:,:,1,tau),  &
+       used = g_send_data(cobalt%id_sfc_cadet_calc,cobalt%p_cadet_calc(:,:,1,tau),  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_dic .gt. 0)             &
-       used = send_data(cobalt%id_sfc_dic,       cobalt%p_dic(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_dic,       cobalt%p_dic(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_fec .gt. 0)             &
-       used = send_data(cobalt%id_sfc_fec,       cobalt%p_fec(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_fec,       cobalt%p_fec(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_fed .gt. 0)             &
-       used = send_data(cobalt%id_sfc_fed,       cobalt%p_fed(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_fed,       cobalt%p_fed(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_ldon .gt. 0)             &
-       used = send_data(cobalt%id_sfc_ldon,       cobalt%p_ldon(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_ldon,       cobalt%p_ldon(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_sldon .gt. 0)             &
-       used = send_data(cobalt%id_sfc_sldon,       cobalt%p_sldon(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_sldon,       cobalt%p_sldon(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_srdon .gt. 0)             &
-       used = send_data(cobalt%id_sfc_srdon,       cobalt%p_srdon(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_srdon,       cobalt%p_srdon(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_no3 .gt. 0)             &
-       used = send_data(cobalt%id_sfc_no3,       cobalt%p_no3(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_no3,       cobalt%p_no3(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_nh4 .gt. 0)             &
-       used = send_data(cobalt%id_sfc_nh4,       cobalt%p_nh4(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_nh4,       cobalt%p_nh4(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_po4 .gt. 0)             &
-       used = send_data(cobalt%id_sfc_po4,       cobalt%p_po4(:,:,1,tau),         &
+       used = g_send_data(cobalt%id_sfc_po4,       cobalt%p_po4(:,:,1,tau),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_sio4 .gt. 0)            &
-       used = send_data(cobalt%id_sfc_sio4,      cobalt%p_sio4(:,:,1,tau),        &
+       used = g_send_data(cobalt%id_sfc_sio4,      cobalt%p_sio4(:,:,1,tau),        &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_htotal .gt. 0)          &
-       used = send_data(cobalt%id_sfc_htotal,    cobalt%f_htotal(:,:,1),          &
+       used = g_send_data(cobalt%id_sfc_htotal,    cobalt%f_htotal(:,:,1),          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_o2 .gt. 0)             &
-       used = send_data(cobalt%id_sfc_o2,       cobalt%p_o2(:,:,1,tau),           &
+       used = g_send_data(cobalt%id_sfc_o2,       cobalt%p_o2(:,:,1,tau),           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_chl .gt. 0)             &
-       used = send_data(cobalt%id_sfc_chl,       cobalt%f_chl(:,:,1),             &
+       used = g_send_data(cobalt%id_sfc_chl,       cobalt%f_chl(:,:,1),             &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_irr .gt. 0)              &
-         used = send_data(cobalt%id_sfc_irr,      cobalt%irr_inst(:,:,1),        &
+         used = g_send_data(cobalt%id_sfc_irr,      cobalt%irr_inst(:,:,1),        &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_irr_mem .gt. 0)          &
-         used = send_data(cobalt%id_sfc_irr_mem,  cobalt%f_irr_mem(:,:,1),       &
+         used = g_send_data(cobalt%id_sfc_irr_mem,  cobalt%f_irr_mem(:,:,1),       &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_temp .gt. 0)            &
-       used = send_data(cobalt%id_sfc_temp,      Temp(:,:,1),                    &
+       used = g_send_data(cobalt%id_sfc_temp,      Temp(:,:,1),                    &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_btm_temp .gt. 0)            &
-       used = send_data(cobalt%id_btm_temp,      cobalt%btm_temp,                &
+       used = g_send_data(cobalt%id_btm_temp,      cobalt%btm_temp,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_btm_o2 .gt. 0)            &
-       used = send_data(cobalt%id_btm_o2,      cobalt%btm_o2,                &
+       used = g_send_data(cobalt%id_btm_o2,      cobalt%btm_o2,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_co3_ion .gt. 0)            &
-       used = send_data(cobalt%id_sfc_co3_ion, cobalt%f_co3_ion(:,:,1),            &
+       used = g_send_data(cobalt%id_sfc_co3_ion, cobalt%f_co3_ion(:,:,1),            &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_co3_sol_arag .gt. 0)            &
-       used = send_data(cobalt%id_sfc_co3_sol_arag, cobalt%co3_sol_arag(:,:,1),  &
+       used = g_send_data(cobalt%id_sfc_co3_sol_arag, cobalt%co3_sol_arag(:,:,1),  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_co3_sol_calc .gt. 0)            &
-       used = send_data(cobalt%id_sfc_co3_sol_calc, cobalt%co3_sol_calc(:,:,1),  &
+       used = g_send_data(cobalt%id_sfc_co3_sol_calc, cobalt%co3_sol_calc(:,:,1),  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_fe2 .gt. 0)            &
-       used = send_data(cobalt%id_sfc_fe2, cobalt%f_fe2(:,:,1),            &
+       used = g_send_data(cobalt%id_sfc_fe2, cobalt%f_fe2(:,:,1),            &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_fe3 .gt. 0)            &
-       used = send_data(cobalt%id_sfc_fe3, cobalt%f_fe3(:,:,1),            &
+       used = g_send_data(cobalt%id_sfc_fe3, cobalt%f_fe3(:,:,1),            &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     do n= 1, NUM_PHYTO
        if (phyto(n)%id_sfc_f_n .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_f_n, phyto(n)%f_n(:,:,1),            & 
+          used = g_send_data(phyto(n)%id_sfc_f_n, phyto(n)%f_n(:,:,1),            & 
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (phyto(n)%id_sfc_chl .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_chl,    cobalt%c_2_n * 12.0e6 *      &
+          used = g_send_data(phyto(n)%id_sfc_chl,    cobalt%c_2_n * 12.0e6 *      &
           phyto(n)%theta(:,:,1) * phyto(n)%f_n(:,:,1),                          &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (phyto(n)%id_sfc_def_fe .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_def_fe, phyto(n)%def_fe(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_def_fe, phyto(n)%def_fe(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (phyto(n)%id_sfc_felim .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_felim, phyto(n)%felim(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_felim, phyto(n)%felim(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
       if (phyto(n)%id_sfc_irrlim .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_irrlim, phyto(n)%irrlim(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_irrlim, phyto(n)%irrlim(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (phyto(n)%id_sfc_theta .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_theta, phyto(n)%theta(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_theta, phyto(n)%theta(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (phyto(n)%id_sfc_mu .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_mu, phyto(n)%mu(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_mu, phyto(n)%mu(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (phyto(n)%id_sfc_po4lim .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_po4lim, phyto(n)%po4lim(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_po4lim, phyto(n)%po4lim(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (phyto(n)%id_sfc_q_fe_2_n .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_q_fe_2_n, phyto(n)%q_fe_2_n(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_q_fe_2_n, phyto(n)%q_fe_2_n(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     enddo
 
    do n= 2,3
     if (phyto(n)%id_sfc_nh4lim .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_nh4lim, phyto(n)%nh4lim(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_nh4lim, phyto(n)%nh4lim(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (phyto(n)%id_sfc_no3lim .gt. 0)              &
-          used = send_data(phyto(n)%id_sfc_no3lim, phyto(n)%no3lim(:,:,1),      &
+          used = g_send_data(phyto(n)%id_sfc_no3lim, phyto(n)%no3lim(:,:,1),      &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
    enddo
@@ -7445,298 +7445,298 @@ write (stdlogunit, generic_COBALT_nml)
     ! Save river, depositon and bulk elemental fluxes
     !
     if (cobalt%id_dep_dry_fed .gt. 0)     &
-       used = send_data(cobalt%id_dep_dry_fed, cobalt%dry_fed,                          &
+       used = g_send_data(cobalt%id_dep_dry_fed, cobalt%dry_fed,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_h2o2 .gt. 0)     &
-       used = send_data(cobalt%id_dep_dry_h2o2, cobalt%dry_h2o2,                        &
+       used = g_send_data(cobalt%id_dep_dry_h2o2, cobalt%dry_h2o2,                        &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_lith .gt. 0)     &
-       used = send_data(cobalt%id_dep_dry_lith, cobalt%dry_lith,                        &
+       used = g_send_data(cobalt%id_dep_dry_lith, cobalt%dry_lith,                        &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_nh4 .gt. 0)     &
-       used = send_data(cobalt%id_dep_dry_nh4, cobalt%dry_nh4,                          &
+       used = g_send_data(cobalt%id_dep_dry_nh4, cobalt%dry_nh4,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_no3 .gt. 0)     &
-       used = send_data(cobalt%id_dep_dry_no3, cobalt%dry_no3,                          &
+       used = g_send_data(cobalt%id_dep_dry_no3, cobalt%dry_no3,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_dry_po4 .gt. 0)     &
-       used = send_data(cobalt%id_dep_dry_po4, cobalt%dry_po4,                          &
+       used = g_send_data(cobalt%id_dep_dry_po4, cobalt%dry_po4,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_fed .gt. 0)     &
-       used = send_data(cobalt%id_dep_wet_fed, cobalt%wet_fed,                          &
+       used = g_send_data(cobalt%id_dep_wet_fed, cobalt%wet_fed,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_h2o2 .gt. 0)     &
-       used = send_data(cobalt%id_dep_wet_h2o2, cobalt%wet_h2o2,                        &
+       used = g_send_data(cobalt%id_dep_wet_h2o2, cobalt%wet_h2o2,                        &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_lith .gt. 0)     &
-       used = send_data(cobalt%id_dep_wet_lith, cobalt%wet_lith,                        &
+       used = g_send_data(cobalt%id_dep_wet_lith, cobalt%wet_lith,                        &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_nh4 .gt. 0)     &
-       used = send_data(cobalt%id_dep_wet_nh4, cobalt%wet_nh4,                          &
+       used = g_send_data(cobalt%id_dep_wet_nh4, cobalt%wet_nh4,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_no3 .gt. 0)     &
-       used = send_data(cobalt%id_dep_wet_no3, cobalt%wet_no3,                          &
+       used = g_send_data(cobalt%id_dep_wet_no3, cobalt%wet_no3,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_po4 .gt. 0)     &
-       used = send_data(cobalt%id_dep_wet_po4, cobalt%wet_po4,                          &
+       used = g_send_data(cobalt%id_dep_wet_po4, cobalt%wet_po4,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_alk .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_alk, cobalt%runoff_flux_alk,           &
+       used = g_send_data(cobalt%id_runoff_flux_alk, cobalt%runoff_flux_alk,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_dic .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_dic, cobalt%runoff_flux_dic,           &
+       used = g_send_data(cobalt%id_runoff_flux_dic, cobalt%runoff_flux_dic,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_fed .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_fed, cobalt%runoff_flux_fed,           &
+       used = g_send_data(cobalt%id_runoff_flux_fed, cobalt%runoff_flux_fed,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_lith .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_lith, cobalt%runoff_flux_lith,         &
+       used = g_send_data(cobalt%id_runoff_flux_lith, cobalt%runoff_flux_lith,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_no3 .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_no3, cobalt%runoff_flux_no3,           &
+       used = g_send_data(cobalt%id_runoff_flux_no3, cobalt%runoff_flux_no3,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_ldon .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_ldon, cobalt%runoff_flux_ldon,           &
+       used = g_send_data(cobalt%id_runoff_flux_ldon, cobalt%runoff_flux_ldon,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_sldon .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_sldon, cobalt%runoff_flux_sldon,           &
+       used = g_send_data(cobalt%id_runoff_flux_sldon, cobalt%runoff_flux_sldon,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_srdon .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_srdon, cobalt%runoff_flux_srdon,           &
+       used = g_send_data(cobalt%id_runoff_flux_srdon, cobalt%runoff_flux_srdon,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_ndet .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_ndet, cobalt%runoff_flux_ndet,           &
+       used = g_send_data(cobalt%id_runoff_flux_ndet, cobalt%runoff_flux_ndet,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_po4 .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_po4, cobalt%runoff_flux_po4,           &
+       used = g_send_data(cobalt%id_runoff_flux_po4, cobalt%runoff_flux_po4,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_ldop .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_ldop, cobalt%runoff_flux_ldop,           &
+       used = g_send_data(cobalt%id_runoff_flux_ldop, cobalt%runoff_flux_ldop,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_sldop .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_sldop, cobalt%runoff_flux_sldop,           &
+       used = g_send_data(cobalt%id_runoff_flux_sldop, cobalt%runoff_flux_sldop,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_srdop .gt. 0)     &
-       used = send_data(cobalt%id_runoff_flux_srdop, cobalt%runoff_flux_srdop,           &
+       used = g_send_data(cobalt%id_runoff_flux_srdop, cobalt%runoff_flux_srdop,           &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     !
     ! Save 100m integral fluxes
     !
     if (cobalt%id_jprod_allphytos_100 .gt. 0)     &
-       used = send_data(cobalt%id_jprod_allphytos_100, cobalt%jprod_allphytos_100,         &
+       used = g_send_data(cobalt%id_jprod_allphytos_100, cobalt%jprod_allphytos_100,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     do n= 1, NUM_PHYTO  !{
        if (phyto(n)%id_jprod_n_100 .gt. 0)     &
-          used = send_data(phyto(n)%id_jprod_n_100, phyto(n)%jprod_n_100,         &
+          used = g_send_data(phyto(n)%id_jprod_n_100, phyto(n)%jprod_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
       if (phyto(n)%id_jprod_n_new_100 .gt. 0)     &
-          used = send_data(phyto(n)%id_jprod_n_new_100, phyto(n)%jprod_n_new_100,         &
+          used = g_send_data(phyto(n)%id_jprod_n_new_100, phyto(n)%jprod_n_new_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
       if (phyto(n)%id_jzloss_n_100 .gt. 0)     &
-          used = send_data(phyto(n)%id_jzloss_n_100, phyto(n)%jzloss_n_100,         &
+          used = g_send_data(phyto(n)%id_jzloss_n_100, phyto(n)%jzloss_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
       if (phyto(n)%id_jexuloss_n_100 .gt. 0)     &
-          used = send_data(phyto(n)%id_jexuloss_n_100, phyto(n)%jexuloss_n_100,         &
+          used = g_send_data(phyto(n)%id_jexuloss_n_100, phyto(n)%jexuloss_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
       if (phyto(n)%id_f_n_100 .gt. 0)     &
-          used = send_data(phyto(n)%id_f_n_100, phyto(n)%f_n_100,         &
+          used = g_send_data(phyto(n)%id_f_n_100, phyto(n)%f_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     enddo !} n
     if (phyto(DIAZO)%id_jprod_n_n2_100 .gt. 0)     &
-       used = send_data(phyto(DIAZO)%id_jprod_n_n2_100, phyto(DIAZO)%jprod_n_n2_100,         &
+       used = g_send_data(phyto(DIAZO)%id_jprod_n_n2_100, phyto(DIAZO)%jprod_n_n2_100,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (phyto(SMALL)%id_jvirloss_n_100 .gt. 0)     &
-       used = send_data(phyto(SMALL)%id_jvirloss_n_100, phyto(SMALL)%jvirloss_n_100,         &
+       used = g_send_data(phyto(SMALL)%id_jvirloss_n_100, phyto(SMALL)%jvirloss_n_100,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
    if (phyto(SMALL)%id_jaggloss_n_100 .gt. 0)     &
-       used = send_data(phyto(SMALL)%id_jaggloss_n_100, phyto(SMALL)%jaggloss_n_100,         &
+       used = g_send_data(phyto(SMALL)%id_jaggloss_n_100, phyto(SMALL)%jaggloss_n_100,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
    if (phyto(LARGE)%id_jaggloss_n_100 .gt. 0)     &
-       used = send_data(phyto(LARGE)%id_jaggloss_n_100, phyto(LARGE)%jaggloss_n_100,         &
+       used = g_send_data(phyto(LARGE)%id_jaggloss_n_100, phyto(LARGE)%jaggloss_n_100,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
      do n= 1, NUM_ZOO  !{
        if (zoo(n)%id_jprod_n_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jprod_n_100, zoo(n)%jprod_n_100,         &
+          used = g_send_data(zoo(n)%id_jprod_n_100, zoo(n)%jprod_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (zoo(n)%id_jingest_n_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jingest_n_100, zoo(n)%jingest_n_100,         &
+          used = g_send_data(zoo(n)%id_jingest_n_100, zoo(n)%jingest_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (zoo(n)%id_jremin_n_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jremin_n_100, zoo(n)%jremin_n_100,         &
+          used = g_send_data(zoo(n)%id_jremin_n_100, zoo(n)%jremin_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
       if (zoo(n)%id_f_n_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_f_n_100, zoo(n)%f_n_100,         &
+          used = g_send_data(zoo(n)%id_f_n_100, zoo(n)%f_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      enddo !} n
 
      do n= 1,2  !{
        if (zoo(n)%id_jzloss_n_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jzloss_n_100, zoo(n)%jzloss_n_100,         &
+          used = g_send_data(zoo(n)%id_jzloss_n_100, zoo(n)%jzloss_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (zoo(n)%id_jprod_don_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jprod_don_100, zoo(n)%jprod_don_100,         &
+          used = g_send_data(zoo(n)%id_jprod_don_100, zoo(n)%jprod_don_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      enddo !} n
 
      do n= 2,3  !{
        if (zoo(n)%id_jhploss_n_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jhploss_n_100, zoo(n)%jhploss_n_100,         &
+          used = g_send_data(zoo(n)%id_jhploss_n_100, zoo(n)%jhploss_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
        if (zoo(n)%id_jprod_ndet_100 .gt. 0)     &
-          used = send_data(zoo(n)%id_jprod_ndet_100, zoo(n)%jprod_ndet_100,         &
+          used = g_send_data(zoo(n)%id_jprod_ndet_100, zoo(n)%jprod_ndet_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      enddo !} n
 
      if (cobalt%id_hp_jingest_n_100 .gt. 0)     &
-        used = send_data(cobalt%id_hp_jingest_n_100, cobalt%hp_jingest_n_100,         &
+        used = g_send_data(cobalt%id_hp_jingest_n_100, cobalt%hp_jingest_n_100,         &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_hp_jremin_n_100 .gt. 0)     &
-        used = send_data(cobalt%id_hp_jremin_n_100, cobalt%hp_jremin_n_100,         &
+        used = g_send_data(cobalt%id_hp_jremin_n_100, cobalt%hp_jremin_n_100,         &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_hp_jprod_ndet_100 .gt. 0)     &
-        used = send_data(cobalt%id_hp_jprod_ndet_100, cobalt%hp_jprod_ndet_100,         &
+        used = g_send_data(cobalt%id_hp_jprod_ndet_100, cobalt%hp_jprod_ndet_100,         &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
      if (bact(1)%id_jprod_n_100 .gt. 0)     &
-          used = send_data(bact(1)%id_jprod_n_100, bact(1)%jprod_n_100,         &
+          used = g_send_data(bact(1)%id_jprod_n_100, bact(1)%jprod_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (bact(1)%id_jzloss_n_100 .gt. 0)     &
-          used = send_data(bact(1)%id_jzloss_n_100, bact(1)%jzloss_n_100,         &
+          used = g_send_data(bact(1)%id_jzloss_n_100, bact(1)%jzloss_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (bact(1)%id_jvirloss_n_100 .gt. 0)     &
-          used = send_data(bact(1)%id_jvirloss_n_100, bact(1)%jvirloss_n_100,         &
+          used = g_send_data(bact(1)%id_jvirloss_n_100, bact(1)%jvirloss_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (bact(1)%id_jremin_n_100 .gt. 0)     &
-          used = send_data(bact(1)%id_jremin_n_100, bact(1)%jremin_n_100,         &
+          used = g_send_data(bact(1)%id_jremin_n_100, bact(1)%jremin_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (bact(1)%id_juptake_ldon_100 .gt. 0)     &
-          used = send_data(bact(1)%id_juptake_ldon_100, bact(1)%juptake_ldon_100,         &
+          used = g_send_data(bact(1)%id_juptake_ldon_100, bact(1)%juptake_ldon_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (bact(1)%id_f_n_100 .gt. 0)     &
-          used = send_data(bact(1)%id_f_n_100, bact(1)%f_n_100,         &
+          used = g_send_data(bact(1)%id_f_n_100, bact(1)%f_n_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
      if (cobalt%id_jprod_lithdet_100 .gt. 0)     &
-          used = send_data(cobalt%id_jprod_lithdet_100, cobalt%jprod_lithdet_100,         &
+          used = g_send_data(cobalt%id_jprod_lithdet_100, cobalt%jprod_lithdet_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_jprod_sidet_100 .gt. 0)     &
-          used = send_data(cobalt%id_jprod_sidet_100, cobalt%jprod_sidet_100,         &
+          used = g_send_data(cobalt%id_jprod_sidet_100, cobalt%jprod_sidet_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_jprod_cadet_calc_100 .gt. 0)     &
-          used = send_data(cobalt%id_jprod_cadet_calc_100, cobalt%jprod_cadet_calc_100,         &
+          used = g_send_data(cobalt%id_jprod_cadet_calc_100, cobalt%jprod_cadet_calc_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_jprod_cadet_arag_100 .gt. 0)     &
-          used = send_data(cobalt%id_jprod_cadet_arag_100, cobalt%jprod_cadet_arag_100,         &
+          used = g_send_data(cobalt%id_jprod_cadet_arag_100, cobalt%jprod_cadet_arag_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_jremin_ndet_100 .gt. 0)     &
-          used = send_data(cobalt%id_jremin_ndet_100, cobalt%jremin_ndet_100,         &
+          used = g_send_data(cobalt%id_jremin_ndet_100, cobalt%jremin_ndet_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
      if (cobalt%id_jprod_mesozoo_200 .gt. 0)     &
-          used = send_data(cobalt%id_jprod_mesozoo_200, cobalt%jprod_mesozoo_200,         &
+          used = g_send_data(cobalt%id_jprod_mesozoo_200, cobalt%jprod_mesozoo_200,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
      if (cobalt%id_f_ndet_100 .gt. 0)     &
-          used = send_data(cobalt%id_f_ndet_100, cobalt%f_ndet_100,         &
+          used = g_send_data(cobalt%id_f_ndet_100, cobalt%f_ndet_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_f_don_100 .gt. 0)     &
-          used = send_data(cobalt%id_f_don_100, cobalt%f_don_100,         &
+          used = g_send_data(cobalt%id_f_don_100, cobalt%f_don_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_f_silg_100 .gt. 0)     &
-          used = send_data(cobalt%id_f_silg_100, cobalt%f_silg_100,         &
+          used = g_send_data(cobalt%id_f_silg_100, cobalt%f_silg_100,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_f_mesozoo_200 .gt. 0)     &
-          used = send_data(cobalt%id_f_mesozoo_200, cobalt%f_mesozoo_200,         &
+          used = g_send_data(cobalt%id_f_mesozoo_200, cobalt%f_mesozoo_200,         &
           model_time, rmask = grid_tmask(:,:,1),&
           is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_fndet_100 .gt. 0)           &
-       used = send_data(cobalt%id_fndet_100,     cobalt%fndet_100,                &
+       used = g_send_data(cobalt%id_fndet_100,     cobalt%fndet_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fpdet_100 .gt. 0)           &
-       used = send_data(cobalt%id_fpdet_100,     cobalt%fpdet_100,                &
+       used = g_send_data(cobalt%id_fpdet_100,     cobalt%fpdet_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fsidet_100 .gt. 0)           &
-       used = send_data(cobalt%id_fsidet_100,     cobalt%fsidet_100,                &
+       used = g_send_data(cobalt%id_fsidet_100,     cobalt%fsidet_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_flithdet_100 .gt. 0)           &
-       used = send_data(cobalt%id_flithdet_100,     cobalt%flithdet_100,                &
+       used = g_send_data(cobalt%id_flithdet_100,     cobalt%flithdet_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fcadet_calc_100 .gt. 0)           &
-       used = send_data(cobalt%id_fcadet_calc_100,     cobalt%fcadet_calc_100,                &
+       used = g_send_data(cobalt%id_fcadet_calc_100,     cobalt%fcadet_calc_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_fcadet_arag_100 .gt. 0)           &
-       used = send_data(cobalt%id_fcadet_arag_100,     cobalt%fcadet_arag_100,                &
+       used = g_send_data(cobalt%id_fcadet_arag_100,     cobalt%fcadet_arag_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_ffedet_100 .gt. 0)           &
-       used = send_data(cobalt%id_ffedet_100,     cobalt%ffedet_100,                &
+       used = g_send_data(cobalt%id_ffedet_100,     cobalt%ffedet_100,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
@@ -7746,19 +7746,19 @@ write (stdlogunit, generic_COBALT_nml)
     !---------------------------------------------------------------------
     !
     if (cobalt%id_o2min .gt. 0)               &
-       used = send_data(cobalt%id_o2min,         cobalt%o2min,                    &
+       used = g_send_data(cobalt%id_o2min,         cobalt%o2min,                    &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_z_o2min .gt. 0)             &
-       used = send_data(cobalt%id_z_o2min,    cobalt%z_o2min,                     &
+       used = g_send_data(cobalt%id_z_o2min,    cobalt%z_o2min,                     &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_z_sat_arag .gt. 0)          &
-       used = send_data(cobalt%id_z_sat_arag,    cobalt%z_sat_arag,               &
+       used = g_send_data(cobalt%id_z_sat_arag,    cobalt%z_sat_arag,               &
        model_time, mask = cobalt%mask_z_sat_arag, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_z_sat_calc .gt. 0)          &
-       used = send_data(cobalt%id_z_sat_calc,    cobalt%z_sat_calc,               &
+       used = g_send_data(cobalt%id_z_sat_calc,    cobalt%z_sat_calc,               &
        model_time, mask = cobalt%mask_z_sat_calc, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
