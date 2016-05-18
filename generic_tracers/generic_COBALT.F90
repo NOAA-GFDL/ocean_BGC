@@ -5244,12 +5244,12 @@ contains
        !     ( cobalt%irr_inst(i,j,k)/(cobalt%ki_fescav+cobalt%irr_inst(i,j,k)) ) * &
        !     (log10(cobalt%kfe_eq_lig_ll) - log10(cobalt%kfe_eq_lig_hl)) )
        cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10**( log10(cobalt%kfe_eq_lig_hl) + &
-            max(0.0,cobalt%gamma_fescav*log10(cobalt%io_fescav/cobalt%irr_inst(i,j,k))) ) ) 
+            max(0.0,cobalt%gamma_fescav*log10(cobalt%io_fescav/max(1.e-12,cobalt%irr_inst(i,j,k)))) ) ) 
 
        feprime = 1.0 + cobalt%kfe_eq_lig(i,j,k) * (cobalt%felig_bkg + cobalt%felig_2_don * &
             (cobalt%f_sldon(i,j,k) + cobalt%f_srdon(i,j,k)) - cobalt%f_fed(i,j,k))
        feprime = (-feprime + (feprime * feprime + 4.0 * cobalt%kfe_eq_lig(i,j,k) * &
-            cobalt%f_fed(i,j,k))**(0.5)) / (2.0 * cobalt%kfe_eq_lig(i,j,k))
+            cobalt%f_fed(i,j,k))**(0.5)) / (2.0 * max(1.e-12,cobalt%kfe_eq_lig(i,j,k)))
 
        !
        ! Iron adsorption to detrital particles
