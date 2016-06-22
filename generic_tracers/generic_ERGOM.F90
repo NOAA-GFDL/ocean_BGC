@@ -1105,12 +1105,14 @@ contains
        write (stdoutunit,'(a)')            trim(spm(n)%name)//':'
        write (stdoutunit,'((a), e13.6)')  '  sinking velocity, wsink0 [m/d]               : ', spm(n)%wsink0  
        write (stdoutunit,'((a), e13.6)')  '  sedimentation rate, wsed [m/d]               : ', spm(n)%wsed    
-       write (stdoutunit,'((a), (a))')    '  will sediment to tracer, (sediment_to)       : ', trim(sed(spm(n)%index_sediment_to)%name) 
+       write (stdoutunit,'((a), (a))')    '  will sediment to tracer, (sediment_to)       : ', &
+                                          trim(sed(spm(n)%index_sediment_to)%name) 
     enddo
     do n=1, NUM_SED
        write (stdoutunit,'(a)')            trim(sed(n)%name)//':'
        write (stdoutunit,'((a), e13.6)')  '  critical shear stress, critical_stress [N/m2]: ', sed(n)%critical_stress  
-       write (stdoutunit,'((a), (a))')    '  will be resuspended to tracer, (suspend_to)  : ', trim(spm(sed(n)%index_suspend_to)%name) 
+       write (stdoutunit,'((a), (a))')    '  will be resuspended to tracer, (suspend_to)  : ', &
+                                          trim(spm(sed(n)%index_suspend_to)%name) 
     enddo
     write (stdoutunit,'(a)')          'Sediment parameters:'
     write (stdoutunit,'((a), e13.6)') '  recycling rate, dn [1/s]                                              : ', &
