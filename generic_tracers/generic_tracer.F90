@@ -46,6 +46,10 @@ module generic_tracer
   use g_tracer_utils, only : g_tracer_diag, g_tracer_print_info
   use g_tracer_utils, only : g_tracer_coupler_accumulate
 
+  use generic_abiotic, only : generic_abiotic_register, generic_abiotic_register_diag
+  use generic_abiotic, only : generic_abiotic_init, generic_abiotic_update_from_source,generic_abiotic_update_from_coupler
+  use generic_abiotic, only : generic_abiotic_set_boundary_values, generic_abiotic_end, do_generic_abiotic
+
   use generic_age,    only : generic_age_register
   use generic_age,    only : generic_age_init, generic_age_update_from_source,generic_age_update_from_coupler
   use generic_age,    only : generic_age_set_boundary_values, generic_age_end, do_generic_age
@@ -121,8 +125,9 @@ module generic_tracer
   logical :: do_generic_tracer = .false.
   logical :: force_update_fluxes = .false.
 
-  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_age, do_generic_argon, do_generic_CFC, do_generic_SF6,  &
-      do_generic_TOPAZ,do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, force_update_fluxes
+  namelist /generic_tracer_nml/ do_generic_tracer, do_generic_abiotic, do_generic_age, do_generic_argon, do_generic_CFC, &
+      do_generic_SF6, do_generic_TOPAZ,do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, &
+      force_update_fluxes
 
 contains
 
@@ -148,6 +153,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     write (stdoutunit,'(/)')
     write (stdoutunit, generic_tracer_nml)
     write (stdlogunit, generic_tracer_nml)
+
+    if(do_generic_abiotic) &
+         call generic_abiotic_register(tracer_list)
 
     if(do_generic_age) &
          call generic_age_register(tracer_list)
@@ -222,7 +230,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     !Allocate and initialize all registered generic tracers
     !JGJ 2013/05/31  merged COBALT into siena_201303
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+    if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
        .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -238,6 +246,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     endif    
 
     !Initilalize specific tracers
+    if(do_generic_abiotic) &
+         call generic_abiotic_init(tracer_list, force_update_fluxes)
+
     if(do_generic_age) &
          call generic_age_init(tracer_list)
 
@@ -291,6 +302,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     endif    
 
     !Diagnostics register for fields particular to each tracer module
+
+    if(do_generic_abiotic)  call generic_abiotic_register_diag(diag_list)
     
     if(do_generic_TOPAZ)  call generic_TOPAZ_register_diag(diag_list)    
 
@@ -451,10 +464,11 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
-       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,      &
+  subroutine generic_tracer_source(Temp,Salt,sosga,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
+       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,&
        grid_ht, current_wave_stress)
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
+    real,                           intent(in) :: sosga ! global avg. sea surface salinity
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     integer,                        intent(in) :: ilb,jlb,tau
     real,                           intent(in) :: dtts
@@ -464,8 +478,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     real, dimension(:),             intent(in) :: max_wavelength_band
     real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band
     real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
-    real, dimension(ilb:,jlb:),optional, intent(in) :: grid_ht
-    real, dimension(ilb:,jlb:),optional ,    intent(in) :: current_wave_stress
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht
+    real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress
 
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_source'
@@ -478,6 +492,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !    if(do_generic_CFC)    call generic_CFC_update_from_source(tracer_list) !Nothing to do for CFC
 
     !    if(do_generic_SF6)    call generic_SF6_update_from_source(tracer_list) !Nothing to do for SF6
+
+    if(do_generic_abiotic) call generic_abiotic_update_from_source(tracer_list,Temp,Salt,sosga,rho_dzt,dzt,&
+         hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time)
 
     if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
@@ -575,7 +592,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+    if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
        .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
 
        g_tracer => tracer_list        
@@ -664,10 +681,11 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !   Time step index of %field
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau)
+  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,sosga,rho,ilb,jlb,tau)
     type(coupler_2d_bc_type), intent(inout) :: IOB_struc
     integer, intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:),  intent(in) :: ST,SS
+    real, intent(in) :: sosga
     real, dimension(ilb:,jlb:,:,:), intent(in)              :: rho
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_set'
@@ -675,6 +693,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !Set coupler fluxes from tracer boundary values (%stf and %triver)for each tracer in the prog_tracer_list
     !User must identify these tracers (not all tracers in module need to set coupler)
     !User must provide the calculations for these boundary values.
+
+    if(do_generic_abiotic) &
+         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau)
 
     if(do_generic_age) &
          call generic_age_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
@@ -708,7 +729,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !for each tracer in the tracer_list that has been marked by the user routine above
     !JGJ 2013/05/31  merged COBALT into siena_201303
     !
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+    if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) &
        call g_tracer_coupler_set(tracer_list,IOB_struc)
 
@@ -744,6 +765,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   ! </SUBROUTINE>
   subroutine generic_tracer_end
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_end'
+    if(do_generic_abiotic) call generic_abiotic_end
     if(do_generic_age) call generic_age_end
     if(do_generic_argon) call generic_argon_end
     if(do_generic_CFC) call generic_CFC_end
