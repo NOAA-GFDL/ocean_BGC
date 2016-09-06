@@ -285,7 +285,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !Diagnostics register for the fields common to All generic tracers
     !JGJ 2013/05/31  merged COBALT into siena_201303
 
-    if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
+    if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
        .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT) then
 
        g_tracer => tracer_list        

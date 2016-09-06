@@ -35,6 +35,7 @@ module generic_abiotic
   use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL, stdout
   use time_manager_mod, only : time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
+  use data_override_mod, only: data_override
 
   use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
   use g_tracer_utils, only : g_tracer_add,g_tracer_add_param, g_tracer_set_files
@@ -84,6 +85,7 @@ module generic_abiotic
                                      ! every coupling time step when update_from_source 
                                      ! is not called every coupling time step as is the 
                                      ! case with MOM6  THERMO_SPANS_COUPLING option
+     real :: atm_delta_14c         ! Ratio of atmospheric 14C to 12C
      real :: half_life            ! Decay time scale of 14C (years)
      real :: lambda_14c           ! Radioactive decay constant for 14C (s-1)
      real :: htotal_in            ! Initial "first guess" for H+ concentration (mol/kg)
@@ -110,6 +112,7 @@ module generic_abiotic
      integer :: id_sfc_ab_htotal = -1
      integer :: id_ab_alk = -1
      integer :: id_sfc_ab_alk = -1
+     integer :: id_delta_14catm = -1
      integer :: id_ab_po4 = -1
      integer :: id_sfc_ab_po4 = -1
      integer :: id_ab_sio4 = -1
@@ -123,7 +126,8 @@ module generic_abiotic
           htotallo, &             ! Lower limit of htotal range 
           abco2_csurf,abco2_alpha,&              ! Oceanic pCO2 (ppmv)
           ab14co2_csurf,ab14co2_alpha,&              ! Oceanic pCO2 (ppmv)
-          abpco2_csurf,abp14co2_csurf  
+          abpco2_csurf,abp14co2_csurf, &
+          delta_14catm
  
      real, dimension(:,:,:), ALLOCATABLE ::  &
           f_dissicabio, f_dissi14cabio, f_htotal,  &
@@ -239,6 +243,10 @@ contains
     abiotic%id_ab_sio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("delta_14catm","Atmospheric Delta of 14C",'h','1','s','mil -1','f')
+    abiotic%id_delta_14catm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("sfc_ab_alk","Surface Abiotic Alkalinity",'h','1','s','eq kg-1','f')
     abiotic%id_sfc_ab_alk = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -294,6 +302,8 @@ contains
 
     allocate(abiotic%htotallo(isd:ied,jsd:jed))
     allocate(abiotic%htotalhi(isd:ied,jsd:jed))
+    
+    allocate(abiotic%delta_14catm(isd:ied,jsd:jed))
 
     allocate(abiotic%f_alk(isd:ied, jsd:jed, 1:nk))    ; abiotic%f_alk    = 0.0
     allocate(abiotic%f_htotal(isd:ied, jsd:jed, 1:nk)) ; abiotic%f_htotal = 0.0
@@ -333,7 +343,7 @@ contains
     !Add the known experimental parameters used for calculations
     !in this module.
     !All the g_tracer_add_param calls must happen between 
-    !g_tracer_start_param_list and g_tracer_end_param_list  calls.
+    !g_tracer_start_param_list and _tracer_end_param_list  calls.
     !This implementation enables runtime overwrite via field_table.
 
     call g_tracer_start_param_list(package_name)
@@ -371,6 +381,7 @@ contains
     call g_tracer_add_param('alkbar',       abiotic%alkbar,       2.31e-3)
     call g_tracer_add_param('dic_global',   abiotic%dic_global,   2.0e-3)
     call g_tracer_add_param('di14c_global', abiotic%di14c_global, 2.0e-3)
+    call g_tracer_add_param('atm_delta_14c',abiotic%atm_delta_14c,0.0)
 
     ! Rho_0 is used in the Boussinesq approximation to calculations of 
     ! pressure and pressure gradients, in units of kg m-3.
@@ -554,6 +565,7 @@ contains
     do j = jsc, jec ; do i = isc, iec  !{
        abiotic%htotallo(i,j) = abiotic%htotal_scale_lo * abiotic%f_htotal(i,j,k)
        abiotic%htotalhi(i,j) = abiotic%htotal_scale_hi * abiotic%f_htotal(i,j,k)
+       abiotic%delta_14catm(i,j) = abiotic%atm_delta_14c ! default is 0.0
     enddo; enddo ; !} i, j
     
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
@@ -562,7 +574,8 @@ contains
       abiotic%f_sio4(i,j,k) = abiotic%sio4_const
     enddo; enddo ; enddo ; !} i, j, k
 
-    call FMS_ocmip2_co2calc_debug(CO2_dope_vec,grid_tmask(:,:,k),&
+    k=1
+    call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
          Temp(:,:,k), Salt(:,:,k),                    &
          abiotic%f_dissicabio(:,:,k),                          &
          abiotic%f_po4(:,:,k),                          &  
@@ -588,6 +601,13 @@ contains
          co2star=abiotic%ab14co2_csurf(:,:), alpha=abiotic%ab14co2_alpha(:,:), &
          pCO2surf=abiotic%abp14co2_csurf(:,:))
 
+    ! Update alpha based on the atmospheric 14C/12C ratio
+
+    call data_override('OCN', 'delta_14catm', abiotic%delta_14catm(isc:iec,jsc:jec), model_time)
+    do j = jsc, jec ; do i = isc, iec  !{
+       abiotic%ab14co2_alpha(i,j) = abiotic%ab14co2_alpha(i,j) * &
+                                    (1.0 + abiotic%delta_14catm(i,j) * 1.0e-03)
+    enddo; enddo ; !} i, j
 
     call g_tracer_set_values(tracer_list,'ab_htotal','field',abiotic%f_htotal  ,isd,jsd,ntau=1)
 
@@ -611,6 +631,11 @@ contains
     enddo; enddo ; enddo !} i,j,k
 
     ! Send Diagnostics
+
+   if (abiotic%id_delta_14catm .gt. 0)             &
+       used = g_send_data(abiotic%id_delta_14catm, abiotic%delta_14catm(:,:),         &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
    if (abiotic%id_ab_alk .gt. 0)             &
        used = g_send_data(abiotic%id_ab_alk, abiotic%f_alk(:,:,:),         &
@@ -687,7 +712,7 @@ contains
   !
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_abiotic_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau)
+  !   call generic_abiotic_set_boundary_values(tracer_list,SST,SSS,sosga,rho,ilb,jlb,tau)
   !  </TEMPLATE>
   !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
   !   Pointer to the head of generic tracer list.
@@ -747,6 +772,7 @@ contains
        do j = jsc, jec ; do i = isc, iec  !{
           abiotic%htotallo(i,j) = abiotic%htotal_scale_lo * htotal_field(i,j,1)
           abiotic%htotalhi(i,j) = abiotic%htotal_scale_hi * htotal_field(i,j,1)
+          abiotic%delta_14catm(i,j) = abiotic%atm_delta_14c ! default is 0.0
        enddo; enddo ; !} i, j
 
        do j = jsc, jec ; do i = isc, iec  !{
@@ -780,6 +806,13 @@ contains
                                 !OUT
             co2star=ab14co2_csurf(:,:), alpha=ab14co2_alpha(:,:),  &
             pCO2surf=abiotic%abp14co2_csurf(:,:))
+
+    !! Update alpha based on the atmospheric 14C/12C ratio
+    !call data_override('OCN', 'delta_14catm', abiotic%delta_14catm(isc:iec,jsc:jec), model_time)
+    !do j = jsc, jec ; do i = isc, iec  !{
+    !   abiotic%ab14co2_alpha(i,j) = abiotic%ab14co2_alpha(i,j) * &
+    !                                (1.0 + abiotic%delta_14catm(i,j) * 1.0e-03)
+    !enddo; enddo ; !} i, j
 
        call g_tracer_set_values(tracer_list,'ab_htotal' ,'field',htotal_field,isd,jsd,ntau=1)
        call g_tracer_set_values(tracer_list,'dissicabio','alpha',abco2_alpha    ,isd,jsd)
