@@ -1,24 +1,27 @@
 !----------------------------------------------------------------
-! <CONTACT EMAIL="First.Last@noaa.gov"> NULL 
+! <CONTACT EMAIL="John.Krasting@noaa.gov"> John Krasting 
 ! </CONTACT>
 ! 
 ! <REVIEWER EMAIL="First.Last@noaa.gov"> NULL
 ! </REVIEWER>
-!<OVERVIEW>
+!
+! <OVERVIEW>
 ! Ocean Carbon Model Intercomparison Study: abiotic carbon module
 ! This module contains the generic version of the abiotic DIC and
 ! DI14C tracers along with associated chemistry.
-!</OVERVIEW>
+! </OVERVIEW>
 !
-!<DESCRIPTION>
-!       Implementation of routines to solve the OCMIP abiotic
-!       simulations as outlined in the Abiotic-HOWTO documentation,
-!       revision 1.16, 2000/01/08.
-!</DESCRIPTION>
+! <DESCRIPTION>
+! Implementation of routines to solve the OCMIP abiotic
+! simulations as outlined in the CMIP6 Ocen Model Intercomparison
+! Project (OMIP) documentation
+! </DESCRIPTION>
 !
 ! <INFO>
 ! <REFERENCE>
-! http://www.cgd.ucar.edu/oce/klindsay/ocmip/HOWTO-Abiotic.pdf
+! Orr et al. Biogeochemical protocols and diagnostics for the CMIP6 
+!   Ocean Model Intercomparison Project (OMIP).  Geosci. Model Dev
+!   Discuss., doi:10.5194/gmd-2016-155  (2016).
 ! </REFERENCE>
 ! <DEVELOPER_NOTES>
 !
@@ -29,24 +32,19 @@
 
 module generic_abiotic
 
-  use coupler_types_mod, only: coupler_2d_bc_type
-  use field_manager_mod, only: fm_string_len
-  use constants_mod,     only: WTMCO2, WTMO2
-  use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL, stdout
-  use time_manager_mod, only : time_type
-  use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
+  use constants_mod,     only: WTMCO2
   use data_override_mod, only: data_override
+  use field_manager_mod, only: fm_string_len
+  use time_manager_mod,  only: time_type
 
-  use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
-  use g_tracer_utils, only : g_tracer_add,g_tracer_add_param, g_tracer_set_files
-  use g_tracer_utils, only : g_tracer_set_values,g_tracer_get_pointer,g_tracer_get_common
-  use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get
-  use g_tracer_utils, only : g_tracer_send_diag, g_tracer_get_values  
-  use g_tracer_utils, only : g_diag_type, g_diag_field_add
-  use g_tracer_utils, only : register_diag_field=>g_register_diag_field
-  use g_tracer_utils, only : g_send_data
+  use g_tracer_utils,    only: g_diag_type,g_send_data
+  use g_tracer_utils,    only: g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
+  use g_tracer_utils,    only: g_tracer_add,g_tracer_add_param, g_tracer_set_files
+  use g_tracer_utils,    only: g_tracer_set_values,g_tracer_get_pointer,g_tracer_get_common
+  use g_tracer_utils,    only: g_tracer_get_values  
+  use g_tracer_utils,    only: register_diag_field=>g_register_diag_field
 
-  use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, FMS_ocmip2_co2calc_debug, CO2_dope_vector
+  use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc,CO2_dope_vector
 
   implicit none ; private
 
@@ -57,7 +55,6 @@ module generic_abiotic
   public generic_abiotic_register
   public generic_abiotic_init
   public generic_abiotic_register_diag
-  public generic_abiotic_update_from_coupler
   public generic_abiotic_update_from_source
   public generic_abiotic_set_boundary_values
   public generic_abiotic_end
@@ -71,21 +68,15 @@ module generic_abiotic
   real, parameter :: epsln=1.0e-30
   real, parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
-  !
-  !This type contains all the parameters and arrays used in this module.
-  !
-  !Note that there is no programatic reason for treating
-  !the following as a type. These are the parameters used only in this module. 
-  !It suffices for varables to be a declared at the top of the module. 
-  !nnz: Find out about the timing overhead for using type%x rather than x
 
+  !This type contains all the parameters and arrays used in this module.
   type generic_abiotic_params
      logical :: init              ! Initialize tracers
      logical :: force_update_fluxes  ! If OCMIP2 tracers fluxes should be updated 
                                      ! every coupling time step when update_from_source 
                                      ! is not called every coupling time step as is the 
                                      ! case with MOM6  THERMO_SPANS_COUPLING option
-     real :: atm_delta_14c         ! Ratio of atmospheric 14C to 12C
+     real :: atm_delta_14c        ! Ratio of atmospheric 14C to 12C
      real :: half_life            ! Decay time scale of 14C (years)
      real :: lambda_14c           ! Radioactive decay constant for 14C (s-1)
      real :: htotal_in            ! Initial "first guess" for H+ concentration (mol/kg)
@@ -98,49 +89,41 @@ module generic_abiotic
      real :: a2_co2
      real :: a3_co2
      real :: a4_co2
-     real :: dic_global           ! Global dissolved inorganic carbon
-                                  ! (DIC) concentration (mol/kg)
-     real :: di14c_global         ! Gloval dissolved inorganic radiocarbon
-                                  ! (DI14C) concentration (mol/kg)
      real :: Rho_0                ! Reference density (kg/m^3)
 
+     ! Restart file names
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
 
-     integer :: id_sfc_dissicabio = -1
-     integer :: id_sfc_dissi14cabio = -1
-     integer :: id_sfc_ab_htotal = -1
-     integer :: id_ab_alk = -1
-     integer :: id_sfc_ab_alk = -1
-     integer :: id_delta_14catm = -1
-     integer :: id_ab_po4 = -1
-     integer :: id_sfc_ab_po4 = -1
-     integer :: id_ab_sio4 = -1
-     integer :: id_sfc_ab_sio4 = -1
-     integer :: id_ab_pco2surf = -1
-     integer :: id_ab_p14co2surf = -1
-     integer :: id_jdecay_di14c = -1
+     ! Diagnostic Output IDs
+     integer :: id_sfc_dissicabio=-1, id_sfc_dissi14cabio=-1, id_sfc_ab_htotal=-1
+     integer :: id_ab_alk=-1, id_ab_po4=-1, id_ab_sio4=-1
+     integer :: id_sfc_ab_alk=-1, id_sfc_ab_po4=-1, id_sfc_ab_sio4=-1
+     integer :: id_ab_pco2surf=-1, id_ab_p14co2surf=-1
+     integer :: id_jdecay_di14c=-1, id_delta_14catm=-1
 
-     real, dimension(:,:), ALLOCATABLE :: &
-          htotalhi, &             ! Upper limit of htotal range 
-          htotallo, &             ! Lower limit of htotal range 
-          abco2_csurf,abco2_alpha,&              ! Oceanic pCO2 (ppmv)
-          ab14co2_csurf,ab14co2_alpha,&              ! Oceanic pCO2 (ppmv)
-          abpco2_csurf,abp14co2_csurf, &
-          delta_14catm
+     ! 2-dimensional fields
+     real, dimension(:,:), ALLOCATABLE ::   &
+          htotalhi, htotallo,               &! Upper and lower limits of htotal range 
+          abco2_csurf,abco2_alpha,          &! Abiotic DIC csurf & alpha
+          ab14co2_csurf,ab14co2_alpha,      &! Abiotic DI14C csurf & alpha
+          abpco2_csurf,abp14co2_csurf,      &! Oceanic pCO2 (ppmv)
+          delta_14catm                       ! Atm. Delta of 14C 
  
-     real, dimension(:,:,:), ALLOCATABLE ::  &
-          f_dissicabio, f_dissi14cabio, f_htotal,  &
-          f_alk, f_po4, f_sio4, &
-          jdecay_di14c
+     ! 3-dimensional fields
+     real, dimension(:,:,:), ALLOCATABLE :: &
+          f_dissicabio, f_dissi14cabio,     &! Abiotic DIC & DI14C fields
+          f_alk, f_po4, f_sio4,             &! Abiotic alkalinity, phosphate, silicate
+          f_htotal,                         &! Abiotic H+ concentration
+          jdecay_di14c                       ! DI14C decay rate
 
+     ! 4-dimensional pointers
      real, dimension(:,:,:,:), pointer :: &
           p_dissicabio, p_dissi14cabio, p_htotal
 
- 
   end type generic_abiotic_params
 
-  !An auxiliary type for storing varible names
+  ! An auxiliary type for storing varible names
   type, public :: vardesc
      character(len=fm_string_len) :: name     ! The variable name in a NetCDF file.
      character(len=fm_string_len) :: longname ! The long name of that variable.
@@ -151,8 +134,7 @@ module generic_abiotic
      character(len=1)  :: mem_size ! The size in memory: d or f.
   end type vardesc
 
-  type(CO2_dope_vector) :: CO2_dope_vec
-
+  type(CO2_dope_vector)        :: CO2_dope_vec
   type(generic_abiotic_params) :: abiotic
 
 contains
@@ -165,9 +147,9 @@ contains
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
 
-    
-    
   end subroutine generic_abiotic_register
+
+
 
   ! <SUBROUTINE NAME="generic_abiotic_init">
   !  <OVERVIEW>
@@ -175,7 +157,7 @@ contains
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   This subroutine: 
-  !       Adds the dissicabio, dissi14cabio, AB_HTOTAL tracers to the list of generic tracers passed 
+  !       Adds the dissicabio, dissi14cabio, ab_htotal tracers to the list of generic tracers passed 
   !       to it via utility subroutine g_tracer_add().
   !       Adds all the parameters used by this module via utility subroutine g_tracer_add_param().
   !       Allocates all work arrays used in the module. 
@@ -203,10 +185,12 @@ contains
 
     !Allocate and initiate all the private work arrays used by this module.
     !    call user_allocate_arrays !None for abiotic module currently
-
     call user_allocate_arrays
 
   end subroutine generic_abiotic_init
+
+
+
 
 
   subroutine generic_abiotic_register_diag(diag_list)
@@ -224,12 +208,6 @@ contains
     ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
     ! 64-bit doubles). For most tracers, only the name, longname and units should
     ! be changed.  
-
-
-    ! Register the diagnostics for the various phytoplankton 
-    !
-    ! Register Limitation Diagnostics
-    !
 
     vardesc_temp = vardesc("ab_alk","Abiotic Alkalinity",'h','1','s','eq kg-1','f')
     abiotic%id_ab_alk = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
@@ -259,11 +237,13 @@ contains
     abiotic%id_sfc_ab_sio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("sfc_dissicabio","Surface Abiotic Dissolved Inorganic Carbon",'h','1','s','mol kg-1','f')
+    vardesc_temp = vardesc("sfc_dissicabio","Surface Abiotic Dissolved Inorganic Carbon",&
+                           'h','1','s','mol kg-1','f')
     abiotic%id_sfc_dissicabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("sfc_dissi14cabio","Surface Abiotic Dissolved Inorganic Radiocarbon",'h','1','s','mol kg-1','f')
+    vardesc_temp = vardesc("sfc_dissi14cabio","Surface Abiotic Dissolved Inorganic Radiocarbon",&
+                           'h','1','s','mol kg-1','f')
     abiotic%id_sfc_dissi14cabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -279,11 +259,15 @@ contains
     abiotic%id_ab_p14co2surf = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("jdecay_di14c","DI14C radioactive decay layer integral",'h','L','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("jdecay_di14c","DI14C radioactive decay layer integral",&
+                           'h','L','s','mol m-2 s-1','f')
     abiotic%id_jdecay_di14c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
   end subroutine generic_abiotic_register_diag
+
+
+
 
 
   subroutine user_allocate_arrays
@@ -302,28 +286,26 @@ contains
 
     allocate(abiotic%htotallo(isd:ied,jsd:jed))
     allocate(abiotic%htotalhi(isd:ied,jsd:jed))
-    
     allocate(abiotic%delta_14catm(isd:ied,jsd:jed))
-
-    allocate(abiotic%f_alk(isd:ied, jsd:jed, 1:nk))    ; abiotic%f_alk    = 0.0
-    allocate(abiotic%f_htotal(isd:ied, jsd:jed, 1:nk)) ; abiotic%f_htotal = 0.0
-    allocate(abiotic%f_dissicabio(isd:ied, jsd:jed, 1:nk))    ; abiotic%f_dissicabio    = 0.0
-    allocate(abiotic%f_dissi14cabio(isd:ied, jsd:jed, 1:nk))  ; abiotic%f_dissi14cabio  = 0.0
-    allocate(abiotic%f_po4(isd:ied, jsd:jed, 1:nk))    ; abiotic%f_po4    = 0.0
-    allocate(abiotic%f_sio4(isd:ied, jsd:jed, 1:nk))   ; abiotic%f_sio4   = 0.0
-
-    allocate(abiotic%jdecay_di14c(isd:ied, jsd:jed, 1:nk)) ; abiotic%jdecay_di14c = 0.0
-
-    allocate(abiotic%abco2_csurf(isd:ied, jsd:jed))   ; abiotic%abco2_csurf   = 0.0
-    allocate(abiotic%abco2_alpha(isd:ied, jsd:jed))   ; abiotic%abco2_alpha   = 0.0
-    allocate(abiotic%ab14co2_csurf(isd:ied, jsd:jed)) ; abiotic%ab14co2_csurf = 0.0
-    allocate(abiotic%ab14co2_alpha(isd:ied, jsd:jed)) ; abiotic%ab14co2_alpha = 0.0
-
-    allocate(abiotic%abpco2_csurf(isd:ied, jsd:jed))   ; abiotic%abpco2_csurf   = 0.0
-    allocate(abiotic%abp14co2_csurf(isd:ied, jsd:jed))   ; abiotic%abp14co2_csurf   = 0.0
-
+    allocate(abiotic%f_alk(isd:ied,jsd:jed,1:nk))          ; abiotic%f_alk=0.0
+    allocate(abiotic%f_htotal(isd:ied,jsd:jed,1:nk))       ; abiotic%f_htotal =0.0
+    allocate(abiotic%f_dissicabio(isd:ied,jsd:jed,1:nk))   ; abiotic%f_dissicabio=0.0
+    allocate(abiotic%f_dissi14cabio(isd:ied,jsd:jed,1:nk)) ; abiotic%f_dissi14cabio= 0.0
+    allocate(abiotic%f_po4(isd:ied,jsd:jed,1:nk))          ; abiotic%f_po4=0.0
+    allocate(abiotic%f_sio4(isd:ied,jsd:jed,1:nk))         ; abiotic%f_sio4=0.0
+    allocate(abiotic%jdecay_di14c(isd:ied,jsd:jed, 1:nk))  ; abiotic%jdecay_di14c=0.0
+    allocate(abiotic%abco2_csurf(isd:ied,jsd:jed))         ; abiotic%abco2_csurf=0.0
+    allocate(abiotic%abco2_alpha(isd:ied,jsd:jed))         ; abiotic%abco2_alpha= 0.0
+    allocate(abiotic%ab14co2_csurf(isd:ied,jsd:jed))       ; abiotic%ab14co2_csurf=0.0
+    allocate(abiotic%ab14co2_alpha(isd:ied,jsd:jed))       ; abiotic%ab14co2_alpha=0.0
+    allocate(abiotic%abpco2_csurf(isd:ied,jsd:jed))        ; abiotic%abpco2_csurf=0.0
+    allocate(abiotic%abp14co2_csurf(isd:ied,jsd:jed))      ; abiotic%abp14co2_csurf=0.0
 
   end subroutine user_allocate_arrays
+
+
+
+
 
   !
   !   This is an internal sub, not a public interface.
@@ -348,9 +330,9 @@ contains
 
     call g_tracer_start_param_list(package_name)
     !-----------------------------------------------------------------------
-    ! Add initialization and force update from fluxes
+    ! Initialization
     !-----------------------------------------------------------------------
-
+    call g_tracer_add_param('init', abiotic%init, .false. )
     !-----------------------------------------------------------------------
     ! Constants for silicate and phosphate
     !-----------------------------------------------------------------------
@@ -367,20 +349,18 @@ contains
     !-----------------------------------------------------------------------
     ! H+ Concentration Parameters
     !-----------------------------------------------------------------------
-    call g_tracer_add_param('htotal_in', abiotic%htotal_in, 1.0e-8)
+    call g_tracer_add_param('htotal_in',       abiotic%htotal_in, 1.0e-8)
     call g_tracer_add_param('htotal_scale_lo', abiotic%htotal_scale_lo, 0.01)
     call g_tracer_add_param('htotal_scale_hi', abiotic%htotal_scale_hi, 100.)
     !-----------------------------------------------------------------------
     ! Global Concentrations
     ! jpk: how-to doc specifies Alkbar as 2310 microeq/kg and value below 
-    !      is from MOM4p1 OCMIP2 abiotic routine.  Is it correct?
+    !      is from MOM4p1 OCMIP2 abiotic routine.  Is unit conversion correct?
     !-----------------------------------------------------------------------
     call g_tracer_add_param('half_life',    abiotic%half_life,    5700.)
     call g_tracer_add_param('lambda_14c',   abiotic%lambda_14c,   log(2.0) / &
                                                                   (abiotic%half_life * spery))
     call g_tracer_add_param('alkbar',       abiotic%alkbar,       2.31e-3)
-    call g_tracer_add_param('dic_global',   abiotic%dic_global,   2.0e-3)
-    call g_tracer_add_param('di14c_global', abiotic%di14c_global, 2.0e-3)
     call g_tracer_add_param('atm_delta_14c',abiotic%atm_delta_14c,0.0)
 
     ! Rho_0 is used in the Boussinesq approximation to calculations of 
@@ -391,8 +371,6 @@ contains
     !===========
     !Block Ends: g_tracer_add_param
     !===========
-
-
 
   end subroutine user_add_params
 
@@ -410,7 +388,7 @@ contains
     call g_tracer_start_param_list(package_name)!nnz: Does this append?
     call g_tracer_add_param('ice_restart_file'   , abiotic%ice_restart_file   , 'ice_ocmip_abiotic.res.nc')
     call g_tracer_add_param('ocean_restart_file' , abiotic%ocean_restart_file , 'ocmip_abiotic.res.nc' )
-    call g_tracer_add_param('IC_file'       , abiotic%IC_file       , '')
+    call g_tracer_add_param('IC_file'            , abiotic%IC_file            , '')
     call g_tracer_end_param_list(package_name)
 
     ! Set Restart files
@@ -429,13 +407,13 @@ contains
     !diag_tracers: none
     !
 
-    call g_tracer_add(tracer_list,package_name,                       &
-         name       = 'dissicabio',                                        &
-         longname   = 'Abiotic Dissolved Inorganic Carbon',                    &
+    call g_tracer_add(tracer_list,package_name,                        &
+         name       = 'dissicabio',                                    &
+         longname   = 'Abiotic Dissolved Inorganic Carbon',            &
          units      = 'mol/kg',                                        &
          prog       = .true.,                                          &
          flux_gas   = .true.,                                          &
-         flux_gas_name  = 'abco2_flux',                                  &
+         flux_gas_name  = 'abco2_flux',                                &
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMCO2,                                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
@@ -445,13 +423,13 @@ contains
          flux_bottom= .true.,                                          &
          init_value = 0.001 )          
 
-    call g_tracer_add(tracer_list,package_name,                       &
-         name       = 'dissi14cabio',                                        &
+    call g_tracer_add(tracer_list,package_name,                        &
+         name       = 'dissi14cabio',                                  &
          longname   = 'Abiotic Dissolved Inorganic Radioarbon',        &
          units      = 'mol/kg',                                        &
          prog       = .true.,                                          &
          flux_gas   = .true.,                                          &
-         flux_gas_name  = 'ab14co2_flux',                                  &
+         flux_gas_name  = 'ab14co2_flux',                              &
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMCO2,                                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
@@ -461,41 +439,14 @@ contains
          flux_bottom= .true.,                                          &
          init_value = 0.001 )        
 
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'ab_htotal',               &
+    call g_tracer_add(tracer_list,package_name,       &
+         name       = 'ab_htotal',                    &
          longname   = 'abiotic H+ ion concentration', &
-         units      = 'mol/kg',               &
-         prog       = .false.,                &
-         init_value = abiotic%htotal_in         )
+         units      = 'mol/kg',                       &
+         prog       = .false.,                        &
+         init_value = abiotic%htotal_in )
 
   end subroutine user_add_tracers
-
-  ! <SUBROUTINE NAME="generic_abiotic_update_from_coupler">
-  !  <OVERVIEW>
-  !   Modify the values obtained from the coupler if necessary.
-  !  </OVERVIEW>
-  !  <DESCRIPTION>
-  !   Some tracer fields need to be modified after values are obtained from the coupler.
-  !   This subroutine is the place for specific tracer manipulations.
-  !  </DESCRIPTION>
-  !  <TEMPLATE>
-  !   call generic_abiotic_update_from_coupler(tracer_list) 
-  !  </TEMPLATE>
-  !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
-  !   Pointer to the head of generic tracer list.
-  !  </IN>
-  ! </SUBROUTINE>
-  subroutine generic_abiotic_update_from_coupler(tracer_list)
-    type(g_tracer_type), pointer :: tracer_list
-    character(len=fm_string_len), parameter :: sub_name = 'generic_abiotic_update_from_coupler'
-    !
-    !Nothing specific to be done for generic abiotic
-    !
-    return
-  end subroutine generic_abiotic_update_from_coupler
-
-
-
 
 
   ! <SUBROUTINE NAME="generic_abiotic_update_from_source">
@@ -526,27 +477,8 @@ contains
     ! Local Variables
     !------------------------------------------------------------------------
     !
-    logical :: used, first
-    integer :: nb
+    logical :: used
     real :: r_dt
-    real :: feprime
-    real :: juptake_di_tot2nterm
-    real :: log_btm_flx
-    real :: P_C_m
-    real :: p_lim_nhet
-    real :: TK, PRESS, PKSPA, PKSPC
-    real :: tmp_hblt, tmp_irrad, tmp_irrad_ML,tmp_opacity,tmp_mu_ML
-    real :: drho_dzt
-    real, dimension(:), Allocatable   :: tmp_irr_band
-    real, dimension(:,:), Allocatable :: rho_dzt_100, rho_dzt_200
-    real :: tot_prey_hp, sw_fac_denom, assim_eff, refuge_conc 
-    real :: bact_ldon_lim, bact_uptake_ratio, vmax_bact
-    real :: fpoc_btm, log_fpoc_btm
-
-    real :: Ltotal, kfe_oxid_night, kfe_des, kfe_f_lig, kfe_r_lig, kfe_f_col, kfe_r_col
-    real :: kfe_ads, kfe_r_lig_bact, irr_scaled, O2minus
-    real :: kfe_oxid, kfe_f_red, kfe_flig_red, kfe_fcol_red, kfe_fdet_red
-    real :: ads_fecol, a_quad, b_quad, c_quad
 
     r_dt = 1.0 / dt
 
@@ -736,15 +668,14 @@ contains
 
   !User must provide the calculations for these boundary values.
   subroutine generic_abiotic_set_boundary_values(tracer_list,SST,SSS,sosga,rho,ilb,jlb,tau)
-    type(g_tracer_type),          pointer    :: tracer_list
-    real, dimension(ilb:,jlb:),   intent(in)   :: SST, SSS
-    real, intent(in) :: sosga
+    type(g_tracer_type),            pointer    :: tracer_list
+    real, dimension(ilb:,jlb:),     intent(in) :: SST, SSS
+    real, intent(in)                           :: sosga
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
 
+    real    :: sal,ST
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
-    real    :: sal,ST,o2_saturation
-    real    :: tt,tk,ts,ts2,ts3,ts4,ts5
     real, dimension(:,:,:)  ,pointer  :: grid_tmask
     real, dimension(:,:,:,:), pointer :: dissicabio_field, dissi14cabio_field
     real, dimension(:,:,:,:), pointer :: po4_field,sio4_field,alk_field
