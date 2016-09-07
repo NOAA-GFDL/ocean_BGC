@@ -47,7 +47,7 @@ module generic_tracer
   use g_tracer_utils, only : g_tracer_coupler_accumulate
 
   use generic_abiotic, only : generic_abiotic_register, generic_abiotic_register_diag
-  use generic_abiotic, only : generic_abiotic_init, generic_abiotic_update_from_source,generic_abiotic_update_from_coupler
+  use generic_abiotic, only : generic_abiotic_init, generic_abiotic_update_from_source
   use generic_abiotic, only : generic_abiotic_set_boundary_values, generic_abiotic_end, do_generic_abiotic
 
   use generic_age,    only : generic_age_register
@@ -681,12 +681,13 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !   Time step index of %field
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,sosga,rho,ilb,jlb,tau)
+  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,sosga,rho,ilb,jlb,tau,model_time)
     type(coupler_2d_bc_type), intent(inout) :: IOB_struc
     integer, intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:),  intent(in) :: ST,SS
     real, intent(in) :: sosga
     real, dimension(ilb:,jlb:,:,:), intent(in)              :: rho
+    type(time_type),intent(in)    :: model_time
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_set'
 
@@ -695,7 +696,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !User must provide the calculations for these boundary values.
 
     if(do_generic_abiotic) &
-         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau)
+         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau,model_time)
 
     if(do_generic_age) &
          call generic_age_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)

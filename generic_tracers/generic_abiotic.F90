@@ -667,12 +667,13 @@ contains
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_abiotic_set_boundary_values(tracer_list,SST,SSS,sosga,rho,ilb,jlb,tau)
+  subroutine generic_abiotic_set_boundary_values(tracer_list,SST,SSS,sosga,rho,ilb,jlb,tau,model_time)
     type(g_tracer_type),            pointer    :: tracer_list
     real, dimension(ilb:,jlb:),     intent(in) :: SST, SSS
     real, intent(in)                           :: sosga
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
+    type(time_type),                intent(in) :: model_time
 
     real    :: sal,ST
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
@@ -681,7 +682,7 @@ contains
     real, dimension(:,:,:,:), pointer :: po4_field,sio4_field,alk_field
     real, dimension(:,:,:), ALLOCATABLE :: htotal_field
     real, dimension(:,:), ALLOCATABLE :: abco2_alpha,abco2_csurf,abco2_sc_no
-    real, dimension(:,:), ALLOCATABLE :: ab14co2_alpha,ab14co2_csurf,ab14co2_sc_no
+    real, dimension(:,:), ALLOCATABLE :: ab14co2_alpha,ab14co2_csurf,ab14co2_sc_no, delta_14catm
     character(len=fm_string_len), parameter :: sub_name = 'generic_abiotic_set_boundary_values'
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask)
@@ -692,6 +693,7 @@ contains
     allocate(ab14co2_alpha(isd:ied, jsd:jed)); ab14co2_alpha=0.0
     allocate(ab14co2_csurf(isd:ied, jsd:jed)); ab14co2_csurf=0.0
     allocate(ab14co2_sc_no(isd:ied, jsd:jed)); ab14co2_sc_no=0.0
+    allocate(delta_14catm(isd:ied, jsd:jed)); delta_14catm=0.0
     allocate(htotal_field(isd:ied,jsd:jed,nk)); htotal_field=0.0
 
     if (abiotic%init .OR. abiotic%force_update_fluxes) then
@@ -738,12 +740,11 @@ contains
             co2star=ab14co2_csurf(:,:), alpha=ab14co2_alpha(:,:),  &
             pCO2surf=abiotic%abp14co2_csurf(:,:))
 
-    !! Update alpha based on the atmospheric 14C/12C ratio
-    !call data_override('OCN', 'delta_14catm', abiotic%delta_14catm(isc:iec,jsc:jec), model_time)
-    !do j = jsc, jec ; do i = isc, iec  !{
-    !   abiotic%ab14co2_alpha(i,j) = abiotic%ab14co2_alpha(i,j) * &
-    !                                (1.0 + abiotic%delta_14catm(i,j) * 1.0e-03)
-    !enddo; enddo ; !} i, j
+    ! Update alpha based on the atmospheric 14C/12C ratio
+    call data_override('OCN', 'delta_14catm', delta_14catm(isc:iec,jsc:jec), model_time)
+    do j = jsc, jec ; do i = isc, iec  !{
+       ab14co2_alpha(i,j) = ab14co2_alpha(i,j) * (1.0 + delta_14catm(i,j) * 1.0e-03)
+    enddo; enddo ; !} i, j
 
        call g_tracer_set_values(tracer_list,'ab_htotal' ,'field',htotal_field,isd,jsd,ntau=1)
        call g_tracer_set_values(tracer_list,'dissicabio','alpha',abco2_alpha    ,isd,jsd)
