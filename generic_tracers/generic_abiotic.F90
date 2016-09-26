@@ -102,8 +102,8 @@
 !!
 !! <pre>
 !! "OCN", "delta_14catm", "D14C", "./INPUT/atm_delta_13C_14C.nc",  "bilinear", 1.0
-!! "ATM", "ab_co2_flux_pcair_atm", "" , "", "none" ,284.65e-6
-!! "ATM", "ab_14co2_flux_pcair_atm", "", "", "none" ,284.65e-6
+!! "ATM", "abco2_flux_pcair_atm", "" , "", "none" ,284.65e-6
+!! "ATM", "ab14co2_flux_pcair_atm", "", "", "none" ,284.65e-6
 !! </pre>
 !!
 !! \section diag_table_entries Diag Table Entries
