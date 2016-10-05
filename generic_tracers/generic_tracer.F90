@@ -464,11 +464,10 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine generic_tracer_source(Temp,Salt,sosga,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
+  subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
        grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,&
-       grid_ht, current_wave_stress)
+       grid_ht, current_wave_stress, sosga)
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
-    real,                           intent(in) :: sosga ! global avg. sea surface salinity
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     integer,                        intent(in) :: ilb,jlb,tau
     real,                           intent(in) :: dtts
@@ -480,6 +479,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
     real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht
     real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress
+    real,                      optional , intent(in) :: sosga ! global avg. sea surface salinity
+
 
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_source'
@@ -681,13 +682,13 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !   Time step index of %field
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,sosga,rho,ilb,jlb,tau,model_time)
+  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau, sosga,model_time)
     type(coupler_2d_bc_type), intent(inout) :: IOB_struc
     integer, intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:),  intent(in) :: ST,SS
-    real, intent(in) :: sosga
     real, dimension(ilb:,jlb:,:,:), intent(in)              :: rho
-    type(time_type),intent(in)    :: model_time
+    real,           optional, intent(in) :: sosga
+    type(time_type),optional, intent(in) :: model_time
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_coupler_set'
 
