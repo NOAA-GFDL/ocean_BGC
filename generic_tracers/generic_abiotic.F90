@@ -74,6 +74,16 @@
 !! ab_htotal_valid_min = 3.981E-09
 !! ab_htotal_valid_max = 1.259E-08
 !! #
+!! ab_htotal14c_src_file = INPUT/init_ocean_cobalt.res.nc
+!! ab_htotal14c_src_var_name = htotal
+!! ab_htotal14c_src_var_unit = none
+!! ab_htotal14c_dest_var_name =  ab_htotal14c
+!! ab_htotal14c_dest_var_unit = mol kg-1
+!! ab_htotal14c_src_var_record = 1
+!! ab_htotal14c_src_var_gridspec = NONE
+!! ab_htotal14c_valid_min = 3.981E-09
+!! ab_htotal14c_valid_max = 1.259E-08
+!! #
 !! ## divide by 1e6 to convert from umol/kg to mol/kg
 !! dissicabio_src_file = INPUT/Preind_DIC.nc
 !! dissicabio_src_var_name = Preind_DIC
@@ -120,6 +130,7 @@
 !! "generic_abiotic","jdecay_di14c","jdecay_di14c","ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","phabio",      "phabio",      "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","ab_htotal",   "ab_htotal",   "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic","ab_htotal14c","ab_htotal14c","ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","ab_alk",      "ab_alk",      "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","ab_po4",      "ab_po4",      "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","ab_sio4",     "ab_sio4",     "ocean_abiotic","all",.true.,"none",2
@@ -128,6 +139,7 @@
 !! "generic_abiotic","sfc_dissicabio",  "sfc_dissicabio",  "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","sfc_dissi14cabio","sfc_dissi14cabio","ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","sfc_ab_htotal",   "sfc_ab_htotal",   "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic","sfc_ab_htotal14c","sfc_ab_htotal14c","ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","sfc_ab_alk",      "sfc_ab_alk",      "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","sfc_ab_po4",      "sfc_ab_po4",      "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic","sfc_ab_sio4",     "sfc_ab_sio4",     "ocean_abiotic","all",.true.,"none",2
@@ -150,6 +162,7 @@
 !! "generic_abiotic_z_new","dissi14cabio","dissi14cabio","ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z_new","phabio",      "phabio",      "ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z_new","ab_htotal",   "ab_htotal",   "ocean_abiotic_z","all",.true.,"none",2
+!! "generic_abiotic_z_new","ab_htotal14c","ab_htotal14c","ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z_new","ab_alk",      "ab_alk",      "ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z_new","ab_po4",      "ab_po4",      "ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z_new","ab_sio4",     "ab_sio4",     "ocean_abiotic_z","all",.true.,"none",2
@@ -208,6 +221,9 @@ module generic_abiotic
      real :: htotal_in            !< Initial "first guess" for H+ concentration (mol/kg)
      real :: htotal_scale_hi      !< Initial upper limit of htotal range 
      real :: htotal_scale_lo      !< Initial lower limit of htotal range 
+     real :: htotal14c_in         !< Initial "first guess" for H+ concentration used for 14C (mol/kg)
+     real :: htotal14c_scale_hi   !< Initial upper limit of htotal range used for 14C
+     real :: htotal14c_scale_lo   !< Initial lower limit of htotal range used for 14C
      real :: alkbar               !< Mean global alkalinity (eq/kg)
      real :: sio4_const           !< Silicate (SiO4) concentration (mol/kg)
      real :: po4_const            !< Phosphate (PO4) concentration (mol/kg)
@@ -222,7 +238,8 @@ module generic_abiotic
      character(len=fm_string_len) :: ocean_restart_file,IC_file
 
      ! Diagnostic Output IDs
-     integer :: id_sfc_dissicabio=-1, id_sfc_dissi14cabio=-1, id_sfc_ab_htotal=-1
+     integer :: id_sfc_dissicabio=-1, id_sfc_dissi14cabio=-1
+     integer :: id_sfc_ab_htotal=-1, id_sfc_ab_htotal14c=-1
      integer :: id_ab_alk=-1, id_ab_po4=-1, id_ab_sio4=-1
      integer :: id_sfc_ab_alk=-1, id_sfc_ab_po4=-1, id_sfc_ab_sio4=-1
      integer :: id_ab_pco2surf=-1, id_ab_p14co2surf=-1
@@ -232,6 +249,7 @@ module generic_abiotic
      ! 2-dimensional fields
      real, dimension(:,:), ALLOCATABLE ::   &
           htotalhi, htotallo,               &!< Upper and lower limits of htotal range 
+          htotal14chi, htotal14clo,         &!< Upper and lower limits of htotal range 
           abco2_csurf,abco2_alpha,          &!< Abiotic DIC csurf & alpha
           ab14co2_csurf,ab14co2_alpha,      &!< Abiotic DI14C csurf & alpha
           abpco2_csurf,abp14co2_csurf,      &!< Oceanic pCO2 (ppmv)
@@ -242,11 +260,12 @@ module generic_abiotic
           f_dissicabio, f_dissi14cabio,     &!< Abiotic DIC & DI14C fields
           f_alk, f_po4, f_sio4,             &!< Abiotic alkalinity, phosphate, silicate
           f_htotal,                         &!< Abiotic H+ concentration
+          f_htotal14c,                      &!< Abiotic H+ concentration for 14C
           jdecay_di14c                       !< DI14C decay rate
 
      ! 4-dimensional pointers
      real, dimension(:,:,:,:), pointer :: &
-          p_dissicabio, p_dissi14cabio, p_htotal !< Pointers to tracer fields
+          p_dissicabio, p_dissi14cabio, p_htotal, p_htotal14c !< Pointers to tracer fields
 
   end type generic_abiotic_params
 
@@ -279,7 +298,7 @@ contains
 
 !> \brief   Initialize the generic abiotic module
 !!
-!! This subroutine adds the dissicabio, dissi14cabio, ab_htotal tracers to the list of 
+!! This subroutine adds the dissicabio, dissi14cabio, ab_htotal, and ab_htotal14c tracers to the list of 
 !! generic tracers passed to it via utility subroutine g_tracer_add().  Adds all the parameters 
 !! used by this module via utility subroutine g_tracer_add_param(). Allocates all work arrays used 
 !! in the module. 
@@ -365,6 +384,10 @@ contains
     abiotic%id_sfc_ab_htotal = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("sfc_ab_htotal14c","Surface Abiotic Htotal for 14C",'h','1','s','mol kg-1','f')
+    abiotic%id_sfc_ab_htotal14c = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("ab_pco2surf","Oceanic Abiotic pCO2",'h','1','s','uatm','f')
     abiotic%id_ab_pco2surf = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -404,9 +427,12 @@ contains
 
     allocate(abiotic%htotallo(isd:ied,jsd:jed))
     allocate(abiotic%htotalhi(isd:ied,jsd:jed))
+    allocate(abiotic%htotal14clo(isd:ied,jsd:jed))
+    allocate(abiotic%htotal14chi(isd:ied,jsd:jed))
     allocate(abiotic%delta_14catm(isd:ied,jsd:jed))
     allocate(abiotic%f_alk(isd:ied,jsd:jed,1:nk))          ; abiotic%f_alk=0.0
     allocate(abiotic%f_htotal(isd:ied,jsd:jed,1:nk))       ; abiotic%f_htotal =0.0
+    allocate(abiotic%f_htotal14c(isd:ied,jsd:jed,1:nk))    ; abiotic%f_htotal14c =0.0
     allocate(abiotic%f_dissicabio(isd:ied,jsd:jed,1:nk))   ; abiotic%f_dissicabio=0.0
     allocate(abiotic%f_dissi14cabio(isd:ied,jsd:jed,1:nk)) ; abiotic%f_dissi14cabio= 0.0
     allocate(abiotic%f_po4(isd:ied,jsd:jed,1:nk))          ; abiotic%f_po4=0.0
@@ -462,9 +488,12 @@ contains
     !-----------------------------------------------------------------------
     ! H+ Concentration Parameters
     !-----------------------------------------------------------------------
-    call g_tracer_add_param('htotal_in',       abiotic%htotal_in, 1.0e-8)
-    call g_tracer_add_param('htotal_scale_lo', abiotic%htotal_scale_lo, 0.01)
-    call g_tracer_add_param('htotal_scale_hi', abiotic%htotal_scale_hi, 100.)
+    call g_tracer_add_param('htotal_in',          abiotic%htotal_in, 1.0e-8)
+    call g_tracer_add_param('htotal_scale_lo',    abiotic%htotal_scale_lo, 0.01)
+    call g_tracer_add_param('htotal_scale_hi',    abiotic%htotal_scale_hi, 100.)
+    call g_tracer_add_param('htotal14c_in',       abiotic%htotal14c_in, 1.0e-8)
+    call g_tracer_add_param('htotal14c_scale_lo', abiotic%htotal14c_scale_lo, 0.01)
+    call g_tracer_add_param('htotal14c_scale_hi', abiotic%htotal14c_scale_hi, 100.)
     !-----------------------------------------------------------------------
     ! Global Concentrations
     ! jpk: how-to doc specifies Alkbar as 2310 microeq/kg and value below 
@@ -557,6 +586,13 @@ contains
          prog       = .false.,                        &
          init_value = abiotic%htotal_in )
 
+    call g_tracer_add(tracer_list,package_name,               &
+         name       = 'ab_htotal14c',                         &
+         longname   = 'abiotic H+ ion concentration for 14C', &
+         units      = 'mol/kg',                               &
+         prog       = .false.,                                &
+         init_value = abiotic%htotal14c_in )
+
   end subroutine user_add_tracers
 
 
@@ -591,7 +627,8 @@ contains
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
 
-    call g_tracer_get_values(tracer_list,'ab_htotal','field', abiotic%f_htotal,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'ab_htotal',    'field', abiotic%f_htotal       ,isd,jsd,ntau=1)
+    call g_tracer_get_values(tracer_list,'ab_htotal14c', 'field', abiotic%f_htotal14c    ,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'dissicabio'   ,'field', abiotic%f_dissicabio   ,isd,jsd,ntau=tau)
     call g_tracer_get_values(tracer_list,'dissi14cabio' ,'field', abiotic%f_dissi14cabio ,isd,jsd,ntau=tau)
 
@@ -603,6 +640,8 @@ contains
     do j = jsc, jec ; do i = isc, iec  !{
        abiotic%htotallo(i,j) = abiotic%htotal_scale_lo * abiotic%f_htotal(i,j,k)
        abiotic%htotalhi(i,j) = abiotic%htotal_scale_hi * abiotic%f_htotal(i,j,k)
+       abiotic%htotal14clo(i,j) = abiotic%htotal14c_scale_lo * abiotic%f_htotal14c(i,j,k)
+       abiotic%htotal14chi(i,j) = abiotic%htotal14c_scale_hi * abiotic%f_htotal14c(i,j,k)
        abiotic%delta_14catm(i,j) = abiotic%atm_delta_14c ! default is 0.0
     enddo; enddo ; !} i, j
     
@@ -632,9 +671,9 @@ contains
          abiotic%f_po4(:,:,k),                          &  
          abiotic%f_sio4(:,:,k),                         &
          abiotic%f_alk(:,:,k),                          &
-         abiotic%htotallo, abiotic%htotalhi,&
+         abiotic%htotal14clo, abiotic%htotal14chi,&
                                 !InOut
-         abiotic%f_htotal(:,:,k),                       & 
+         abiotic%f_htotal14c(:,:,k),                       & 
                                 !OUT
          co2star=abiotic%ab14co2_csurf(:,:), alpha=abiotic%ab14co2_alpha(:,:), &
          pCO2surf=abiotic%abp14co2_csurf(:,:))
@@ -647,7 +686,8 @@ contains
                                     (1.0 + abiotic%delta_14catm(i,j) * 1.0e-03)
     enddo; enddo ; !} i, j
 
-    call g_tracer_set_values(tracer_list,'ab_htotal','field',abiotic%f_htotal  ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'ab_htotal',   'field',abiotic%f_htotal   ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'ab_htotal14c','field',abiotic%f_htotal14c,isd,jsd,ntau=1)
 
     call g_tracer_set_values(tracer_list,'dissicabio','alpha',abiotic%abco2_alpha    ,isd,jsd)
     call g_tracer_set_values(tracer_list,'dissicabio','csurf',abiotic%abco2_csurf    ,isd,jsd)
@@ -657,6 +697,7 @@ contains
     call g_tracer_get_pointer(tracer_list,'dissicabio',  'field',abiotic%p_dissicabio)
     call g_tracer_get_pointer(tracer_list,'dissi14cabio','field',abiotic%p_dissi14cabio)
     call g_tracer_get_pointer(tracer_list,'ab_htotal','field',abiotic%p_htotal)
+    call g_tracer_get_pointer(tracer_list,'ab_htotal14c','field',abiotic%p_htotal14c)
 
     ! Decay the radiocarbon
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{        
@@ -730,6 +771,11 @@ contains
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
+    if (abiotic%id_sfc_ab_htotal14c .gt. 0)  &
+       used = g_send_data(abiotic%id_sfc_ab_htotal14c, abiotic%f_htotal14c(:,:,1),         &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+
     if (abiotic%id_jdecay_di14c .gt. 0)                                          &
          used = g_send_data(abiotic%id_jdecay_di14c, abiotic%jdecay_di14c(:,:,:), &
          model_time, rmask = grid_tmask(:,:,:),                                         & 
@@ -762,7 +808,7 @@ contains
     real, dimension(:,:,:)  ,pointer  :: grid_tmask
     real, dimension(:,:,:,:), pointer :: dissicabio_field, dissi14cabio_field
     real, dimension(:,:,:,:), pointer :: po4_field,sio4_field,alk_field
-    real, dimension(:,:,:), ALLOCATABLE :: htotal_field
+    real, dimension(:,:,:), ALLOCATABLE :: htotal_field, htotal14c_field
     real, dimension(:,:), ALLOCATABLE :: abco2_alpha,abco2_csurf,abco2_sc_no
     real, dimension(:,:), ALLOCATABLE :: ab14co2_alpha,ab14co2_csurf,ab14co2_sc_no, delta_14catm
     character(len=fm_string_len), parameter :: sub_name = 'generic_abiotic_set_boundary_values'
@@ -777,16 +823,21 @@ contains
     allocate(ab14co2_sc_no(isd:ied, jsd:jed)); ab14co2_sc_no=0.0
     allocate(delta_14catm(isd:ied, jsd:jed)); delta_14catm=0.0
     allocate(htotal_field(isd:ied,jsd:jed,nk)); htotal_field=0.0
+    allocate(htotal14c_field(isd:ied,jsd:jed,nk)); htotal14c_field=0.0
 
     if (abiotic%init .OR. abiotic%force_update_fluxes) then
        !Get necessary fields
        call g_tracer_get_pointer(tracer_list,'dissicabio', 'field', dissicabio_field)
        call g_tracer_get_pointer(tracer_list,'dissi14cabio', 'field', dissi14cabio_field)
-       call g_tracer_get_values(tracer_list,'ab_htotal' ,'field', htotal_field,isd,jsd,ntau=1)
+
+       call g_tracer_get_values(tracer_list, 'ab_htotal', 'field', htotal_field,isd,jsd,ntau=1)
+       call g_tracer_get_values(tracer_list, 'ab_htotal14c', 'field', htotal14c_field,isd,jsd,ntau=1)
 
        do j = jsc, jec ; do i = isc, iec  !{
           abiotic%htotallo(i,j) = abiotic%htotal_scale_lo * htotal_field(i,j,1)
           abiotic%htotalhi(i,j) = abiotic%htotal_scale_hi * htotal_field(i,j,1)
+          abiotic%htotal14clo(i,j) = abiotic%htotal14c_scale_lo * htotal14c_field(i,j,1)
+          abiotic%htotal14chi(i,j) = abiotic%htotal14c_scale_hi * htotal14c_field(i,j,1)
           abiotic%delta_14catm(i,j) = abiotic%atm_delta_14c ! default is 0.0
        enddo; enddo ; !} i, j
 
@@ -815,9 +866,9 @@ contains
             abiotic%f_po4(:,:,1),                              &  
             abiotic%f_sio4(:,:,1),                             &
             abiotic%f_alk(:,:,1),                              &
-            abiotic%htotallo, abiotic%htotalhi,                &
+            abiotic%htotal14clo, abiotic%htotal14chi,          &
                                 !InOut
-            htotal_field(:,:,1),                               &
+            htotal14c_field(:,:,1),                            &
                                 !OUT
             co2star=ab14co2_csurf(:,:), alpha=ab14co2_alpha(:,:),&
             pCO2surf=abiotic%abp14co2_csurf(:,:))
@@ -829,6 +880,7 @@ contains
     enddo; enddo ; !} i, j
 
        call g_tracer_set_values(tracer_list,'ab_htotal' ,'field',htotal_field,isd,jsd,ntau=1)
+       call g_tracer_set_values(tracer_list,'ab_htotal14c','field',htotal14c_field,isd,jsd,ntau=1)
        call g_tracer_set_values(tracer_list,'dissicabio','alpha',abco2_alpha    ,isd,jsd)
        call g_tracer_set_values(tracer_list,'dissicabio','csurf',abco2_csurf    ,isd,jsd)
        call g_tracer_set_values(tracer_list,'dissi14cabio','alpha',ab14co2_alpha    ,isd,jsd)
@@ -901,7 +953,7 @@ contains
 
     deallocate(abco2_alpha, abco2_csurf, abco2_sc_no,       &
                ab14co2_alpha, ab14co2_csurf, ab14co2_sc_no, &
-               delta_14catm, htotal_field)
+               delta_14catm, htotal_field, htotal14c_field)
 
   end subroutine generic_abiotic_set_boundary_values
 
@@ -911,9 +963,12 @@ contains
   subroutine user_deallocate_arrays
     deallocate(abiotic%htotallo)
     deallocate(abiotic%htotalhi)
+    deallocate(abiotic%htotal14clo)
+    deallocate(abiotic%htotal14chi)
     deallocate(abiotic%delta_14catm)
     deallocate(abiotic%f_alk)
     deallocate(abiotic%f_htotal)
+    deallocate(abiotic%f_htotal14c)
     deallocate(abiotic%f_dissicabio)
     deallocate(abiotic%f_dissi14cabio)
     deallocate(abiotic%f_po4)
