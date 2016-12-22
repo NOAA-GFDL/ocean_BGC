@@ -113,8 +113,8 @@ contains
 
 subroutine FMS_ocmip2_co2calc(dope_vec, mask,                      &
                           t_in, s_in, dic_in, pt_in, sit_in, ta_in, htotallo, &
-                          htotalhi, htotal, co2_calc, co2star, alpha, pCO2surf, co3_ion, &
-                          omeg_arag, omeg_calc)  !{
+                          htotalhi, htotal, co2_calc, zt, co2star, alpha, pCO2surf, &
+                          co3_ion, omega_arag, omega_calc)  !{
 
 implicit none
 
@@ -127,8 +127,8 @@ real, parameter :: xacc = 1.0e-10
 
 ! Mocsy parameters
 real, dimension(1) :: ph, pco2, fco2, co2, hco3, co3,  &
-                      OmegaA, OmegaC, BetaD, rhoSW, p, tempis
-real, dimension(1) :: temp, sal, alk, dic, sil, phos, Patm, depth, lat
+                      OmegaA, OmegaC, BetaD, rhoSW, p, depth, tempis
+real, dimension(1) :: temp, sal, alk, dic, sil, phos, Patm, lat
 character(10)      :: optCON, optGas, optT, optP, optB, optKf, optK1K2
 
 !
@@ -149,12 +149,14 @@ real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
       intent(inout)         :: htotal
 character(len=*), intent(in), optional :: co2_calc
 real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
+      intent(in), optional  :: zt
+real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
       intent(out), optional :: alpha, &
                                pCO2surf, &
                                co2star, &
                                co3_ion, &
-                               omeg_arag, &
-                               omeg_calc
+                               omega_arag, &
+                               omega_calc
 !
 !       local variables
 !
@@ -193,9 +195,16 @@ character(len=10) :: co2_calc_method
 
 if (present(co2_calc)) then
   co2_calc_method = trim(co2_calc)
+  if (co2_calc == 'mocsy') then
+    if (.not. present(zt)) then 
+        call mpp_error(FATAL,"Depth must be specified when invoking Mocsy.") 
+    end if
+  end if   
 else
   co2_calc_method = 'ocmip2'
 end if
+
+
 
 
 ! Set the loop indices.
@@ -214,7 +223,7 @@ end if
         if (trim(co2_calc_method) == 'mocsy') then
 
           Patm(1)  = 1.           ! atm
-          depth(1) = 2.           ! m
+          depth(1) = zt(i,j)      ! m
           lat(1)   = 30.          ! degrees
           temp(1)  = t_in(i,j)    ! degC
           sal(1)   = s_in(i,j)    ! psu
@@ -236,8 +245,8 @@ end if
           if (present(co3_ion))   co3_ion(i,j)   = co3(1)
           if (present(alpha))     alpha(i,j)     = (co2(1)/(pco2(1)*1.e-6))
           if (present(pCO2surf))  pCO2surf(i,j)  = pco2(1)
-          if (present(omeg_arag)) omeg_arag(i,j) = OmegaA(1)
-          if (present(omeg_calc)) omeg_calc(i,j) = OmegaC(1)
+          if (present(omega_arag)) omega_arag(i,j) = OmegaA(1)
+          if (present(omega_calc)) omega_calc(i,j) = OmegaC(1)
  
         else if (trim(co2_calc_method) == 'ocmip2') then
 !

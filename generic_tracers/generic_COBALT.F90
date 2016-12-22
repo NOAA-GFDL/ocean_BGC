@@ -92,6 +92,12 @@
 ! This is a mistake that will be fixed later.
 !  </DATA> 
 !
+!  <DATA NAME="co2_calc" TYPE="character">
+!  Defines the carbon equiliabration method.  Default is 'ocmip2' which uses
+! the FMS_ocmip2_co2calc routine.  The other option is 'mocsy', which uses
+! the set of routines authored by J. Orr. See reference at: 
+! http://ocmip5.ipsl.jussieu.fr/mocsy/index.html
+!
 !</NAMELIST>
 !
 !</DESCRIPTION>
@@ -141,8 +147,6 @@ module generic_COBALT
 
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
-  use mvars, only: 
-
   implicit none ; private
 !-----------------------------------------------------------------------
   character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1.2.1 2014/09/29 16:40:08 Niki.Zadeh Exp $'
@@ -173,8 +177,7 @@ module generic_COBALT
 
 ! Namelist Options
 
-  character(len=10) :: co2_calc = 'ocmip2'  ! other option is 'mocsy'
-
+  character(len=10) ::  co2_calc = 'ocmip2'  ! other option is 'mocsy'
   logical :: do_14c             = .false.
   logical :: do_fan_dunne_fe    = .false.
 
@@ -728,6 +731,8 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jnitrif,&
           omega_arag,&
           omega_calc,&                                                  
+          omegaa,&                                                  
+          omegac,&                                                  
           tot_layer_int_c,&
           tot_layer_int_fe,&
           tot_layer_int_n,&
@@ -1186,15 +1191,14 @@ write (stdlogunit, generic_COBALT_nml)
   if (do_fan_dunne_fe) then
     write (stdoutunit,*) trim(note_header), 'Using Fan and Dunne 2011 Chemistry'
   endif
-
-  if (co2_calc == 'ocmip2') then
+  
+  if (trim(co2_calc) == 'ocmip2') then
     write (stdoutunit,*) trim(note_header), 'Using FMS OCMIP2 CO2 routine'
-  else if (co2_calc == 'moscy') then
+  else if (trim(co2_calc) == 'moscy') then
     write (stdoutunit,*) trim(note_header), 'Using Mocsy CO2 routine'
   else
     call mpp_error(FATAL,"Unknown co2_calc option specified in generic_COBALT_nml")
   endif
-
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
     
@@ -4411,48 +4415,54 @@ write (stdlogunit, generic_COBALT_nml)
     !Also calculate co2 fluxes csurf and alpha for the next round of exchnage
     !---------------------------------------------------------------------
    
-    if ('co2_calc' == 'ocmip2') then 
-      k=1
-      do j = jsc, jec ; do i = isc, iec  !{
-         cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
-         cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * cobalt%f_htotal(i,j,k)
-      enddo; enddo ; !} i, j
+    k=1
+    do j = jsc, jec ; do i = isc, iec  !{
+       cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
+       cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * cobalt%f_htotal(i,j,k)
+    enddo; enddo ; !} i, j
+ 
+    call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
+         Temp(:,:,k), Salt(:,:,k),                    &
+         cobalt%f_dic(:,:,k),                          &
+         cobalt%f_po4(:,:,k),                          &  
+         cobalt%f_sio4(:,:,k),                         &
+         cobalt%f_alk(:,:,k),                          &
+         cobalt%htotallo, cobalt%htotalhi,&
+                                !InOut
+         cobalt%f_htotal(:,:,k),                       & 
+                                !Optional In
+         co2_calc=trim(co2_calc),                      & 
+         zt=cobalt%zt(:,:,k),                          & 
+                                !OUT
+         co2star=cobalt%co2_csurf(:,:), alpha=cobalt%co2_alpha(:,:), &
+         pCO2surf=cobalt%pco2_csurf(:,:), &
+         co3_ion=cobalt%f_co3_ion(:,:,k), &
+         omega_arag=cobalt%omegaa(:,:,k), &
+         omega_calc=cobalt%omegac(:,:,k))
 
-      call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
-           Temp(:,:,k), Salt(:,:,k),                    &
-           cobalt%f_dic(:,:,k),                          &
-           cobalt%f_po4(:,:,k),                          &  
-           cobalt%f_sio4(:,:,k),                         &
-           cobalt%f_alk(:,:,k),                          &
-           cobalt%htotallo, cobalt%htotalhi,&
-                                  !InOut
-           cobalt%f_htotal(:,:,k),                       & 
-                                  !OUT
-           co2star=cobalt%co2_csurf(:,:), alpha=cobalt%co2_alpha(:,:), &
-           pCO2surf=cobalt%pco2_csurf(:,:), &
-           co3_ion=cobalt%f_co3_ion(:,:,k))
-
-      do k = 2, nk
-         do j = jsc, jec ; do i = isc, iec  !{
-            cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
-            cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * cobalt%f_htotal(i,j,k)
-         enddo; enddo ; !} i, j
+    do k = 2, nk
+       do j = jsc, jec ; do i = isc, iec  !{
+          cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
+          cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * cobalt%f_htotal(i,j,k)
+       enddo; enddo ; !} i, j
   
-         call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
-              Temp(:,:,k), Salt(:,:,k),                    &
-              cobalt%f_dic(:,:,k),                          &
-              cobalt%f_po4(:,:,k),                          &  
-              cobalt%f_sio4(:,:,k),                         &
-              cobalt%f_alk(:,:,k),                          &
-              cobalt%htotallo, cobalt%htotalhi,&
-                                  !InOut
-              cobalt%f_htotal(:,:,k),                       & 
-                                  !OUT
-              co3_ion=cobalt%f_co3_ion(:,:,k))
-      enddo
-    else
-      call mpp_error(FATAL,"CO2 calculation was not invoked.")
-    endif
+       call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
+            Temp(:,:,k), Salt(:,:,k),                    &
+            cobalt%f_dic(:,:,k),                          &
+            cobalt%f_po4(:,:,k),                          &  
+            cobalt%f_sio4(:,:,k),                         &
+            cobalt%f_alk(:,:,k),                          &
+            cobalt%htotallo, cobalt%htotalhi,&
+                                !InOut
+            cobalt%f_htotal(:,:,k),                       & 
+                                !Optional In
+            co2_calc=trim(co2_calc),                      & 
+            zt=cobalt%zt(:,:,k),                          & 
+                                !OUT
+            co3_ion=cobalt%f_co3_ion(:,:,k), &
+            omega_arag=cobalt%omegaa(:,:,k), &
+            omega_calc=cobalt%omegac(:,:,k))
+    enddo
 
     call g_tracer_set_values(tracer_list,'htotal','field',cobalt%f_htotal  ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1)
@@ -7984,7 +7994,6 @@ write (stdlogunit, generic_COBALT_nml)
        call g_tracer_get_values(tracer_list,'htotal' ,'field', htotal_field,isd,jsd,ntau=1)
        call g_tracer_get_values(tracer_list,'co3_ion','field',co3_ion_field,isd,jsd,ntau=1)
 
-    if ('co2_calc' == 'ocmip2') then 
        do j = jsc, jec ; do i = isc, iec  !{
           cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * htotal_field(i,j,1)
           cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * htotal_field(i,j,1)
@@ -7999,13 +8008,15 @@ write (stdlogunit, generic_COBALT_nml)
             cobalt%htotallo, cobalt%htotalhi,                &
                                 !InOut
             htotal_field(:,:,1),                           &
+                                !Optional In
+            co2_calc=trim(co2_calc),                      & 
+            zt=cobalt%zt(:,:,1),                          & 
                                 !OUT
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
             pCO2surf=cobalt%pco2_csurf(:,:), &
-            co3_ion=co3_ion_field(:,:,1))
-    else
-      call mpp_error(FATAL,"CO2 calculation was not invoked.")
-    endif
+            co3_ion=co3_ion_field(:,:,1), &
+            omega_arag=cobalt%omegaa(:,:,1), &
+            omega_calc=cobalt%omegac(:,:,1))
 
        !Set fields !nnz: if These are pointers do I need to do this?
        call g_tracer_set_values(tracer_list,'htotal' ,'field',htotal_field ,isd,jsd,ntau=1)
@@ -8356,6 +8367,8 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%co3_sol_calc(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_calc=0.0
     allocate(cobalt%omega_arag(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_arag=0.0
     allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
+    allocate(cobalt%omegaa(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegaa=0.0
+    allocate(cobalt%omegac(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegac=0.0
     allocate(cobalt%f_chl(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_chl=0.0
     allocate(cobalt%f_co3_ion(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_co3_ion=0.0
     allocate(cobalt%f_fe2(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_fe2=0.0
