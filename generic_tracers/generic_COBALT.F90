@@ -1456,7 +1456,7 @@ write (stdlogunit, generic_COBALT_nml)
   
   if (trim(co2_calc) == 'ocmip2') then
     write (stdoutunit,*) trim(note_header), 'Using FMS OCMIP2 CO2 routine'
-  else if (trim(co2_calc) == 'moscy') then
+  else if (trim(co2_calc) == 'mocsy') then
     write (stdoutunit,*) trim(note_header), 'Using Mocsy CO2 routine'
   else
     call mpp_error(FATAL,"Unknown co2_calc option specified in generic_COBALT_nml")
