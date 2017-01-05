@@ -11601,8 +11601,6 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%irr_mix(isd:ied, jsd:jed, 1:nk))      ; cobalt%irr_mix=0.0
     allocate(cobalt%jno3denit_wc(isd:ied, jsd:jed, 1:nk)) ; cobalt%jno3denit_wc=0.0
     allocate(cobalt%jnitrif(isd:ied, jsd:jed, 1:nk))      ; cobalt%jnitrif=0.0
-    allocate(cobalt%omega_arag(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_arag=0.0
-    allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
     allocate(cobalt%tot_layer_int_c(isd:ied, jsd:jed,1:nk))  ; cobalt%tot_layer_int_c=0.0
     allocate(cobalt%tot_layer_int_fe(isd:ied, jsd:jed,1:nk)) ; cobalt%tot_layer_int_fe=0.0
     allocate(cobalt%tot_layer_int_n(isd:ied, jsd:jed, 1:nk)) ; cobalt%tot_layer_int_n=0.0
@@ -12003,6 +12001,8 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%jnitrif)  
     deallocate(cobalt%omega_arag)  
     deallocate(cobalt%omega_calc)  
+    deallocate(cobalt%omegaa)  
+    deallocate(cobalt%omegac)  
     deallocate(cobalt%tot_layer_int_c)  
     deallocate(cobalt%tot_layer_int_fe)  
     deallocate(cobalt%tot_layer_int_n)  

@@ -239,8 +239,6 @@ end if
 
           htotal(i,j) = 10.**(-1.*ph(1))
 
-          write(*,*) 'Computing with Mocsy'
-
           if (present(co2star))   co2star(i,j)   = co2(1)
           if (present(co3_ion))   co3_ion(i,j)   = co3(1)
           if (present(alpha))     alpha(i,j)     = (co2(1)/(pco2(1)*1.e-6))
