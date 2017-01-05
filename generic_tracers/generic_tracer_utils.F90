@@ -879,7 +879,8 @@ contains
 
     if(present(requires_src_info)) then
        g_tracer%requires_src_info = requires_src_info 
-    elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' ) then !Niki: later we can make this just else
+    elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' .or. &
+           trim(g_tracer%package_name) .eq. 'generic_abiotic') then !Niki: later we can make this just else
        call  g_tracer_add_param('enforce_src_info', g_tracer%requires_src_info ,  .true.) 
     endif
        
@@ -3583,6 +3584,10 @@ contains
              case('dic')
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case('di14c')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dissicabio')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dissi14cabio')
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
