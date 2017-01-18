@@ -6148,7 +6148,8 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
        cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * cobalt%f_htotal(i,j,k)
     enddo; enddo ; !} i, j
- 
+
+
     call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
          Temp(:,:,k), Salt(:,:,k),                    &
          cobalt%f_dic(:,:,k),                          &
@@ -6158,10 +6159,16 @@ write (stdlogunit, generic_COBALT_nml)
          cobalt%htotallo, cobalt%htotalhi,&
                                 !InOut
          cobalt%f_htotal(:,:,k),                       & 
+                                !Optional In
+         co2_calc=trim(co2_calc),                      & 
+         zt=cobalt%zt(:,:,k),                          & 
                                 !OUT
          co2star=cobalt%co2_csurf(:,:), alpha=cobalt%co2_alpha(:,:), &
          pCO2surf=cobalt%pco2_csurf(:,:), &
-         co3_ion=cobalt%f_co3_ion(:,:,k))
+         co3_ion=cobalt%f_co3_ion(:,:,k), &
+         omega_arag=cobalt%omegaa(:,:,k), &
+         omega_calc=cobalt%omegac(:,:,k))
+
 
     do k = 2, nk
        do j = jsc, jec ; do i = isc, iec  !{
@@ -6178,8 +6185,13 @@ write (stdlogunit, generic_COBALT_nml)
             cobalt%htotallo, cobalt%htotalhi,&
                                 !InOut
             cobalt%f_htotal(:,:,k),                       & 
+                                !Optional In
+            co2_calc=trim(co2_calc),                      & 
+            zt=cobalt%zt(:,:,k),                          & 
                                 !OUT
-            co3_ion=cobalt%f_co3_ion(:,:,k))
+            co3_ion=cobalt%f_co3_ion(:,:,k), &
+            omega_arag=cobalt%omegaa(:,:,k), &
+            omega_calc=cobalt%omegac(:,:,k))
     enddo
 
     call g_tracer_set_values(tracer_list,'htotal','field',cobalt%f_htotal  ,isd,jsd,ntau=1)
