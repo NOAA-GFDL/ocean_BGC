@@ -6143,6 +6143,18 @@ write (stdlogunit, generic_COBALT_nml)
     !Also calculate co2 fluxes csurf and alpha for the next round of exchnage
     !---------------------------------------------------------------------
    
+    cobalt%zt = 0.0
+    cobalt%zm = 0.0
+    do j = jsc, jec ; do i = isc, iec   !{
+       cobalt%zt(i,j,1) = dzt(i,j,1)
+       cobalt%zm(i,j,1) = 0.5*dzt(i,j,1)
+    enddo; enddo !} i,j
+
+    do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       cobalt%zt(i,j,k) = cobalt%zt(i,j,k-1) + dzt(i,j,k)
+       cobalt%zm(i,j,k) = cobalt%zm(i,j,k-1) + dzt(i,j,k)
+    enddo; enddo ; enddo !} i,j,k
+
     k=1
     do j = jsc, jec ; do i = isc, iec  !{
        cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
@@ -6293,8 +6305,6 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_values(tracer_list,'sidet_btf','field',cobalt%f_sidet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'irr_mem','field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
 
-    cobalt%zt = 0.0
-    cobalt%zm = 0.0
     ! minimum concentration below which predation/basal respiration stops
     refuge_conc = 1.0e-9
 
@@ -7234,15 +7244,6 @@ write (stdlogunit, generic_COBALT_nml)
     call mpp_clock_end(id_clock_production_loop)
 
     call mpp_clock_begin(id_clock_ballast_loops)
-    do j = jsc, jec ; do i = isc, iec   !{
-       cobalt%zt(i,j,1) = dzt(i,j,1)
-       cobalt%zm(i,j,1) = 0.5*dzt(i,j,1)
-    enddo; enddo !} i,j
-
-    do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       cobalt%zt(i,j,k) = cobalt%zt(i,j,k-1) + dzt(i,j,k)
-       cobalt%zm(i,j,k) = cobalt%zm(i,j,k-1) + dzt(i,j,k)
-    enddo; enddo ; enddo !} i,j,k
 
 !
 !------------------------------------------------------------------------------------
@@ -8249,10 +8250,12 @@ write (stdlogunit, generic_COBALT_nml)
 ! CHECK: Remineralization of Organic Carbon, remoc=(jprod_nh4*c_2_n/dht) for k=1,kbot-1 + (jprod_nh4+f_ndet_btf-fndet_burial)*c_2_n/dht for k=kbot
     do j = jsc, jec ; do i = isc, iec  !{
        kbot = grid_kmt(i,j)
+if (kbot .gt. 0) then !{
        do k = 1, kbot-1  !{
           cobalt%remoc(i,j,k) = cobalt%jprod_nh4(i,j,k) * cobalt%c_2_n / dzt(i,j,k)
        enddo  !} k
        cobalt%remoc(i,j,kbot) = (cobalt%jprod_nh4(i,j,kbot) + cobalt%f_ndet_btf(i,j,1) + cobalt%fndet_burial(i,j)) * cobalt%c_2_n / dzt(i,j,kbot)
+endif !}
     enddo; enddo  !} i, j
 
 
@@ -11155,12 +11158,12 @@ write (stdlogunit, generic_COBALT_nml)
             po4_field(:,:,1,tau),                          &
             sio4_field(:,:,1,tau),                         &
             alk_field(:,:,1,tau),                          &
-            cobalt%htotallo, cobalt%htotalhi,                &
+            cobalt%htotallo, cobalt%htotalhi,              &
                                 !InOut
             htotal_field(:,:,1),                           &
                                 !Optional In
-            co2_calc=trim(co2_calc),                      & 
-            zt=cobalt%zt(:,:,1),                          & 
+            co2_calc=trim(co2_calc),                       & 
+            zt=cobalt%zt(:,:,1),                           & 
                                 !OUT
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
             pCO2surf=cobalt%pco2_csurf(:,:), &
