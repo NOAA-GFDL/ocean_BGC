@@ -11096,11 +11096,12 @@ endif !}
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau)
+  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt)
     type(g_tracer_type),          pointer    :: tracer_list
     real, dimension(ilb:,jlb:),   intent(in)   :: SST, SSS
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
+    real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
 
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: sal,ST,o2_saturation
@@ -11152,6 +11153,14 @@ endif !}
           cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * htotal_field(i,j,1)
        enddo; enddo ; !} i, j
 
+       if(present(dzt)) then
+         do j = jsc, jec ; do i = isc, iec  !{
+          cobalt%zt(i,j,1) = dzt(i,j,1)
+         enddo; enddo ; !} i, j
+       elseif (trim(co2_calc) == 'mocsy') then
+         call mpp_error(FATAL,"mocsy method of co2_calc needs dzt to be passed to the FMS_ocmip2_co2calc subroutine.")
+       endif
+                 
        call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,1), &
             SST(:,:), SSS(:,:),                            &
             dic_field(:,:,1,tau),                          &
