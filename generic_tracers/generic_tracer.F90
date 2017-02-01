@@ -682,11 +682,12 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !   Time step index of %field
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau, sosga,model_time)
+  subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau, dzt, sosga,model_time)
     type(coupler_2d_bc_type), intent(inout) :: IOB_struc
     integer, intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:),  intent(in) :: ST,SS
-    real, dimension(ilb:,jlb:,:,:), intent(in)              :: rho
+    real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
+    real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
     real,           optional, intent(in) :: sosga
     type(time_type),optional, intent(in) :: model_time
 
@@ -724,7 +725,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
          call generic_miniBLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
 
     if(do_generic_COBALT) &
-         call generic_COBALT_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
+         call generic_COBALT_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau,dzt)
 
     !
     !Set coupler fluxes from tracer boundary values (%alpha and %csurf)
