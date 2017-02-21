@@ -227,14 +227,14 @@ end if
           lat(1)   = 30.          ! degrees
           temp(1)  = t_in(i,j)    ! degC
           sal(1)   = s_in(i,j)    ! psu
-          alk(1)   = ta_in(i,j)   ! mol/m3
-          dic(1)   = dic_in(i,j)  ! mol/m3
-          sil(1)   = sit_in(i,j)  ! mol/m3
-          phos(1)  = pt_in(i,j)   ! mol/m3
+          alk(1)   = ta_in(i,j)   ! mol/kg
+          dic(1)   = dic_in(i,j)  ! mol/kg
+          sil(1)   = sit_in(i,j)  ! mol/kg
+          phos(1)  = pt_in(i,j)   ! mol/kg
 
           call vars(ph, pco2, fco2, co2, hco3, co3, OmegaA, OmegaC, BetaD, rhoSW, p, tempis, &
                     temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
-                    optCON='mol/kg', optT='Tpot   ', optP='db', optb='l10',                  &
+                    optCON='mol/kg', optT='Tpot   ', optP='m', optb='l10',                  &
                     optK1K2='m10', optkf='dg', optgas='Pinsitu')
 
           htotal(i,j) = 10.**(-1.*ph(1))
