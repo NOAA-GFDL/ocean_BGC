@@ -234,7 +234,7 @@ end if
 
           call vars(ph, pco2, fco2, co2, hco3, co3, OmegaA, OmegaC, BetaD, rhoSW, p, tempis, &
                     temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
-                    optCON='mol/kg', optT='Tpot   ', optP='m', optb='l10',                  &
+                    optCON='mol/kg', optT='Tpot   ', optP='m ', optb='l10',                  &
                     optK1K2='m10', optkf='dg', optgas='Pinsitu')
 
           htotal(i,j) = 10.**(-1.*ph(1))
