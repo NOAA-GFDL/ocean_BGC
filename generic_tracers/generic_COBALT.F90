@@ -8221,10 +8221,12 @@ write (stdlogunit, generic_COBALT_nml)
 ! CHECK: Remineralization of Organic Carbon, remoc=(jprod_nh4*c_2_n/dht) for k=1,kbot-1 + (jprod_nh4+f_ndet_btf-fndet_burial)*c_2_n/dht for k=kbot
     do j = jsc, jec ; do i = isc, iec  !{
        kbot = grid_kmt(i,j)
+       if (kbot .gt. 0) then !{
        do k = 1, kbot-1  !{
           cobalt%remoc(i,j,k) = cobalt%jprod_nh4(i,j,k) * cobalt%c_2_n / dzt(i,j,k)
        enddo  !} k
        cobalt%remoc(i,j,kbot) = (cobalt%jprod_nh4(i,j,kbot) + cobalt%f_ndet_btf(i,j,1) + cobalt%fndet_burial(i,j)) * cobalt%c_2_n / dzt(i,j,kbot)
+       endif !}
     enddo; enddo  !} i, j
 
 
