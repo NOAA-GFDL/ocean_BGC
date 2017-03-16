@@ -7255,23 +7255,32 @@ write (stdlogunit, generic_COBALT_nml)
     !
     ! 4.1: Calculate aragonite and calcite saturation states
     !
+       if (trim(co2_calc) == "ocmip2") then
+         TK = Temp(i,j,k) + 273.15
+         PRESS = 0.1016 * cobalt%zt(i,j,k) + 1.013
+         PKSPA = 171.945 + 0.077993 * TK - 2903.293 / TK - 71.595 * log10(TK) - (-0.068393 + 1.7276e-3 * &
+            TK + 88.135 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.10018 * max(epsln, Salt(i,j,k)) -      &
+            5.9415e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 2.8 - 0.5304 * Temp(i,j,k)) *   &
+            (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
+            (PRESS - 1.013) / (382.92 * TK)
+         cobalt%co3_sol_arag(i,j,k) = 10**(-PKSPA) / (2.937d-4 * max(5.0, Salt(i,j,k)))
+         cobalt%omega_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_arag(i,j,k)
+         PKSPC = 171.9065 + 0.077993 * TK - 2839.319 / TK - 71.595 * log10(TK) - (-0.77712 + 2.8426e-3 * &
+            TK + 178.34 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.07711 * max(epsln, Salt(i,j,k)) -      &
+            4.1249e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 0.5304 * Temp(i,j,k)) *         &
+            (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
+            (PRESS - 1.013) / (382.92 * TK)
+         cobalt%co3_sol_calc(i,j,k) = 10**(-PKSPC) / (2.937d-4 * max(5.0, Salt(i,j,k)))
+         cobalt%omega_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_calc(i,j,k)
+      else if (trim(co2_calc) == "mocsy") then
+         cobalt%omega_arag(i,j,k) = cobalt%omegaa(i,j,k)  ! from Mocsy
+         cobalt%omega_calc(i,j,k) = cobalt%omegac(i,j,k)  ! from Mocsy
+         cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_arag(i,j,k)
+         cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_calc(i,j,k)
+      else
+        call mpp_error(FATAL,"Unable to compute aragonite and calcite saturation states")
+      endif
 
-       TK = Temp(i,j,k) + 273.15
-       PRESS = 0.1016 * cobalt%zt(i,j,k) + 1.013
-       PKSPA = 171.945 + 0.077993 * TK - 2903.293 / TK - 71.595 * log10(TK) - (-0.068393 + 1.7276e-3 * &
-          TK + 88.135 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.10018 * max(epsln, Salt(i,j,k)) -      &
-          5.9415e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 2.8 - 0.5304 * Temp(i,j,k)) *   &
-          (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
-          (PRESS - 1.013) / (382.92 * TK)
-       cobalt%co3_sol_arag(i,j,k) = 10**(-PKSPA) / (2.937d-4 * max(5.0, Salt(i,j,k)))
-       cobalt%omega_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_arag(i,j,k)
-       PKSPC = 171.9065 + 0.077993 * TK - 2839.319 / TK - 71.595 * log10(TK) - (-0.77712 + 2.8426e-3 * &
-          TK + 178.34 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.07711 * max(epsln, Salt(i,j,k)) -      &
-          4.1249e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 0.5304 * Temp(i,j,k)) *         &
-          (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
-          (PRESS - 1.013) / (382.92 * TK)
-       cobalt%co3_sol_calc(i,j,k) = 10**(-PKSPC) / (2.937d-4 * max(5.0, Salt(i,j,k)))
-       cobalt%omega_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_calc(i,j,k)
     enddo; enddo ; enddo !} i,j,k
 
     !
