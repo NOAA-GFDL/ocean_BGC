@@ -44,6 +44,9 @@ module generic_SF6
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get
   use g_tracer_utils, only : g_tracer_send_diag, g_tracer_get_values  
 
+  use g_tracer_utils, only : g_diag_type, g_diag_field_add
+  use g_tracer_utils, only : register_diag_field=>g_register_diag_field
+  use g_tracer_utils, only : g_send_data
 
   implicit none ; private
 
@@ -53,6 +56,7 @@ module generic_SF6
   public do_generic_SF6
   public generic_SF6_register
   public generic_SF6_init
+  public generic_SF6_register_diag
   public generic_SF6_update_from_coupler
   public generic_SF6_update_from_source
   public generic_SF6_set_boundary_values
@@ -63,6 +67,7 @@ module generic_SF6
   logical, save :: do_generic_SF6 = .false.
 
   real, parameter :: epsln=1.0e-30
+  real, parameter :: missing_value1=-1.0e+10
 
   !
   !This type contains all the parameters and arrays used in this module.
@@ -84,8 +89,27 @@ module generic_SF6
      character(len=fm_string_len) :: ocean_restart_file,IC_file
   end type generic_SF6_params
 
-
   type(generic_SF6_params) :: param
+
+  !An auxiliary type for storing varible names
+  type, public :: vardesc
+     character(len=fm_string_len) :: name     ! The variable name in a NetCDF file.
+     character(len=fm_string_len) :: longname ! The long name of that variable.
+     character(len=1)  :: hor_grid ! The hor. grid:  u, v, h, q, or 1.
+     character(len=1)  :: z_grid   ! The vert. grid:  L, i, or 1.
+     character(len=1)  :: t_grid   ! The time description: s, a, m, or 1.
+     character(len=fm_string_len) :: units    ! The dimensions of the variable.
+     character(len=1)  :: mem_size ! The size in memory: d or f.
+  end type vardesc
+
+  type generic_SF6_type
+    integer ::          &
+      id_sf6_cmip   = -1
+    real, dimension(:,:,:,:), pointer :: &
+      p_sf6
+  end type generic_SF6_type
+
+  type(generic_SF6_type) :: sf6
 
 contains
 
@@ -131,6 +155,43 @@ contains
     !    call user_allocate_arrays !None for SF6 module currently
 
   end subroutine generic_SF6_init
+
+  !   Register diagnostic fields to be used in this module.
+  !   Note that the tracer fields are automatically registered in user_add_tracers
+  !   User adds only diagnostics for fields that are not a member of g_tracer_type
+  !
+  subroutine generic_SF6_register_diag(diag_list)
+    type(g_diag_type), pointer :: diag_list
+    type(vardesc)  :: vardesc_temp
+    integer        :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau, axes(3)
+    type(time_type):: init_time
+    character(len=fm_string_len)          :: cmor_field_name
+    character(len=fm_string_len)          :: cmor_long_name
+    character(len=fm_string_len)          :: cmor_units
+    character(len=fm_string_len)          :: cmor_standard_name
+!    real                                  :: conversion
+
+
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes=axes,init_time=init_time)
+
+    !   The following vardesc types contain a package of metadata about each tracer,
+    ! including, in order, the following elements: name; longname; horizontal
+    ! staggering ('h') for collocation with thickness points ; vertical staggering
+    ! ('L') for a layer variable ; temporal staggering ('s' for snapshot) ; units ;
+    ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
+    ! 64-bit doubles). For most tracers, only the name, longname and units should
+    ! be changed.
+
+    !! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("sf6_raw","Mole Concentration of SF6 in sea water",'h','L','s','mol kg-1','f')
+    sf6%id_sf6_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sf6_cmip", cmor_units="mol kg-1",                          &
+         cmor_standard_name="moles_of_sf6_per_unit_mass_in_sea_water", &
+         cmor_long_name="Mole Concentration of SF6 in sea water")
+
+  end subroutine generic_SF6_register_diag
+
 
   subroutine user_allocate_arrays
     !Allocate all the private arrays.
@@ -270,17 +331,39 @@ contains
 
   ! <SUBROUTINE NAME="generic_SF6_update_from_source">
   !  <OVERVIEW>
-  !   Update tracer concentration fields due to the source/sink contributions.
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Currently an empty stub for SF6s.
   !  </DESCRIPTION>
   ! </SUBROUTINE>
-  subroutine generic_SF6_update_from_source(tracer_list)
+  subroutine generic_SF6_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+                                            ilb,jlb,tau,dt,grid_dat,model_time)
+
     type(g_tracer_type), pointer :: tracer_list
-    !
-    !No source update for SF6's currently exit in code.
-    !
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt,dzt
+    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
+    integer,                        intent(in) :: ilb,jlb,tau
+    real,                           intent(in) :: dt
+    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat
+    type(time_type),                intent(in) :: model_time
+
+    character(len=fm_string_len), parameter :: sub_name = 'generic_SF6_update_from_source'
+    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau 
+    real, dimension(:,:,:) ,pointer :: grid_tmask
+    integer, dimension(:,:),pointer :: mask_coast, grid_kmt
+
+    logical :: used, first
+
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
+         grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
+
+    call g_tracer_get_pointer(tracer_list,'sf6','field',sf6%p_sf6)
+ 
+    if (sf6%id_sf6_cmip .gt. 0)            &
+        used = g_send_data(sf6%id_sf6_cmip,  sf6%p_sf6(:,:,:,tau),   &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
     return
   end subroutine generic_SF6_update_from_source
 
