@@ -92,6 +92,12 @@
 ! This is a mistake that will be fixed later.
 !  </DATA> 
 !
+!  <DATA NAME="co2_calc" TYPE="character">
+!  Defines the carbon equiliabration method.  Default is 'ocmip2' which uses
+! the FMS_ocmip2_co2calc routine.  The other option is 'mocsy', which uses
+! the set of routines authored by J. Orr. See reference at: 
+! http://ocmip5.ipsl.jussieu.fr/mocsy/index.html
+!
 !</NAMELIST>
 !
 !</DESCRIPTION>
@@ -143,8 +149,8 @@ module generic_COBALT
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1.2.1 2014/09/29 16:40:08 Niki.Zadeh Exp $'
-  character(len=128) :: tag = '$Name: bugfix_nnz $'
+  character(len=128) :: version = '$Id$'
+  character(len=128) :: tag = '$Name$'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_COBALT'
@@ -171,10 +177,11 @@ module generic_COBALT
 
 ! Namelist Options
 
+  character(len=10) ::  co2_calc = 'ocmip2'  ! other option is 'mocsy'
   logical :: do_14c             = .false.
   logical :: do_fan_dunne_fe    = .false.
 
-namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe
+namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -735,6 +742,8 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe
           jnitrif,&
           omega_arag,&
           omega_calc,&                                                  
+          omegaa,&                                                  
+          omegac,&                                                  
           tot_layer_int_c,&
           tot_layer_int_fe,&
           tot_layer_int_n,&
@@ -1445,6 +1454,13 @@ write (stdlogunit, generic_COBALT_nml)
     write (stdoutunit,*) trim(note_header), 'Using Fan and Dunne 2011 Chemistry'
   endif
   
+  if (trim(co2_calc) == 'ocmip2') then
+    write (stdoutunit,*) trim(note_header), 'Using FMS OCMIP2 CO2 routine'
+  else if (trim(co2_calc) == 'mocsy') then
+    write (stdoutunit,*) trim(note_header), 'Using Mocsy CO2 routine'
+  else
+    call mpp_error(FATAL,"Unknown co2_calc option specified in generic_COBALT_nml")
+  endif
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
     
@@ -6127,12 +6143,25 @@ write (stdlogunit, generic_COBALT_nml)
     !Also calculate co2 fluxes csurf and alpha for the next round of exchnage
     !---------------------------------------------------------------------
    
+    cobalt%zt = 0.0
+    cobalt%zm = 0.0
+    do j = jsc, jec ; do i = isc, iec   !{
+       cobalt%zt(i,j,1) = dzt(i,j,1)
+       cobalt%zm(i,j,1) = 0.5*dzt(i,j,1)
+    enddo; enddo !} i,j
+
+    do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       cobalt%zt(i,j,k) = cobalt%zt(i,j,k-1) + dzt(i,j,k)
+       cobalt%zm(i,j,k) = cobalt%zm(i,j,k-1) + dzt(i,j,k)
+    enddo; enddo ; enddo !} i,j,k
+
     k=1
     do j = jsc, jec ; do i = isc, iec  !{
        cobalt%htotallo(i,j) = cobalt%htotal_scale_lo * cobalt%f_htotal(i,j,k)
        cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * cobalt%f_htotal(i,j,k)
     enddo; enddo ; !} i, j
- 
+
+
     call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
          Temp(:,:,k), Salt(:,:,k),                    &
          cobalt%f_dic(:,:,k),                          &
@@ -6142,10 +6171,16 @@ write (stdlogunit, generic_COBALT_nml)
          cobalt%htotallo, cobalt%htotalhi,&
                                 !InOut
          cobalt%f_htotal(:,:,k),                       & 
+                                !Optional In
+         co2_calc=trim(co2_calc),                      & 
+         zt=cobalt%zt(:,:,k),                          & 
                                 !OUT
          co2star=cobalt%co2_csurf(:,:), alpha=cobalt%co2_alpha(:,:), &
          pCO2surf=cobalt%pco2_csurf(:,:), &
-         co3_ion=cobalt%f_co3_ion(:,:,k))
+         co3_ion=cobalt%f_co3_ion(:,:,k), &
+         omega_arag=cobalt%omegaa(:,:,k), &
+         omega_calc=cobalt%omegac(:,:,k))
+
 
     do k = 2, nk
        do j = jsc, jec ; do i = isc, iec  !{
@@ -6162,8 +6197,13 @@ write (stdlogunit, generic_COBALT_nml)
             cobalt%htotallo, cobalt%htotalhi,&
                                 !InOut
             cobalt%f_htotal(:,:,k),                       & 
+                                !Optional In
+            co2_calc=trim(co2_calc),                      & 
+            zt=cobalt%zt(:,:,k),                          & 
                                 !OUT
-            co3_ion=cobalt%f_co3_ion(:,:,k))
+            co3_ion=cobalt%f_co3_ion(:,:,k), &
+            omega_arag=cobalt%omegaa(:,:,k), &
+            omega_calc=cobalt%omegac(:,:,k))
     enddo
 
     call g_tracer_set_values(tracer_list,'htotal','field',cobalt%f_htotal  ,isd,jsd,ntau=1)
@@ -6265,8 +6305,6 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_values(tracer_list,'sidet_btf','field',cobalt%f_sidet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'irr_mem','field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
 
-    cobalt%zt = 0.0
-    cobalt%zm = 0.0
     ! minimum concentration below which predation/basal respiration stops
     refuge_conc = 1.0e-9
 
@@ -7206,15 +7244,6 @@ write (stdlogunit, generic_COBALT_nml)
     call mpp_clock_end(id_clock_production_loop)
 
     call mpp_clock_begin(id_clock_ballast_loops)
-    do j = jsc, jec ; do i = isc, iec   !{
-       cobalt%zt(i,j,1) = dzt(i,j,1)
-       cobalt%zm(i,j,1) = 0.5*dzt(i,j,1)
-    enddo; enddo !} i,j
-
-    do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       cobalt%zt(i,j,k) = cobalt%zt(i,j,k-1) + dzt(i,j,k)
-       cobalt%zm(i,j,k) = cobalt%zm(i,j,k-1) + dzt(i,j,k)
-    enddo; enddo ; enddo !} i,j,k
 
 !
 !------------------------------------------------------------------------------------
@@ -7226,23 +7255,32 @@ write (stdlogunit, generic_COBALT_nml)
     !
     ! 4.1: Calculate aragonite and calcite saturation states
     !
+       if (trim(co2_calc) == "ocmip2") then
+         TK = Temp(i,j,k) + 273.15
+         PRESS = 0.1016 * cobalt%zt(i,j,k) + 1.013
+         PKSPA = 171.945 + 0.077993 * TK - 2903.293 / TK - 71.595 * log10(TK) - (-0.068393 + 1.7276e-3 * &
+            TK + 88.135 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.10018 * max(epsln, Salt(i,j,k)) -      &
+            5.9415e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 2.8 - 0.5304 * Temp(i,j,k)) *   &
+            (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
+            (PRESS - 1.013) / (382.92 * TK)
+         cobalt%co3_sol_arag(i,j,k) = 10**(-PKSPA) / (2.937d-4 * max(5.0, Salt(i,j,k)))
+         cobalt%omega_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_arag(i,j,k)
+         PKSPC = 171.9065 + 0.077993 * TK - 2839.319 / TK - 71.595 * log10(TK) - (-0.77712 + 2.8426e-3 * &
+            TK + 178.34 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.07711 * max(epsln, Salt(i,j,k)) -      &
+            4.1249e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 0.5304 * Temp(i,j,k)) *         &
+            (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
+            (PRESS - 1.013) / (382.92 * TK)
+         cobalt%co3_sol_calc(i,j,k) = 10**(-PKSPC) / (2.937d-4 * max(5.0, Salt(i,j,k)))
+         cobalt%omega_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_calc(i,j,k)
+      else if (trim(co2_calc) == "mocsy") then
+         cobalt%omega_arag(i,j,k) = cobalt%omegaa(i,j,k)  ! from Mocsy
+         cobalt%omega_calc(i,j,k) = cobalt%omegac(i,j,k)  ! from Mocsy
+         cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_arag(i,j,k)
+         cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_calc(i,j,k)
+      else
+        call mpp_error(FATAL,"Unable to compute aragonite and calcite saturation states")
+      endif
 
-       TK = Temp(i,j,k) + 273.15
-       PRESS = 0.1016 * cobalt%zt(i,j,k) + 1.013
-       PKSPA = 171.945 + 0.077993 * TK - 2903.293 / TK - 71.595 * log10(TK) - (-0.068393 + 1.7276e-3 * &
-          TK + 88.135 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.10018 * max(epsln, Salt(i,j,k)) -      &
-          5.9415e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 2.8 - 0.5304 * Temp(i,j,k)) *   &
-          (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
-          (PRESS - 1.013) / (382.92 * TK)
-       cobalt%co3_sol_arag(i,j,k) = 10**(-PKSPA) / (2.937d-4 * max(5.0, Salt(i,j,k)))
-       cobalt%omega_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_arag(i,j,k)
-       PKSPC = 171.9065 + 0.077993 * TK - 2839.319 / TK - 71.595 * log10(TK) - (-0.77712 + 2.8426e-3 * &
-          TK + 178.34 / TK) * sqrt(max(epsln, Salt(i,j,k))) + 0.07711 * max(epsln, Salt(i,j,k)) -      &
-          4.1249e-3 * max(epsln, Salt(i,j,k))**(1.5) - 0.02 - (48.76 - 0.5304 * Temp(i,j,k)) *         &
-          (PRESS - 1.013) / (191.46 * TK) + (1e-3 * (11.76 - 0.3692 * Temp(i,j,k))) * (PRESS - 1.013) *&
-          (PRESS - 1.013) / (382.92 * TK)
-       cobalt%co3_sol_calc(i,j,k) = 10**(-PKSPC) / (2.937d-4 * max(5.0, Salt(i,j,k)))
-       cobalt%omega_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%co3_sol_calc(i,j,k)
     enddo; enddo ; enddo !} i,j,k
 
     !
@@ -11067,11 +11105,12 @@ write (stdlogunit, generic_COBALT_nml)
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau)
+  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt)
     type(g_tracer_type),          pointer    :: tracer_list
     real, dimension(ilb:,jlb:),   intent(in)   :: SST, SSS
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
+    real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
 
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: sal,ST,o2_saturation
@@ -11123,19 +11162,32 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%htotalhi(i,j) = cobalt%htotal_scale_hi * htotal_field(i,j,1)
        enddo; enddo ; !} i, j
 
+       if(present(dzt)) then
+         do j = jsc, jec ; do i = isc, iec  !{
+          cobalt%zt(i,j,1) = dzt(i,j,1)
+         enddo; enddo ; !} i, j
+       elseif (trim(co2_calc) == 'mocsy') then
+         call mpp_error(FATAL,"mocsy method of co2_calc needs dzt to be passed to the FMS_ocmip2_co2calc subroutine.")
+       endif
+                 
        call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,1), &
             SST(:,:), SSS(:,:),                            &
             dic_field(:,:,1,tau),                          &
             po4_field(:,:,1,tau),                          &
             sio4_field(:,:,1,tau),                         &
             alk_field(:,:,1,tau),                          &
-            cobalt%htotallo, cobalt%htotalhi,                &
+            cobalt%htotallo, cobalt%htotalhi,              &
                                 !InOut
             htotal_field(:,:,1),                           &
+                                !Optional In
+            co2_calc=trim(co2_calc),                       & 
+            zt=cobalt%zt(:,:,1),                           & 
                                 !OUT
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
             pCO2surf=cobalt%pco2_csurf(:,:), &
-            co3_ion=co3_ion_field(:,:,1))
+            co3_ion=co3_ion_field(:,:,1), &
+            omega_arag=cobalt%omegaa(:,:,1), &
+            omega_calc=cobalt%omegac(:,:,1))
 
        !Set fields !nnz: if These are pointers do I need to do this?
        call g_tracer_set_values(tracer_list,'htotal' ,'field',htotal_field ,isd,jsd,ntau=1)
@@ -11483,6 +11535,10 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%f_sio4(isd:ied, jsd:jed, 1:nk))       ; cobalt%f_sio4=0.0
     allocate(cobalt%co3_sol_arag(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_arag=0.0
     allocate(cobalt%co3_sol_calc(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_calc=0.0
+    allocate(cobalt%omega_arag(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_arag=0.0
+    allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
+    allocate(cobalt%omegaa(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegaa=0.0
+    allocate(cobalt%omegac(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegac=0.0
     allocate(cobalt%f_chl(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_chl=0.0
     allocate(cobalt%f_co3_ion(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_co3_ion=0.0
     allocate(cobalt%f_htotal(isd:ied, jsd:jed, 1:nk))     ; cobalt%f_htotal=0.0
@@ -11578,8 +11634,6 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%irr_mix(isd:ied, jsd:jed, 1:nk))      ; cobalt%irr_mix=0.0
     allocate(cobalt%jno3denit_wc(isd:ied, jsd:jed, 1:nk)) ; cobalt%jno3denit_wc=0.0
     allocate(cobalt%jnitrif(isd:ied, jsd:jed, 1:nk))      ; cobalt%jnitrif=0.0
-    allocate(cobalt%omega_arag(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_arag=0.0
-    allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
     allocate(cobalt%tot_layer_int_c(isd:ied, jsd:jed,1:nk))  ; cobalt%tot_layer_int_c=0.0
     allocate(cobalt%tot_layer_int_fe(isd:ied, jsd:jed,1:nk)) ; cobalt%tot_layer_int_fe=0.0
     allocate(cobalt%tot_layer_int_n(isd:ied, jsd:jed, 1:nk)) ; cobalt%tot_layer_int_n=0.0
@@ -11980,6 +12034,8 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%jnitrif)  
     deallocate(cobalt%omega_arag)  
     deallocate(cobalt%omega_calc)  
+    deallocate(cobalt%omegaa)  
+    deallocate(cobalt%omegac)  
     deallocate(cobalt%tot_layer_int_c)  
     deallocate(cobalt%tot_layer_int_fe)  
     deallocate(cobalt%tot_layer_int_n)  

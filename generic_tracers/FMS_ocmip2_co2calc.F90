@@ -39,7 +39,8 @@ module FMS_ocmip2_co2calc_mod  !{
 !------------------------------------------------------------------
 !
 
-use mpp_mod, only: mpp_error, WARNING
+use mpp_mod, only: mpp_error, WARNING, FATAL
+use mvars, only: vars
 
 implicit none
 
@@ -47,6 +48,7 @@ private
 
 public  :: FMS_ocmip2_co2calc,  FMS_ocmip2_co2calc_old, CO2_dope_vector
 public  :: FMS_ocmip2_co2_alpha
+
 
 character(len=128) :: version = '$Id$'
 character(len=128) :: tagname = '$Name$'
@@ -111,7 +113,8 @@ contains
 
 subroutine FMS_ocmip2_co2calc(dope_vec, mask,                      &
                           t_in, s_in, dic_in, pt_in, sit_in, ta_in, htotallo, &
-                          htotalhi, htotal, co2star, alpha, pCO2surf, co3_ion)  !{
+                          htotalhi, htotal, co2_calc, zt, co2star, alpha, pCO2surf, &
+                          co3_ion, omega_arag, omega_calc)  !{
 
 implicit none
 
@@ -121,6 +124,12 @@ implicit none
 
 real, parameter :: permeg = 1.e-6
 real, parameter :: xacc = 1.0e-10
+
+! Mocsy parameters
+real, dimension(1) :: ph, pco2, fco2, co2, hco3, co3,  &
+                      OmegaA, OmegaC, BetaD, rhoSW, p, depth, tempis
+real, dimension(1) :: temp, sal, alk, dic, sil, phos, Patm, lat
+character(10)      :: optCON, optGas, optT, optP, optB, optKf, optK1K2
 
 !
 !       arguments
@@ -138,11 +147,16 @@ real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
                                htotalhi
 real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
       intent(inout)         :: htotal
+character(len=*), intent(in), optional :: co2_calc
+real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
+      intent(in), optional  :: zt
 real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
       intent(out), optional :: alpha, &
                                pCO2surf, &
                                co2star, &
-                               co3_ion
+                               co3_ion, &
+                               omega_arag, &
+                               omega_calc
 !
 !       local variables
 !
@@ -177,6 +191,21 @@ real :: tk
 real :: tk100
 real :: tk1002
 real :: logf_of_s
+character(len=10) :: co2_calc_method
+
+if (present(co2_calc)) then
+  co2_calc_method = trim(co2_calc)
+  if (co2_calc == 'mocsy') then
+    if (.not. present(zt)) then 
+        call mpp_error(FATAL,"Depth must be specified when invoking Mocsy.") 
+    end if
+  end if   
+else
+  co2_calc_method = 'ocmip2'
+end if
+
+
+
 
 ! Set the loop indices.
   isc = dope_vec%isc ; iec = dope_vec%iec
@@ -190,6 +219,34 @@ real :: logf_of_s
   do j = jsc, jec  !{
     do i = isc, iec  !{
       if (mask(i,j) .gt. 0.0) then  !{
+
+        if (trim(co2_calc_method) == 'mocsy') then
+
+          Patm(1)  = 1.           ! atm
+          depth(1) = zt(i,j)      ! m
+          lat(1)   = 30.          ! degrees
+          temp(1)  = t_in(i,j)    ! degC
+          sal(1)   = s_in(i,j)    ! psu
+          alk(1)   = ta_in(i,j)   ! mol/kg
+          dic(1)   = dic_in(i,j)  ! mol/kg
+          sil(1)   = sit_in(i,j)  ! mol/kg
+          phos(1)  = pt_in(i,j)   ! mol/kg
+
+          call vars(ph, pco2, fco2, co2, hco3, co3, OmegaA, OmegaC, BetaD, rhoSW, p, tempis, &
+                    temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
+                    optCON='mol/kg', optT='Tpot   ', optP='m ', optb='l10',                  &
+                    optK1K2='m10', optkf='dg', optgas='Pinsitu')
+
+          htotal(i,j) = 10.**(-1.*ph(1))
+
+          if (present(co2star))   co2star(i,j)   = co2(1)
+          if (present(co3_ion))   co3_ion(i,j)   = co3(1)
+          if (present(alpha))     alpha(i,j)     = (co2(1)/(pco2(1)*1.e-6))
+          if (present(pCO2surf))  pCO2surf(i,j)  = pco2(1)
+          if (present(omega_arag)) omega_arag(i,j) = OmegaA(1)
+          if (present(omega_calc)) omega_calc(i,j) = OmegaC(1)
+ 
+        else if (trim(co2_calc_method) == 'ocmip2') then
 !
 !---------------------------------------------------------------------
 !
@@ -376,6 +433,10 @@ real :: logf_of_s
         if (present(pCO2surf)) then
           pCO2surf(i,j) = co2star_internal / (alpha_internal * permeg)
         endif
+      
+      else
+        call mpp_error(FATAL,"CO2 calculation was not invoked.")    
+      endif !} mocsy vs. ocmip2
 
     else  !}{mask(i,j)=0.0
 
@@ -392,10 +453,12 @@ real :: logf_of_s
         pCO2surf(i,j) = 0.0
       endif  !}
 
+
     endif  !}mask
 
     enddo  !} i
   enddo  !} j
+
 
 return
 
