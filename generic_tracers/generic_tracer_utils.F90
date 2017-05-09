@@ -880,7 +880,8 @@ contains
     if(present(requires_src_info)) then
        g_tracer%requires_src_info = requires_src_info 
     elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' .or. &
-           trim(g_tracer%package_name) .eq. 'generic_abiotic') then !Niki: later we can make this just else
+           trim(g_tracer%package_name) .eq. 'generic_abiotic' .or. &
+           trim(g_tracer%package_name) .eq. 'generic_bling') then !Niki: later we can make this just else
        call  g_tracer_add_param('enforce_src_info', g_tracer%requires_src_info ,  .true.) 
     endif
        
@@ -3561,6 +3562,8 @@ contains
              select case (trim(g_tracer%name))
              case('o2')  
                 g_tracer%src_var_unit_conversion = (1000.0/22391.6)/1035.0
+             case('o2_b')  
+                g_tracer%src_var_unit_conversion = (1000.0/22391.6)/1035.0
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
                 call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
@@ -3572,6 +3575,10 @@ contains
              case('po4')
                 g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
              case('sio4')
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
+             case('po4_b')
+                g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
+             case('po4_pre')
                 g_tracer%src_var_unit_conversion = 1.0 / 1035.0e3
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
@@ -3588,6 +3595,18 @@ contains
              case('dissicabio')
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case('dissi14cabio')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('alk_b')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('alk_pre')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dic_b')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dic_pre')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('dic_sat')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('do14c')
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
@@ -3729,9 +3748,15 @@ contains
             x_cell_method, y_cell_method, v_cell_method)
     endif
 #else
+    if(present(cmor_field_name)) then
+       g_register_diag_field = register_diag_field_FMS(module_name, cmor_field_name, axes, init_time,         &
+          long_name, cmor_units, missing_value, range, mask_variant, cmor_standard_name,      &
+          verbose, do_not_log, err_msg, interp_method, tile_count)
+    else
     g_register_diag_field = register_diag_field_FMS(module_name, field_name, axes, init_time,         &
        long_name, units, missing_value, range, mask_variant, standard_name,      &
        verbose, do_not_log, err_msg, interp_method, tile_count)
+    endif
 
 #endif    
 

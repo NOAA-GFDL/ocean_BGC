@@ -268,7 +268,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
          call generic_ERGOM_init(tracer_list)
 
     if(do_generic_BLING) &
-         call generic_BLING_init(tracer_list)
+         call generic_BLING_init(tracer_list, force_update_fluxes)
 
     if(do_generic_miniBLING) &
          call generic_miniBLING_init(tracer_list)
@@ -309,7 +309,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_ERGOM)  call generic_ERGOM_register_diag(diag_list)    
 
-    if(do_generic_BLING)  call generic_BLING_register_diag()    
+    if(do_generic_BLING)  call generic_BLING_register_diag(diag_list)    
     
     if(do_generic_miniBLING)  call generic_miniBLING_register_diag()    
 
@@ -682,6 +682,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !  <IN NAME="tau" TYPE="integer">
   !   Time step index of %field
   !  </IN>
+  !  <IN NAME="dzt" TYPE="real, dimension(ilb:,jlb:,:)">
+  !   Layer thickness
+  !  </IN>
   ! </SUBROUTINE>
   subroutine generic_tracer_coupler_set(IOB_struc, ST,SS,rho,ilb,jlb,tau, dzt, sosga,model_time)
     type(coupler_2d_bc_type), intent(inout) :: IOB_struc
@@ -720,7 +723,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
          call generic_ERGOM_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
 
     if(do_generic_BLING) &
-         call generic_BLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
+         call generic_BLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau,dzt)
     !
     if(do_generic_miniBLING) &
          call generic_miniBLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
