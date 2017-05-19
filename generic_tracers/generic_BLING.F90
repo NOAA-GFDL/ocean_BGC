@@ -79,9 +79,9 @@
 ! Changed all internal diagnostics from layer integrals of rates to volumetric rates
 !   to make use of z-coordinate remapping.
 ! Converted CO2 calculation from OCMIP2 to MOCSY
-
-
-! Changed calculation of frac_lg
+! Reduced maximum growth rate constant, Pc_0, to be consistent with Bissinger et al., 
+!   2010 of 0.82 d-1 at 0C
+!
 !
 !</DESCRIPTION>
 !
@@ -1169,7 +1169,13 @@ write (stdlogunit, generic_bling_nml)
     call g_tracer_add_param('alpha_min', bling%alpha_min, 0.4e-5 *2.77e18/6.022e17) ! g C g Chl-1 m2 W-1 s-1
     call g_tracer_add_param('kappa_eppley', bling%kappa_eppley, 0.063)              ! deg C-1
     call g_tracer_add_param('resp_frac', bling%resp_frac, 0.0)                      ! dimensionless
-    call g_tracer_add_param('pc_0',     bling%pc_0, 1.0e-5)                         ! s-1
+!    call g_tracer_add_param('pc_0',     bling%pc_0, 1.0e-5)                         ! s-1
+!
+! Use Bissinger, J.E., Montagnes, D.J. and Atkinson, D., 2008. Predicting marine phytoplankton maximum growth
+! rates from temperature: Improving on the Eppley curve using quantile regression. Limnology and Oceanography,
+! 53(2), pp.487-493.Bissinger et al., value of 0.81 d-1 at 0C
+!
+    call g_tracer_add_param('pc_0',     bling%pc_0, 0.938e-5)                       ! s-1
     call g_tracer_add_param('thetamax_hi', bling%thetamax_hi, 0.040)                ! g Chl g C-1
     call g_tracer_add_param('thetamax_lo', bling%thetamax_lo, 0.010)                ! g Chl g C-1
     !
@@ -1233,7 +1239,7 @@ write (stdlogunit, generic_bling_nml)
     ! value of 0.5, chosen according to Sunda and Huntsman (Fig. 2, 
     ! Nature, 1997). Converted from Fe:C ratio.
 
-    call g_tracer_add_param('k_fe_2_p', bling%k_fe_2_p,  15.e-6 * 106.)          ! mol Fe mol P-1
+    call g_tracer_add_param('k_fe_2_p', bling%k_fe_2_p,  20.e-6 * 106.)          ! mol Fe mol P-1
 
     ! In order to represent enzymatic plasticity and the ability of plankton
     ! to make do with very low Fe supply - including by liberating recalcitrant
