@@ -464,13 +464,12 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,Hml,dtts,&
+  subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
        grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,&
        grid_ht, current_wave_stress, sosga)
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     integer,                        intent(in) :: ilb,jlb,tau
-    real, dimension(ilb:,jlb:),optional,     intent(in) :: Hml
     real,                           intent(in) :: dtts
     real, dimension(ilb:,jlb:),     intent(in) :: grid_dat
     type(time_type),                intent(in) :: model_time
