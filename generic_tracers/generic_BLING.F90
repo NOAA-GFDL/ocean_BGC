@@ -2133,7 +2133,7 @@ write (stdlogunit, generic_bling_nml)
 
        do nb=1,nbands !{
           if (max_wavelength_band(nb) .lt. 710) then !{
-             tmp_irr_band(nb) = sw_pen_band(nb,i,j)
+             tmp_irr_band(nb) = max(0.0, sw_pen_band(nb,i,j))
           else
              tmp_irr_band(nb) = 0.0
           endif !}
