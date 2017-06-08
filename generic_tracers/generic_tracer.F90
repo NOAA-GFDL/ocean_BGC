@@ -65,6 +65,7 @@ module generic_tracer
   use generic_SF6,    only : generic_SF6_register
   use generic_SF6,    only : generic_SF6_init, generic_SF6_update_from_source,generic_SF6_update_from_coupler
   use generic_SF6,    only : generic_SF6_set_boundary_values, generic_SF6_end, do_generic_SF6
+  use generic_SF6,    only : generic_SF6_register_diag
 
   use generic_ERGOM, only : generic_ERGOM_register, generic_ERGOM_register_diag
   use generic_ERGOM, only : generic_ERGOM_init, generic_ERGOM_update_from_source,generic_ERGOM_update_from_coupler
@@ -315,6 +316,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_COBALT)  call generic_COBALT_register_diag(diag_list)
 
+    if(do_generic_SF6) call generic_SF6_register_diag(diag_list)
+
   end subroutine generic_tracer_register_diag
 
   ! <SUBROUTINE NAME="generic_tracer_coupler_get">
@@ -516,6 +519,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_COBALT)  call generic_COBALT_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
          nbands,max_wavelength_band,sw_pen_band,opacity_band)
+
+    if(do_generic_SF6)  call generic_SF6_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+         ilb,jlb,tau,dtts,grid_dat,model_time)
 
     return
 
