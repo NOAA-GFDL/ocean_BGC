@@ -707,7 +707,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !User must provide the calculations for these boundary values.
 
     if(do_generic_abiotic) &
-         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau,model_time)
+         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau, &
+                                                  model_time,dzt)
 
     if(do_generic_age) &
          call generic_age_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)

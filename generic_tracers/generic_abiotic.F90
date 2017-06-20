@@ -112,8 +112,8 @@
 !!
 !! <pre>
 !! "OCN", "delta_14catm", "D14C", "./INPUT/atm_delta_13C_14C.nc",  "bilinear", 1.0
-!! "ATM", "abco2_flux_pcair_atm", "" , "", "none" ,284.65e-6
-!! "ATM", "ab14co2_flux_pcair_atm", "", "", "none" ,284.65e-6
+!! "ATM", "abco2_flux_pcair_atm", "" , "", "none" ,284.262e-6
+!! "ATM", "ab14co2_flux_pcair_atm", "", "", "none" ,284.262e-6
 !! </pre>
 !!
 !! \section diag_table_entries Diag Table Entries
@@ -174,6 +174,9 @@ module generic_abiotic
   use constants_mod,     only: WTMCO2
   use data_override_mod, only: data_override
   use field_manager_mod, only: fm_string_len
+  use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist
+  use fms_mod,           only: open_namelist_file, check_nml_error, close_file
+  use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
   use time_manager_mod,  only: time_type
 
   use g_tracer_utils,    only: g_diag_type,g_send_data
@@ -207,6 +210,11 @@ module generic_abiotic
   real, parameter :: epsln=1.0e-30
   real, parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
+
+  !Namelist Options
+  character(len=10) ::  co2_calc = 'ocmip2'  ! other option is 'mocsy'
+
+namelist /generic_abiotic_nml/ co2_calc
 
   !This type contains all the parameters and arrays used in this module.
   type generic_abiotic_params
@@ -261,7 +269,8 @@ module generic_abiotic
           f_alk, f_po4, f_sio4,             &!< Abiotic alkalinity, phosphate, silicate
           f_htotal,                         &!< Abiotic H+ concentration
           f_htotal14c,                      &!< Abiotic H+ concentration for 14C
-          jdecay_di14c                       !< DI14C decay rate
+          jdecay_di14c,                     &!< DI14C decay rate
+          zt                                 !< Cell depth passed from ocean model
 
      ! 4-dimensional pointers
      real, dimension(:,:,:,:), pointer :: &
@@ -287,8 +296,43 @@ contains
 
   subroutine generic_abiotic_register(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
+    integer :: ioun, ierr, io_status, stdoutunit, stdlogunit
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_abiotic_register'
+    character(len=256), parameter :: error_header =                                &
+         '==>Error from ' // trim(mod_name) // '(' // trim(sub_name) // '): '
+    character(len=256), parameter   :: warn_header =                               &
+         '==>Warning from ' // trim(mod_name) // '(' // trim(sub_name) // '): '
+    character(len=256), parameter   :: note_header =                               &
+         '==>Note from ' // trim(mod_name) // '(' // trim(sub_name) // '): '
+
+    ! provide for namelist over-ride
+    ! This needs to go before the add_tracers in order to allow the namelist 
+    ! settings to switch tracers on and off.
+
+    stdoutunit=stdout();stdlogunit=stdlog()
+
+    #ifdef INTERNAL_FILE_NML
+    read (input_nml_file, nml=generic_abiotic_nml, iostat=io_status)
+    ierr = check_nml_error(io_status,'generic_abiotic_nml')
+    #else
+    ioun = open_namelist_file()
+    read  (ioun, generic_abiotic_nml,iostat=io_status)
+    ierr = check_nml_error(io_status,'generic_abiotic_nml')
+    call close_file (ioun)
+    #endif
+    
+    write (stdoutunit,'(/)')
+    write (stdoutunit, generic_abiotic_nml)
+    write (stdlogunit, generic_abiotic_nml)
+
+    if (trim(co2_calc) == 'ocmip2') then
+      write (stdoutunit,*) trim(note_header), 'Using FMS OCMIP2 CO2 routine'
+    else if (trim(co2_calc) == 'mocsy') then
+      write (stdoutunit,*) trim(note_header), 'Using Mocsy CO2 routine'
+    else
+      call mpp_error(FATAL,"Unknown co2_calc option specified in generic_abiotic_nml")
+    endif
 
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
@@ -632,6 +676,16 @@ contains
     call g_tracer_get_values(tracer_list,'dissicabio'   ,'field', abiotic%f_dissicabio   ,isd,jsd,ntau=tau)
     call g_tracer_get_values(tracer_list,'dissi14cabio' ,'field', abiotic%f_dissi14cabio ,isd,jsd,ntau=tau)
 
+    abiotic%zt = 0.0
+    do j = jsc, jec ; do i = isc, iec   !{
+       abiotic%zt(i,j,1) = dzt(i,j,1)
+    enddo; enddo !} i,j
+
+    do k = 2, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       abiotic%zt(i,j,k) = abiotic%zt(i,j,k-1) + dzt(i,j,k)
+    enddo; enddo ; enddo !} i,j,k
+
+
     !---------------------------------------------------------------------
     !Also calculate co2 fluxes csurf and alpha for the next round of exchnage
     !---------------------------------------------------------------------
@@ -653,14 +707,17 @@ contains
 
     k=1
     call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
-         Temp(:,:,k), Salt(:,:,k),                    &
-         abiotic%f_dissicabio(:,:,k),                          &
+         Temp(:,:,k), Salt(:,:,k),                      &
+         abiotic%f_dissicabio(:,:,k),                   &
          abiotic%f_po4(:,:,k),                          &  
          abiotic%f_sio4(:,:,k),                         &
          abiotic%f_alk(:,:,k),                          &
          abiotic%htotallo, abiotic%htotalhi,&
                                 !InOut
          abiotic%f_htotal(:,:,k),                       & 
+                                !Optional In
+         co2_calc=trim(co2_calc),                       & 
+         zt=abiotic%zt(:,:,k),                           & 
                                 !OUT
          co2star=abiotic%abco2_csurf(:,:), alpha=abiotic%abco2_alpha(:,:), &
          pCO2surf=abiotic%abpco2_csurf(:,:))
@@ -795,13 +852,14 @@ contains
 !! This subroutine takes the pointer to the head of generic tracer list, the lower bounds of x and y 
 !! extents of input arrays on data domain, sea surface temperature, sea surface salinity, global average
 !! sea surface salinity, ocean denisty, and the time step index of %field as input.
-  subroutine generic_abiotic_set_boundary_values(tracer_list,SST,SSS,sosga,rho,ilb,jlb,tau,model_time)
+  subroutine generic_abiotic_set_boundary_values(tracer_list,SST,SSS,sosga,rho,ilb,jlb,tau,model_time,dzt)
     type(g_tracer_type),            pointer    :: tracer_list
     real, dimension(ilb:,jlb:),     intent(in) :: SST, SSS
     real, intent(in)                           :: sosga
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
     type(time_type),                intent(in) :: model_time
+    real, dimension(ilb:,jlb:,:),   optional, intent(in) :: dzt
 
     real    :: sal,ST
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
@@ -841,6 +899,14 @@ contains
           abiotic%delta_14catm(i,j) = abiotic%atm_delta_14c ! default is 0.0
        enddo; enddo ; !} i, j
 
+       if(present(dzt)) then
+         do j = jsc, jec ; do i = isc, iec  !{
+          abiotic%zt(i,j,1) = dzt(i,j,1)
+         enddo; enddo ; !} i, j
+       elseif (trim(co2_calc) == 'mocsy') then
+         call mpp_error(FATAL,"mocsy method of co2_calc needs dzt to be passed to the FMS_ocmip2_co2calc subroutine.")
+       endif
+
        do j = jsc, jec ; do i = isc, iec  !{
          abiotic%f_alk(i,j,1)  = SSS(i,j) * (abiotic%alkbar/sosga)
          abiotic%f_po4(i,j,1)  = abiotic%po4_const
@@ -856,9 +922,13 @@ contains
             abiotic%htotallo, abiotic%htotalhi,                &
                                 !InOut
             htotal_field(:,:,1),                               &
+                                !Optional In
+            co2_calc=trim(co2_calc),                           & 
+            zt=abiotic%zt(:,:,1),                               & 
                                 !OUT
             co2star=abco2_csurf(:,:), alpha=abco2_alpha(:,:),  &
             pCO2surf=abiotic%abpco2_csurf(:,:))
+
 
        call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,1), &
             SST(:,:), SSS(:,:),                                &
@@ -869,6 +939,9 @@ contains
             abiotic%htotal14clo, abiotic%htotal14chi,          &
                                 !InOut
             htotal14c_field(:,:,1),                            &
+                                !Optional In
+            co2_calc=trim(co2_calc),                           & 
+            zt=abiotic%zt(:,:,1),                               & 
                                 !OUT
             co2star=ab14co2_csurf(:,:), alpha=ab14co2_alpha(:,:),&
             pCO2surf=abiotic%abp14co2_csurf(:,:))
