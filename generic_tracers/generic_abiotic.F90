@@ -474,6 +474,7 @@ contains
     allocate(abiotic%htotal14clo(isd:ied,jsd:jed))
     allocate(abiotic%htotal14chi(isd:ied,jsd:jed))
     allocate(abiotic%delta_14catm(isd:ied,jsd:jed))
+    allocate(abiotic%zt(isd:ied,jsd:jed,1:nk))             ; abiotic%zt=0.0
     allocate(abiotic%f_alk(isd:ied,jsd:jed,1:nk))          ; abiotic%f_alk=0.0
     allocate(abiotic%f_htotal(isd:ied,jsd:jed,1:nk))       ; abiotic%f_htotal =0.0
     allocate(abiotic%f_htotal14c(isd:ied,jsd:jed,1:nk))    ; abiotic%f_htotal14c =0.0
@@ -1039,6 +1040,7 @@ contains
     deallocate(abiotic%htotal14clo)
     deallocate(abiotic%htotal14chi)
     deallocate(abiotic%delta_14catm)
+    deallocate(abiotic%zt)
     deallocate(abiotic%f_alk)
     deallocate(abiotic%f_htotal)
     deallocate(abiotic%f_htotal14c)
