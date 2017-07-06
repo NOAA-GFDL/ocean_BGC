@@ -39,6 +39,8 @@ module generic_tracer
   use time_manager_mod, only : time_type
   use coupler_types_mod, only : coupler_2d_bc_type
 
+  use FMS_ocmip2_co2calc_mod, only : read_mocsy_namelist
+
   use g_tracer_utils, only : g_tracer_type, g_tracer_init, g_diag_type
   use g_tracer_utils, only : g_tracer_get_common, g_tracer_set_common, g_tracer_is_prog
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get, g_tracer_register_diag
@@ -154,6 +156,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     write (stdoutunit,'(/)')
     write (stdoutunit, generic_tracer_nml)
     write (stdlogunit, generic_tracer_nml)
+
+    call read_mocsy_namelist()
 
     if(do_generic_abiotic) &
          call generic_abiotic_register(tracer_list)
