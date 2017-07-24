@@ -42,7 +42,7 @@ module FMS_ocmip2_co2calc_mod  !{
 use fm_util_mod, only: fm_util_start_namelist, fm_util_end_namelist
 use fms_mod,     only: open_namelist_file, check_nml_error, close_file
 use mpp_mod,     only: input_nml_file, mpp_error, stdout, stdlog, WARNING, FATAL
-use mvars, only: vars
+use mocsy_vars,  only: vars
 
 implicit none
 
