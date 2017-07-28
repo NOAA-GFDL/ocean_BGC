@@ -40,7 +40,7 @@ module FMS_ocmip2_co2calc_mod  !{
 !
 
 use mpp_mod, only: mpp_error, WARNING, FATAL
-use mvars, only: vars
+use mocsy_vars, only: vars
 
 implicit none
 
