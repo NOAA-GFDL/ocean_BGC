@@ -229,7 +229,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
 
   type generic_BLING_type
 
-     logical  ::       &
+     logical  ::            &
           init,             &                  ! If tracers should be initializated
           force_update_fluxes,&                ! If OCMIP2 tracers fluxes should be updated every coupling timesteps
                                                !    when update_from_source is not called every coupling timesteps
@@ -237,7 +237,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           prevent_neg_o2,   &
           tracer_debug
 
-     real  ::          &
+     real  ::               &
           alpha_max,        &                  ! Quantum yield under low light, Fe-replete
           alpha_min,        &                  ! Quantum yield under low light, Fe-limited
           c_2_p,            &                  ! Carbon to Phosphorus ratio
@@ -245,6 +245,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           ca_remin_depth,   &                  ! CaCO3 dissolution length scale (subject to omega)
           chl_min,          &                  ! Minimum chl concentration allowed (for numerical stability)
           def_fe_min,       &                  ! Minimum value for iron deficiency term
+          doc_background,   &                  ! Background refractory DOC concentration (mol m-3)
           fast_gasex,       &                  ! Gas exchange rate multiplier for DIC_sat
           fe_2_p_max,       &                  ! Iron to Phosphate uptake ratio scaling
           fe_2_p_sed,       &                  ! Iron to Phosphorus ratio in sediments
@@ -294,7 +295,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           wsink0,           &                  ! Sinking rate at surface
           wsink0_z,         &                  ! Depth to which sinking rate remains constant
           z_burial,         &                  ! Depth scale of shelf scouring preventing organic burial
-          z_bact,          &                  ! Depth scale of colonization of bacteria for remineralization of sinking material
+          z_bact,           &                  ! Depth scale of colonization of bacteria for remineralization of sinking material
           z_sed,            &                  ! Thickness of active sediment layer
           inv_z_min                            ! Maximum remineralization length scale
 
@@ -399,6 +400,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
 
      real, dimension(:,:), ALLOCATABLE :: &
           biomass_p_100,&
+          cased_top,&
           fe_burial,&
           ffe_sed,&
           frac_lg,&
@@ -408,7 +410,25 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           intpp,&
           b_fed,&
           b_o2,&
-          b_po4
+          b_po4,&
+          f_alk_int_100, &
+          f_dic_int_100, &
+          f_fed_int_100, &
+          f_po4_int_100, &
+          jalk_100, &
+          jdic_100, &
+          jfed_100, &
+          jpo4_100, &
+          jp_uptake_100, &
+          jfe_uptake_100, &
+          jca_uptake_100, &
+          fpop_100,&
+          fpofe_100,&
+          fcaco3_100,&
+          wc_vert_int_c,&
+          wc_vert_int_dic,&
+          wc_vert_int_doc
+!==============================================================================================================
 
      real, dimension(:,:), ALLOCATABLE :: &
           b_po4_n,&
@@ -457,13 +477,27 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           p_dic,&
           p_dic_pre,&
           p_do14c
-     
+ 
+      real, dimension (:,:), ALLOCATABLE :: &
+          runoff_flux_alk,&
+          runoff_flux_dic,&
+          runoff_flux_di14c,&
+          runoff_flux_fed,&
+          runoff_flux_po4,&
+          runoff_flux_dop,&
+          dry_fed, wet_fed,&
+          dry_po4, wet_po4, &
+          stf_gas_dic,&
+          stf_gas_o2,&
+          deltap_dic,&
+          deltap_o2
+    
      integer :: nkml
      character(len=fm_string_len) :: file
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
 
-     integer                   :: &
+     integer               :: &
       id_alpha         = -1,  & ! Iron-limited initial slope of P-I curve 
       id_b_alk         = -1,  & ! Bottom flux of alkalinity
       id_b_dic         = -1,  & ! Bottom flux of DIC
@@ -480,6 +514,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
       id_c14_2_p       = -1,  & ! DI14C to PO4 uptake ratio
       id_c14o2_csurf   = -1,  & ! Surface water 14CO2*
       id_c14o2_alpha   = -1,  & ! Surface water 14CO2* solubility 
+      id_cased_top     = -1,  & ! Active sediment CaCO3 concentration Diagnostic tracer top layer value
       id_co2_csurf     = -1,  & ! Surface water CO2*
       id_co2_alpha     = -1,  & ! Surface water CO2* solubility
       id_co2_sat_csurf = -1,  & ! Surface water CO2* for DIC_sat
@@ -505,7 +540,6 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
       id_frac_lg       = -1,  & ! Fraction of production by large phytoplankton
       id_frac_pop      = -1,  & ! Fraction of uptake converted to particulate
       id_hblt_depth    = -1,  & ! Depth of actively mixing layer
-      id_intpp         = -1,  & ! Integrated Primary Production in upper 100 m
       id_intjalk       = -1,  & ! Integrated Biological Tendency for Alk in upper 100 m
       id_intjdic       = -1,  & ! Integrated Biological Tendency for DIC in upper 100 m
       id_intjpo4       = -1,  & ! Integrated Biological Tendency for PO4 in upper 100 m
@@ -547,8 +581,8 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
       id_theta         = -1,  & ! Chl:C ratio
       id_thetamax_fe   = -1,  & ! Iron-limited maximum Chl:C ratio
       id_wsink         = -1,  & ! Sinking rate
-      id_inv_zremin        = -1,  & ! Remineralization length scale
-      id_inv_zremin_caco3  = -1,  & ! CaCO3 remineralization length scale
+      id_inv_zremin    = -1,  & ! Remineralization length scale
+      id_inv_zremin_caco3= -1,  & ! CaCO3 remineralization length scale
       id_omega_calc    = -1,  & ! CaCO3 saturation state
       id_alk           = -1,  & ! Alkalinity Prognostic tracer
       id_alk_pre       = -1,  & ! Preformed Alkalinity Prognostic tracer
@@ -559,9 +593,9 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
       id_do14c         = -1,  & ! Semi-labile DO radiocarbon Prognostic tracer
       id_dop           = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
       id_dop_n         = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
-      id_dop_nx         = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
+      id_dop_nx        = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
       id_dop_s         = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
-      id_dop_sx         = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
+      id_dop_sx        = -1,  & ! Semi-labile dissolved organic P Prognostic tracer
       id_fed           = -1,  & ! Dissolved Iron Prognostic tracer
       id_o2            = -1,  & ! Oxygen Prognostic tracer
       id_po4           = -1,  & ! Phosphate Prognostic tracer
@@ -578,7 +612,108 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
       id_cased         = -1,  & ! Active sediment CaCO3 concentration Diagnostic tracer
       id_chl           = -1,  & ! Chlorophyll Diagnostic tracer
       id_biomass_p     = -1,  & ! Biomass Diagnostic tracer
-      id_irr_mem       = -1     ! Irradiance Memory Diagnostic tracer
+      id_irr_mem       = -1,  & ! Irradiance Memory Diagnostic tracer
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem 
+          id_dissic         = -1, & 
+          id_dissi14cabio   = -1, & 
+          id_dissoc         = -1, &
+          id_phyc           = -1, &
+          id_zooc           = -1, &
+          id_detoc          = -1, &
+          id_talk           = -1, &
+          id_ph             = -1, &
+          id_o2_cmip        = -1, &
+          id_o2sat          = -1, &
+          id_po4_cmip       = -1, &
+          id_dfe            = -1, &
+          id_chl_cmip       = -1, &
+          id_phyp           = -1, &
+          id_co3            = -1, &
+          id_co3satcalc     = -1, &
+          id_pp             = -1, &
+          id_remoc          = -1, &
+          id_pphosphate     = -1, &
+          id_pbfe           = -1, &
+          id_pcalc          = -1, &
+          id_expc           = -1, &
+          id_expp           = -1, &
+          id_expfe          = -1, &
+          id_expcalc        = -1, &
+          id_dcalc          = -1, &
+          id_bddtdic        = -1, &
+          id_bddtdip        = -1, &
+          id_bddtdife       = -1, &
+          id_bddtalk        = -1, &
+          id_fescav         = -1, &
+          id_fediss         = -1, &
+          id_graz           = -1, &
+          id_sfc_dissic     = -1, & 
+          id_sfc_dissi14cabio= -1, & 
+          id_sfc_dissoc     = -1, &
+          id_sfc_phyc       = -1, &
+          id_sfc_zooc       = -1, &
+          id_sfc_talk       = -1, &
+          id_sfc_ph         = -1, &
+          id_sfc_o2_cmip    = -1, &
+          id_sfc_o2sat      = -1, &
+          id_sfc_po4_cmip   = -1, &
+          id_sfc_dfe        = -1, &
+          id_sfc_chl_cmip   = -1, &
+          id_sfc_phyp       = -1, &
+          id_sfc_co3        = -1, &
+          id_sfc_co3satcalc = -1, &
+          id_intpp          = -1, &
+          id_intpbp         = -1, &
+          id_intpbfe        = -1, &
+          id_intpcalcite    = -1, &
+          id_expc100        = -1, &
+          id_expp100        = -1, &
+          id_expfe100       = -1, &
+          id_expcalc100     = -1, &
+          id_intdissic      = -1, &
+          id_intdissoc      = -1, &
+          id_spco2          = -1, &
+          id_dpco2          = -1, &
+          id_dpo2           = -1, &
+          id_fgco2          = -1, &
+          id_fgo2           = -1, &
+          id_fgco2abio      = -1, &
+          id_fg14co2abio    = -1, &
+          id_icfriver       = -1, &
+          id_fric           = -1, &
+          id_ocfriver       = -1, &
+          id_froc           = -1, &
+          id_fsfe           = -1, &
+          id_frfe           = -1, &
+          id_fddtdic        = -1, &
+          id_fddtdip        = -1, &
+          id_fddtdife       = -1, &
+          id_fddtalk        = -1, &
+          id_fbddtdic       = -1, &
+          id_fbddtdip       = -1, &
+          id_fbddtdife      = -1, &
+          id_fbddtalk       = -1, &
+          id_chlos          = -1, &
+          id_phycos         = -1, &
+          id_f_alk_int_100  = -1, &
+          id_f_dic_int_100  = -1, &
+          id_f_fed_int_100  = -1, &
+          id_f_po4_int_100  = -1, &
+          id_jalk_100       = -1, &
+          id_jdic_100       = -1, &
+          id_jfed_100       = -1, &
+          id_jpo4_100       = -1, &
+          id_jp_uptake_100  = -1, &
+          id_jfe_uptake_100 = -1, &
+          id_jca_uptake_100 = -1, &
+          id_fpop_100       = -1, &
+          id_fpofe_100      = -1, &
+          id_fcaco3_100     = -1, &
+          id_wc_vert_int_c  = -1, &
+          id_wc_vert_int_dic= -1, &
+          id_wc_vert_int_doc= -1
+
 
   end type generic_BLING_type
 
@@ -647,7 +782,7 @@ write (stdlogunit, generic_bling_nml)
   else if (trim(co2_calc) == 'mocsy') then
     write (stdoutunit,*) trim(note_header), 'Using Mocsy CO2 routine'
   else
-    call mpp_error(FATAL,"Unknown co2_calc option specified in generic_COBALT_nml")
+    call mpp_error(FATAL,"Unknown co2_calc option specified in generic_BLING_nml")
   endif
 
   if ((do_14c) .and. (do_carbon)) then
@@ -780,6 +915,10 @@ write (stdlogunit, generic_bling_nml)
     bling%id_biomass_p_ts = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
     vardesc_temp = vardesc&
+    ("cased_top","Sediment Calcite in top 10 cm layer",'h','L','s','mol m-3','f')
+    bling%id_cased_top = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc&
     ("def_Fe","Iron deficiency term",'h','L','s','unitless','f')
     bling%id_def_fe = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -822,10 +961,6 @@ write (stdlogunit, generic_bling_nml)
     vardesc_temp = vardesc&
     ("hblt_depth","Depth of actively mixing layer",'h','L','s','m','f')
     bling%id_hblt_depth = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    vardesc_temp = vardesc&
-    ("intpp","Vertically Integrated Primary production in the upper 100 m",'h','L','s','mol C m-2 s-1','f')
-    bling%id_intpp = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
     vardesc_temp = vardesc&
     ("intjdop","Vertically Integrated Biological Tendency for DOP in the upper 100 m",'h','L','s','mol P m-2 s-1','f')
@@ -1068,6 +1203,594 @@ write (stdlogunit, generic_bling_nml)
 
     endif                                                    !CARBON CYCLE>>
 
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem Oyr/Omon/day: Marine Biogeochemical Fields
+
+    vardesc_temp = vardesc("dissic_raw","Total Dissolved Inorganic Carbon",'h','L','s','mol m-3','f')
+    bling%id_dissic = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dissic", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water",  &
+         cmor_long_name="Dissolved Inorganic Carbon Concentration")
+
+    vardesc_temp = vardesc("dissi14cabio_raw","Total Natural Dissolved Inorganic Carbon",'h','L','s','mol m-3','f')
+    bling%id_dissi14cabio = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dissi14cabio", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_14carbon_in_sea_water_abiotic_component", &
+         cmor_long_name="Abiotic Dissolved Inorganic 14Carbon Concentration")
+
+    vardesc_temp = vardesc("dissoc_raw","Total Dissolved Organic Carbon",'h','L','s','mol m-3','f')
+    bling%id_dissoc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dissoc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_organic_carbon_in_sea_water",  &
+         cmor_long_name="Dissolved Organic Carbon Concentration")
+
+    vardesc_temp = vardesc("phyc_raw","Phytoplankton Carbon Concentration",'h','L','s','mol m-3','f')
+    bling%id_phyc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="phyc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Phytoplankton Carbon Concentration")
+
+    vardesc_temp = vardesc("zooc_raw","Zooplankton Carbon Concentration",'h','L','s','mol m-3','f')
+    bling%id_zooc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="zooc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_zooplankton_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Zooplankton Carbon Concentration")
+
+    vardesc_temp = vardesc("talk_raw","Total Alkalinity",'h','L','s','mol m-3','f')
+    bling%id_talk = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="talk", cmor_units="mol m-3",                          &
+         cmor_standard_name="seawater_alkalinity_expressed_as_mole_equivalent", &
+         cmor_long_name="Total Alkalinity")
+
+    vardesc_temp = vardesc("ph_raw","pH",'h','L','s','1','f')
+    bling%id_ph = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="ph", cmor_units="1",                          &
+         cmor_standard_name="seawater_ph_reported_on_total_scale", &
+         cmor_long_name="pH")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("o2_raw","Dissolved Oxygen Concentration",'h','L','s','mol m-3','f')
+    bling%id_o2_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="o2_cmip", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water", &
+         cmor_long_name="Dissolved Oxygen Concentration")
+
+    vardesc_temp = vardesc("o2sat_raw","Dissolved Oxygen Concentration at Saturation",'h','L','s','mol m-3','f')
+    bling%id_o2sat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="o2sat", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water_at_saturation", &
+         cmor_long_name="Dissolved Oxygen Concentration at Saturation")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("po4_raw","Dissolved Phosphate Concentration",'h','L','s','mol m-3','f')
+    bling%id_po4_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="po4_cmip", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phosphate_in_sea_water", &
+         cmor_long_name="Dissolved Phosphate Concentration")
+
+    vardesc_temp = vardesc("dfe_raw","Dissolved Iron Concentration",'h','L','s','mol m-3','f')
+    bling%id_dfe = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dfe", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_iron_in_sea_water", &
+         cmor_long_name="Dissolved Iron Concentration")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("chl_raw","Total Chlorophyll Mass Concentration",'h','L','s','kg m-3','f')
+    bling%id_chl_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="chl_cmip", cmor_units="kg m-3",                          &
+         cmor_standard_name="mass_concentration_of_phytoplankton_expressed_as_chlorophyll_in_sea_water", &
+         cmor_long_name="Total Chlorophyll Mass Concentration")
+
+    vardesc_temp = vardesc("phyp_raw","Phytoplankton Phosphorus Concentration",'h','L','s','mol m-3','f')
+    bling%id_phyp = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="phyp", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_phosphorus_in_sea_water", &
+         cmor_long_name="Phytoplankton Phosphorus Concentration")
+
+! Per JPD, use Omon long_name and standard_name
+    vardesc_temp = vardesc("co3_raw","Carbonate Ion Concentration",'h','L','s','mol m-3','f')
+    bling%id_co3 = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="co3", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater", &
+         cmor_long_name="Mole Concentration of Carbonate ion in Seawater")
+
+! Per JPD, use Omon long_name and standard_name
+    vardesc_temp = vardesc("co3satcalc_raw","Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite",'h','L','s','mol m-3','f')
+    bling%id_co3satcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="co3satcalc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_for_seawater_in equilibrium_with_pure_calcite", &
+         cmor_long_name="Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite")
+
+!------------------------------------------------------------------------------------------------------------------
+! 3-D rates
+! CHECK: all GFDL and CMOR units
+
+    vardesc_temp = vardesc("pp_raw","Primary Carbon Production by Phytoplankton",'h','L','s','mol m-3 s-1','f')
+    bling%id_pp = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="pp", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_particulate_organic_matter_expressed_as_carbon_in_sea_water_due_to_net_primary_production", &
+         cmor_long_name="Primary Carbon Production by Phytoplankton")
+
+! Not requested
+!    vardesc_temp = vardesc("pphosphate_raw","Primary Carbon Production by Phytoplankton due to Phosphorus",'h','L','s','mol m-3 s-1','f')
+!    bling%id_pphosphate = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+!         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+!         cmor_field_name="pphosphate", cmor_units="mol m-3 s-1",                          &
+!         cmor_standard_name="tendency_of_mole_concentration_of_particulate_organic_matter_expressed_as_carbon_in_sea_water_due_to_phosphorus", &
+!         cmor_long_name="Primary Carbon Production by Phytoplankton due to Phosphorus")
+
+    vardesc_temp = vardesc("pbfe_raw","Biogenic Iron Production",'h','L','s','mol m-3 s-1','f')
+    bling%id_pbfe = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="pbfe", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_iron_in_sea_water_due_to_biological_production", &
+         cmor_long_name="Biogenic Iron Production")
+
+    vardesc_temp = vardesc("pcalc_raw","Calcite Production",'h','L','s','mol m-3 s-1','f')
+    bling%id_pcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="pcalc", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_calcite_expressed_as_carbon_in_sea_water_due_to_biological_production", &
+         cmor_long_name="Calcite Production")
+
+    vardesc_temp = vardesc("expc_raw","Sinking Particulate Organic Carbon Flux",'h','L','s','mol m-2 s-1','f')
+    bling%id_expc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expc", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_particulate_organic_matter_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Sinking Particulate Organic Carbon Flux")
+
+    vardesc_temp = vardesc("expp_raw","Sinking Particulate Organic Phosphorus Flux",'h','L','s','mol m-2 s-1','f')
+    bling%id_expp = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expp", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_particulate_organic_phosphorus_in_sea_water", &
+         cmor_long_name="Sinking Particulate Organic Phosphorus Flux")
+
+    vardesc_temp = vardesc("expfe_raw","Sinking Particulate Iron Flux",'h','L','s','mol m-2 s-1','f')
+    bling%id_expfe = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expfe", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_particulate_iron_in_sea_water", &
+         cmor_long_name="Sinking Particulate Iron Flux")
+
+    vardesc_temp = vardesc("expcalc_raw","Sinking Calcite Flux",'h','L','s','mol m-2 s-1','f')
+    bling%id_expcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expcalc", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_calcite_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Sinking Calcite Flux")
+
+    vardesc_temp = vardesc("remoc_raw","Remineralization of Organic Carbon",'h','L','s','mol m-3 s-1','f')
+    bling%id_remoc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="remoc", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_organic matter_expressed_as_carbon_in_sea_water_due_to_remineralization", &
+         cmor_long_name="Remineralization of Organic Carbon")
+
+    vardesc_temp = vardesc("dcalc_raw","Calcite Dissolution",'h','L','s','mol m-3 s-1','f')
+    bling%id_dcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dcalc", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_calcite_expressed_as_carbon_in_sea_water_due_to_dissolution", &
+         cmor_long_name="Calcite Dissolution")
+
+    vardesc_temp = vardesc("bddtdic_raw","Rate of Change of Dissolved Inorganic Carbon due to Biological Activity",'h','L','s','mol m-3 s-1','f')
+    bling%id_bddtdic = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="bddtdic", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_carbon_in_sea_water_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Inorganic Carbon due to Biological Activity")
+
+    vardesc_temp = vardesc("bddtdip_raw","Rate of Change of Dissolved Phosphate due to Biological Activity",'h','L','s','mol m-3 s-1','f')
+    bling%id_bddtdip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="bddtdip", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_phosphate_in_sea_water_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Phosphate due to Biological Activity")
+
+    vardesc_temp = vardesc("bddtdife_raw","Rate of Change of Dissolved Inorganic Iron due to Biological Activity",'h','L','s','mol m-3 s-1','f')
+    bling%id_bddtdife = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="bddtdife", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_iron_in_sea_water_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Inorganic Iron due to Biological Activity")
+
+    vardesc_temp = vardesc("bddtalk_raw","Rate of Change of Alkalinity due to Biological Activity",'h','L','s','mol m-3 s-1','f')
+    bling%id_bddtalk = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="bddtalk", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_sea_water_alkalinity_expressed_as_mole_equivalent_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Alkalinity due to Biological Activity")
+
+    vardesc_temp = vardesc("fescav_raw","Nonbiogenic Iron Scavenging",'h','L','s','mol m-3 s-1','f')
+    bling%id_fescav = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fescav", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_iron_in_sea_water_due_to_scavenging_by_inorganic_particles", &
+         cmor_long_name="Nonbiogenic Iron Scavenging")
+
+    vardesc_temp = vardesc("fediss_raw","Particle Source of Dissolved Iron",'h','L','s','mol m-3 s-1','f')
+    bling%id_fediss = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fediss", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_iron_in_sea_water_due_to_dissolution_from_inorganic_particles", &
+         cmor_long_name="Particle Source of Dissolved Iron")
+
+    vardesc_temp = vardesc("graz_raw","Total Grazing of Phytoplankton by Zooplankton",'h','L','s','mol m-3 s-1','f')
+    bling%id_graz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="graz", cmor_units="mol m-3 s-1",                          &
+         cmor_standard_name="tendency_of_mole_concentration_of_organic_matter_expressed_as_carbon_in_sea_water_due_to_grazing_of_phytoplankton", &
+         cmor_long_name="Total Grazing of Phytoplankton by Zooplankton")
+
+!------------------------------------------------------------------------------------------------------------------
+! 2-D fields
+! sfc tracers
+
+    vardesc_temp = vardesc("sfc_dissic_raw","Total Dissolved Inorganic Carbon at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_dissic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_dissic", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water",  &
+         cmor_long_name="Dissolved Inorganic Carbon Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_dissi14cabio_raw","Total Natural Dissolved Inorganic Carbon at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_dissi14cabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_dissi14cabio", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_14carbon_in_sea_water_abiotic_component", &
+         cmor_long_name="Abiotic Dissolved Inorganic 14Carbon Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_dissoc_raw","Total Dissolved Organic Carbon at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_dissoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_dissoc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_organic_carbon_in_sea_water",  &
+         cmor_long_name="Dissolved Organic Carbon Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_phyc_raw","Phytoplankton Carbon Concentration at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_phyc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_phyc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Phytoplankton Carbon Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_talk_raw","Total Alkalinity at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_talk = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_talk", cmor_units="mol m-3",                          &
+         cmor_standard_name="seawater_alkalinity_expressed_as_mole_equivalent", &
+         cmor_long_name="Total Alkalinity at surface")
+
+    vardesc_temp = vardesc("sfc_ph_raw","pH at surface",'h','1','s','1','f')
+    bling%id_sfc_ph = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_ph", cmor_units="1",                          &
+         cmor_standard_name="seawater_ph_reported_on_total_scale", &
+         cmor_long_name="pH at surface")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("sfc_o2_raw","Dissolved Oxygen Concentration at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_o2_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_o2_cmip", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water", &
+         cmor_long_name="Dissolved Oxygen Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_o2sat_raw","Dissolved Oxygen Concentration at Saturation at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_o2sat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_o2sat", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water_at_saturation", &
+         cmor_long_name="Dissolved Oxygen Concentration at Saturation at surface")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("sfc_po4_raw","Dissolved Phosphate Concentration at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_po4_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_po4_cmip", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phosphate_in_sea_water", &
+         cmor_long_name="Dissolved Phosphate Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_dfe_raw","Dissolved Iron Concentration at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_dfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_dfe", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_iron_in_sea_water", &
+         cmor_long_name="Dissolved Iron Concentration at surface")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("sfc_chl_raw","Total Chlorophyll Mass Concentration at surface",'h','1','s','kg m-3','f')
+    bling%id_sfc_chl_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_chl_cmip", cmor_units="kg m-3",                          &
+         cmor_standard_name="mass_concentration_of_phytoplankton_expressed_as_chlorophyll_in_sea_water", &
+         cmor_long_name="Total Chlorophyll Mass Concentration at surface")
+
+    vardesc_temp = vardesc("sfc_phyp_raw","Phytoplankton Phosphorus Concentration at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_phyp = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_phyp", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_phosphorus_in_sea_water", &
+         cmor_long_name="Phytoplankton Phosphorus Concentration at surface")
+
+! Per JPD, use Omon long_name and standard_name
+    vardesc_temp = vardesc("sfc_co3_raw","Carbonate Ion Concentration at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_co3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_co3", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater", &
+         cmor_long_name="Mole Concentration of Carbonate ion in Seawater at surface")
+
+! Per JPD, use Omon long_name and standard_name
+    vardesc_temp = vardesc("sfc_co3satcalc_raw",                                              &
+    "Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite at surface",'h','1','s','mol m-3','f')
+    bling%id_sfc_co3satcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="sfc_co3satcalc", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_for_seawater_in equilibrium_with_pure_calcite", &
+         cmor_long_name="Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite at surface")
+
+!------------------------------------------------------------------------------------------------------------------
+! 2-D fields (from Omon)
+
+    vardesc_temp = vardesc("intpp_raw","Primary Organic Carbon Production by All Types of Phytoplankton",'h','1','s','mol m-2 s-1','f')
+    bling%id_intpp = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="intpp", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="net_primary_mole_productivity_of_carbon_by_phytoplankton", &
+         cmor_long_name="Primary Organic Carbon Production by All Types of Phytoplankton")
+
+    vardesc_temp = vardesc("intpbp_raw","Phosphorus Production",'h','1','s','mol m-2 s-1','f')
+    bling%id_intpbp = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="intpbp", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_phosphorus_due_to_biological_production", &
+         cmor_long_name="Phosphorus Production")
+
+    vardesc_temp = vardesc("intpbfe_raw","Iron Production",'h','1','s','mol m-2 s-1','f')
+    bling%id_intpbfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="intpbfe", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_iron_due_to_biological_production", &
+         cmor_long_name="Iron Production")
+
+    vardesc_temp = vardesc("intpcalcite_raw","Calcite Production",'h','1','s','mol m-2 s-1','f')
+    bling%id_intpcalcite = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="intpcalcite", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_calcite_expressed_as_carbon_due_to_biological_production", &
+         cmor_long_name="Calcite Production")
+
+! CHECK: these should be AT 100m 
+    vardesc_temp = vardesc("expc100_raw","Downward Flux of Particle Organic Carbon",'h','1','s','mol m-2 s-1','f')
+    bling%id_expc100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expc100", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_particulate_organic_matter_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Downward Flux of Particle Organic Carbon")
+
+    vardesc_temp = vardesc("expp100_raw","Downward Flux of Particulate Phosphorus",'h','1','s','mol m-2 s-1','f')
+    bling%id_expp100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expp100", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_particulate_phosphorus_in_sea_water", &
+         cmor_long_name="Downward Flux of Particulate Phosphorus")
+
+    vardesc_temp = vardesc("expfe100_raw","Downward Flux of Particulate Iron",'h','1','s','mol m-2 s-1','f')
+    bling%id_expfe100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expfe100", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_particulate_iron_in_sea_water", &
+         cmor_long_name="Downward Flux of Particulate Iron")
+
+    vardesc_temp = vardesc("expcalc100_raw","Downward Flux of Calcite",'h','1','s','mol m-2 s-1','f')
+    bling%id_expcalc100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="expcalc100", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="sinking_mole_flux_of_calcite_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Downward Flux of Calcite")
+
+! vertically integrated
+! CAS: note that these are intdic, intdoc and intpoc in spreadsheet, change?
+    vardesc_temp = vardesc("intdissic_raw","Dissolved Inorganic Carbon Content",'h','1','s','kg m-2','f')
+    bling%id_intdissic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="intdissic", cmor_units="kg m-2",                          &
+         cmor_standard_name="ocean_mass_content_of_dissolved_inorganic_carbon", &
+         cmor_long_name="Dissolved Inorganic Carbon Content")
+
+    vardesc_temp = vardesc("intdissoc_raw","Dissolved Organic Carbon Content",'h','1','s','kg m-2','f')
+    bling%id_intdissoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="intdissoc", cmor_units="kg m-2",                          &
+         cmor_standard_name="ocean_mass_content_of_dissolved_organic_carbon", &
+         cmor_long_name="Dissolved Organic Carbon Content")
+
+    vardesc_temp = vardesc("spco2_raw","Surface Aqueous Partial Pressure of CO2",'h','1','s','Pa','f')
+    bling%id_spco2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="spco2", cmor_units="Pa",                          &
+         cmor_standard_name="surface_partial_pressure_of_carbon_dioxide_in_sea_water", &
+         cmor_long_name="Surface Aqueous Partial Pressure of CO2")
+
+    vardesc_temp = vardesc("dpco2_raw","Delta PCO2",'h','1','s','Pa','f')
+    bling%id_dpco2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dpco2", cmor_units="Pa",                          &
+         cmor_standard_name="surface_carbon_dioxide_partial_pressure_difference_between_sea_water_and_air", &
+         cmor_long_name="Delta PCO2")
+
+    vardesc_temp = vardesc("dpo2_raw","Delta PO2",'h','1','s','Pa','f')
+    bling%id_dpo2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="dpo2", cmor_units="Pa",                          &
+         cmor_standard_name="surface_molecular_oxygen_partial_pressure_difference_between_sea_water_and_air", &
+         cmor_long_name="Delta PO2")
+
+    vardesc_temp = vardesc("fgco2_raw","Surface Downward CO2 Flux",'h','1','s','kg m-2 s-1','f')
+    bling%id_fgco2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fgco2", cmor_units="kg m-2 s-1",                          &
+         cmor_standard_name="surface_downward_mass_flux_of_carbon_dioxide_expressed_as_carbon", &
+         cmor_long_name="Surface Downward CO2 Flux")
+
+    vardesc_temp = vardesc("fgco2abio_raw","Surface Downward abiotic CO2 Flux",'h','1','s','kg m-2 s-1','f')
+    bling%id_fgco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fgco2abio", cmor_units="kg m-2 s-1",                          &
+         cmor_standard_name="surface_downward_mass_flux_of_abiotic_carbon_dioxide_expressed_as_carbon", &
+         cmor_long_name="Surface Downward abiotic CO2 Flux")
+
+    vardesc_temp = vardesc("fg14co2abio_raw","Surface Downward abiotic 14CO2 Flux",'h','1','s','kg m-2 s-1','f')
+    bling%id_fg14co2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fg14co2abio", cmor_units="kg m-2 s-1",                          &
+         cmor_standard_name="surface_downward_mass_flux_of_abiotic_14_carbon_dioxide_expressed_as_carbon", &
+         cmor_long_name="Surface Downward abiotic 14CO2 Flux")
+
+    vardesc_temp = vardesc("fgo2_raw","Surface Downward O2 Flux",'h','1','s','mol m-2 s-1','f')
+    bling%id_fgo2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fgo2", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="surface_downward_mole_flux_of_molecular_oxygen", &
+         cmor_long_name="Surface Downward O2 Flux")
+
+    vardesc_temp = vardesc("icfriver_raw","Flux of Inorganic Carbon Into Ocean Surface by Runoff",'h','1','s','mol m-2 s-1','f')
+    bling%id_icfriver = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="icfriver", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_inorganic_carbon_due_to_runoff_and_sediment_dissolution", &
+         cmor_long_name="Flux of Inorganic Carbon Into Ocean Surface by Runoff")
+
+    vardesc_temp = vardesc("fric_raw","Downward Inorganic Carbon Flux at Ocean Bottom",'h','1','s','mol m-2 s-1','f')
+    bling%id_fric = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fric", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_inorganic_carbon_due_to_sedimentation", &
+         cmor_long_name="Downward Inorganic Carbon Flux at Ocean Bottom")
+
+    vardesc_temp = vardesc("ocfriver_raw","Flux of Organic Carbon Into Ocean Surface by Runoff",'h','1','s','mol m-2 s-1','f')
+    bling%id_ocfriver = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="ocfriver", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_organic_carbon_due_to_runoff_and_sediment_dissolution", &
+         cmor_long_name="Flux of Organic Carbon Into Ocean Surface by Runoff")
+
+    vardesc_temp = vardesc("froc_raw","Downward Organic Carbon Flux at Ocean Bottom",'h','1','s','mol m-2 s-1','f')
+    bling%id_froc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="froc", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_organic_carbon_due_to_sedimentation", &
+         cmor_long_name="Downward Organic Carbon Flux at Ocean Bottom")
+
+    vardesc_temp = vardesc("fsfe_raw","Surface Downward Net Flux of Iron",'h','1','s','mol m-2 s-1','f')
+    bling%id_fsfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fsfe", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_iron_due_to_deposition_and_runoff_and_sediment_dissolution", &
+         cmor_long_name="Surface Downward Net Flux of Iron")
+
+    vardesc_temp = vardesc("frfe_raw","Iron Loss to Sediments",'h','1','s','mol m-2 s-1','f')
+    bling%id_frfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="frfe", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_iron_due_to_sedimentation", &
+         cmor_long_name="Iron Loss to Sediments")
+
+    vardesc_temp = vardesc("fddtdic_raw","Rate of Change of Net Dissolved Inorganic Carbon",'h','1','s','mol m-2 s-1','f')
+    bling%id_fddtdic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fddtdic", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_carbon", &
+         cmor_long_name="Rate of Change of Net Dissolved Inorganic Carbon")
+
+    vardesc_temp = vardesc("fddtdip_raw","Rate of Change of Net Dissolved Inorganic Phosphate",'h','1','s','mol m-2 s-1','f')
+    bling%id_fddtdip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fddtdip", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_phosphorus", &
+         cmor_long_name="Rate of Change of Net Dissolved Inorganic Phosphate")
+
+    vardesc_temp = vardesc("fddtdife_raw","Rate of Change of Net Dissolved Inorganic Iron",'h','1','s','mol m-2 s-1','f')
+    bling%id_fddtdife = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fddtdife", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_iron", &
+         cmor_long_name="Rate of Change of Net Dissolved Inorganic Iron")
+
+    vardesc_temp = vardesc("fddtalk_raw","Rate of Change of Alkalinity",'h','1','s','mol m-2 s-1','f')
+    bling%id_fddtalk = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fddtalk", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="integral_wrt_depth_of_tendency_of_sea_water_alkalinity_expressed_as_mole_equivalent", &
+         cmor_long_name="Rate of Change of Alkalinity")
+
+    vardesc_temp = vardesc("fbddtdic_raw","Rate of Change of Dissolved Inorganic Carbon due to Biological Activity",'h','1','s','mol m-2 s-1','f')
+    bling%id_fbddtdic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fbddtdic", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_carbon_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Inorganic Carbon due to Biological Activity")
+
+    vardesc_temp = vardesc("fbddtdip_raw","Rate of Change of Dissolved Inorganic Phosphate due to Biological Activity",'h','1','s','mol m-2 s-1','f')
+    bling%id_fbddtdip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fbddtdip", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_phosphorus_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Inorganic Phosphate due to Biological Activity")
+
+    vardesc_temp = vardesc("fbddtdife_raw","Rate of Change of Dissolved Inorganic Iron due to Biological Activity",'h','1','s','mol m-2 s-1','f')
+    bling%id_fbddtdife = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fbddtdife", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_iron_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Inorganic Iron due to Biological Activity")
+
+    vardesc_temp = vardesc("fbddtalk_raw","Rate of Change of Biological Alkalinity due to Biological Activity",'h','1','s','mol m-2 s-1','f')
+    bling%id_fbddtalk = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="fbddtalk", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="integral_wrt_depth_of_tendency_of_sea_water_alkalinity_expressed_as_mole_equivalent_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Biological Alkalinity due to Biological Activity")
+
+!------------------------------------------------------------------------------------------------------------------
+! 2-D fields (from day)  
+! CHECK: saved on model grid
+
+! calculated the same as sfc_chl
+    vardesc_temp = vardesc("chlos_raw","Sea Surface Total Chlorophyll Mass Concentration",'h','1','s','kg m-3','f')
+    bling%id_chlos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="chlos", cmor_units="kg m-3",                          &
+         cmor_standard_name="surface_mass_concentration_of_phytoplankton_expressed_as_chlorophyll_in_sea_water", &
+         cmor_long_name="Sea Surface Total Chlorophyll Mass Concentration")
+
+! calculated the same as sfc_phyc
+    vardesc_temp = vardesc("phycos_raw","Sea Surface Phytoplankton Carbon Concentration",'h','1','s','mol m-3','f')
+    bling%id_phycos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="phycos", cmor_units="mol m-3",                          &
+         cmor_standard_name="surface_mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Sea Surface Phytoplankton Carbon Concentration")
+
   end subroutine generic_BLING_register_diag
 
 !#######################################################################
@@ -1290,6 +2013,7 @@ write (stdlogunit, generic_bling_nml)
     ! 
     call g_tracer_add_param('phi_dop'  ,  bling%phi_dop, 0.04)                   ! dimensionless
     call g_tracer_add_param('gamma_dop',  bling%gamma_dop, 1.0 / (18.0 * spery)) ! s-1
+    call g_tracer_add_param('doc_background',  bling%doc_background, 3.8e-5)    ! mol m-3
     !
     !
     !-----------------------------------------------------------------------
@@ -1498,24 +2222,24 @@ write (stdlogunit, generic_bling_nml)
 
     !       Dissolved Fe 
     !
-    call g_tracer_add(tracer_list,package_name, &
-         name       = 'fed',                    &
-         longname   = 'Dissolved Iron',         & 
-         units      = 'mol/kg',                 &
-         prog       = .true.,                   &
-         flux_runoff    = .true.,               &
-         flux_wetdep    = .true.,               &
-         flux_drydep    = .true.,               &
-         flux_param     = (/ 55.847e-03 /),     &
+    call g_tracer_add(tracer_list,package_name,     &
+         name       = 'fed',                        &
+         longname   = 'Dissolved Iron',             & 
+         units      = 'mol/kg',                     &
+         prog       = .true.,                       &
+         flux_runoff    = .true.,                   &
+         flux_wetdep    = .true.,                   &
+         flux_drydep    = .true.,                   &
+         flux_param     = (/ 55.847e-03 /),         &
          flux_bottom    = .true. )
 
 
     !       DOP (Dissolved organic phosphorus)
     !
-    call g_tracer_add(tracer_list,package_name, &
-         name       = 'dop',                    &
-         longname   = 'DOP',                    &
-         units      = 'mol/kg',                 &
+    call g_tracer_add(tracer_list,package_name,     &
+         name       = 'dop',                        &
+         longname   = 'DOP',                        &
+         units      = 'mol/kg',                     &
          prog       = .true.)
 
     !
@@ -1534,7 +2258,7 @@ write (stdlogunit, generic_bling_nml)
          flux_gas       = .true.,                                   &
          flux_bottom    = .true.,                                   &
          flux_gas_name  = 'o2_flux',                                &
-         flux_gas_type  = 'air_sea_gas_flux',                       &
+         flux_gas_type  = 'air_sea_gas_flux_generic',               &
          flux_gas_molwt = WTMO2,                                    &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),               &
          flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc' )
@@ -1542,25 +2266,25 @@ write (stdlogunit, generic_bling_nml)
     !
     !       PO4
     !
-    call g_tracer_add(tracer_list,package_name,  &
-         name       = 'po4',                     &
-         longname   = 'Phosphate',               &
-         units      = 'mol/kg',                  &
-         prog       = .true.,                    &
-         flux_runoff    = .true.,                &
-         flux_wetdep    = .true.,                &
-         flux_drydep    = .true.,                &
-         flux_param     = (/ 94.9714e-03 /),     &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'po4',                         &
+         longname   = 'Phosphate',                   &
+         units      = 'mol/kg',                      &
+         prog       = .true.,                        &
+         flux_runoff    = .true.,                    &
+         flux_wetdep    = .true.,                    &
+         flux_drydep    = .true.,                    &
+         flux_param     = (/ 94.9714e-03 /),         &
          flux_bottom    = .true.     )
 
     if (do_po4_pre) then                                          !<<PO4_PRE
     !
     !       PO4_pre
     !
-    call g_tracer_add(tracer_list,package_name,  &
-         name       = 'po4_pre',                 &
-         longname   = 'Preformed phosphate',     &
-         units      = 'mol/kg',                  &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'po4_pre',                     &
+         longname   = 'Preformed phosphate',         &
+         units      = 'mol/kg',                      &
          prog       = .true.)
     endif                                                         !PO4_PRE>>
     
@@ -1568,27 +2292,27 @@ write (stdlogunit, generic_bling_nml)
     !Diagnostic Tracers
     !===========================================================
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'chl',                 &
-         longname   = 'Chlorophyll',           &
-         units      = 'ug kg-1',               &
-         prog       = .false.,                 &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'chl',                         &
+         longname   = 'Chlorophyll',                 &
+         units      = 'ug kg-1',                     &
+         prog       = .false.,                       &
          init_value = 0.08          )
     !
     !       Biomass
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'biomass_p',             &
-         longname   = 'Biomass in P units',    &
-         units      = 'mol P kg-1',            &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'biomass_p',                   &
+         longname   = 'Biomass in P units',          &
+         units      = 'mol P kg-1',                  &
          prog       = .false.)
 
     !       Irr_mem (Irradiance Memory)
     !
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'irr_mem',             &
-         longname   = 'Irradiance memory',     &
-         units      = 'Watts/m^2',             &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'irr_mem',                     &
+         longname   = 'Irradiance memory',           &
+         units      = 'Watts/m^2',                   &
          prog       = .false.)
 
 
@@ -1599,13 +2323,13 @@ write (stdlogunit, generic_bling_nml)
       ! If CaCO3 is being buried, alkalinity is restored
       ! by riverine input (flux_runoff = true).
       !
-      call g_tracer_add(tracer_list,package_name,&
-           name       = 'alk',                   &
-           longname   = 'Alkalinity',            &
-           units      = 'mol/kg',                &
-           prog       = .true.,                  &
-           flux_runoff    = .true.,              &
-           flux_param     = (/ 1.0e-03 /),       &
+      call g_tracer_add(tracer_list,package_name,    &
+           name       = 'alk',                       &
+           longname   = 'Alkalinity',                &
+           units      = 'mol/kg',                    &
+           prog       = .true.,                      &
+           flux_runoff    = .true.,                  &
+           flux_param     = (/ 1.0e-03 /),           &
            flux_bottom    = .true.           )
       !
       !       DIC (Dissolved inorganic carbon)
@@ -1617,7 +2341,7 @@ write (stdlogunit, generic_bling_nml)
          prog       = .true.,                        &
          flux_gas       = .true.,                    &
          flux_gas_name  = 'co2_flux',                &
-         flux_gas_type  = 'air_sea_gas_flux',        &
+         flux_gas_type  = 'air_sea_gas_flux_generic',&
          flux_gas_molwt = WTMCO2,                    &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),&
          flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc', &
@@ -1628,22 +2352,22 @@ write (stdlogunit, generic_bling_nml)
       !
       !    Cased (CaCO3 concentration in active sediment layer)   
       !
-      call g_tracer_add(tracer_list,package_name,&
-           name       = 'cased',          &
+      call g_tracer_add(tracer_list,package_name,    &
+           name       = 'cased',                     &
            longname   = 'Sediment CaCO3 concentration', &
-           units      = 'mol m-3',       &
+           units      = 'mol m-3',                   &
            prog       = .false.          )
       else
       !
       !       ALK (Total carbonate alkalinity)
       !
-      call g_tracer_add(tracer_list,package_name,&
-           name       = 'alk',                   &
-           longname   = 'Alkalinity',            &
-           units      = 'mol/kg',                &
-           prog       = .true.,                  &
-           flux_runoff    = .false.,             &
-           flux_param     = (/ 1.0e-03 /),       &
+      call g_tracer_add(tracer_list,package_name,    &
+           name       = 'alk',                       &
+           longname   = 'Alkalinity',                &
+           units      = 'mol/kg',                    &
+           prog       = .true.,                      &
+           flux_runoff    = .false.,                 &
+           flux_param     = (/ 1.0e-03 /),           &
            flux_bottom    = .true.           )
       !
       !       DIC (Dissolved inorganic carbon)
@@ -1655,7 +2379,7 @@ write (stdlogunit, generic_bling_nml)
          prog       = .true.,                        &
          flux_gas       = .true.,                    &
          flux_gas_name  = 'co2_flux',                &
-         flux_gas_type  = 'air_sea_gas_flux',        &
+         flux_gas_type  = 'air_sea_gas_flux_generic',&
          flux_gas_molwt = WTMCO2,                    &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),&
          flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc', &
@@ -1669,52 +2393,52 @@ write (stdlogunit, generic_bling_nml)
     !
     !       CO3_ion (Carbonate ion)
     !
-    call g_tracer_add(tracer_list,package_name,    &
-         name       = 'co3_ion',                   &
-         longname   = 'Carbonate ion',             &
-         units      = 'mol/kg',                    &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'co3_ion',                     &
+         longname   = 'Carbonate ion',               &
+         units      = 'mol/kg',                      &
          prog       = .false. )
     !
     !       htotal (H+ ion concentration)
     !
-    call g_tracer_add(tracer_list,package_name,  &
-         name       = 'htotal',                  &
-         longname   = 'H+ ion concentration',    &
-         units      = 'mol/kg',                  &
-         prog       = .false.,                   &
+    call g_tracer_add(tracer_list,package_name,      &
+         name       = 'htotal',                      &
+         longname   = 'H+ ion concentration',        &
+         units      = 'mol/kg',                      &
+         prog       = .false.,                       &
          init_value = bling%htotal_in)
 
-      if (do_carbon_pre) then                                     !<<DIC_PRE  
+      if (do_carbon_pre) then                                  !<<DIC_PRE  
       !       ALK_pre
       !
-      call g_tracer_add(tracer_list,package_name,  &
-           name       = 'alk_pre',                 &
-           longname   = 'Preformed ALK',           &
-           units      = 'mol/kg',                  &
+      call g_tracer_add(tracer_list,package_name,    &
+           name       = 'alk_pre',                   &
+           longname   = 'Preformed ALK',             &
+           units      = 'mol/kg',                    &
            prog       = .true.)
       !          
       !       DIC_pre
       !
-      call g_tracer_add(tracer_list,package_name,  &
-           name       = 'dic_pre',                 &
-           longname   = 'Preformed DIC',           &
-           units      = 'mol/kg',                  &
+      call g_tracer_add(tracer_list,package_name,    &
+           name       = 'dic_pre',                   &
+           longname   = 'Preformed DIC',             &
+           units      = 'mol/kg',                    &
            prog       = .true.)
       !   
       !       DIC_sat (Saturation Dissolved inorganic carbon)
       !
-      call g_tracer_add(tracer_list,package_name,      &
-           name       = 'dic_sat',                     &
+      call g_tracer_add(tracer_list,package_name,    &
+           name       = 'dic_sat',                   &
            longname   = 'Saturation Dissolved Inorganic Carbon', &
-           units      = 'mol/kg',                      &
-           prog       = .true.,                        &
-           flux_gas       = .true.,                    &
-           flux_gas_name  = 'co2_sat_flux',            &
-           flux_gas_type  = 'air_sea_gas_flux',        &
-           flux_gas_molwt = WTMCO2,                    &
+           units      = 'mol/kg',                    &
+           prog       = .true.,                      &
+           flux_gas       = .true.,                  &
+           flux_gas_name  = 'co2_sat_flux',          &
+           flux_gas_type  = 'air_sea_gas_flux',      &
+           flux_gas_molwt = WTMCO2,                  &
            flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),&
-           flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc',  &
-           flux_param     = (/12.011e-03  /),          &
+           flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc', &
+           flux_param     = (/12.011e-03  /),        &
            init_value     = 0.001)
       !
       !Diagnostic tracers
@@ -1723,7 +2447,7 @@ write (stdlogunit, generic_bling_nml)
       !
       call g_tracer_add(tracer_list,package_name,       &
            name       = 'htotal_sat',                   &
-           longname   = 'H+ ion concentration for DIC_sat',    &
+           longname   = 'H+ ion concentration for DIC_sat', &
            units      = 'mol/kg',                       &
            prog       = .false.,                        &
            init_value = bling%htotal_in)
@@ -1743,17 +2467,17 @@ write (stdlogunit, generic_bling_nml)
          flux_gas_type  = 'air_sea_gas_flux',           &
          flux_gas_molwt = WTMCO2,                       &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),   &
-         flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc',  &
+         flux_gas_restart_file  = 'ocean_bling_airsea_flux.res.nc', &
          flux_param     = (/14.e-03  /),                &
          flux_bottom    = .true.,                       &
          init_value     = 0.001)
       !
       !       DO14C (Dissolved organic radiocarbon)
       !
-      call g_tracer_add(tracer_list,package_name, &
-         name       = 'do14c',                    &
-         longname   = 'DO14C',                    &
-         units      = 'mol/kg',                   &
+      call g_tracer_add(tracer_list,package_name,       &
+         name       = 'do14c',                          &
+         longname   = 'DO14C',                          &
+         units      = 'mol/kg',                         &
          prog       = .true.)
       endif                                                   !RADIOCARBON>>
 
@@ -1884,7 +2608,7 @@ write (stdlogunit, generic_bling_nml)
 
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_BLING_update_from_source'
-    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau, i, j, k , kblt,n
+    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau, i, j, k , k_100, kblt, n
     real, dimension(:,:,:) ,pointer :: grid_tmask
     integer, dimension(:,:),pointer :: mask_coast,grid_kmt
 
@@ -1896,6 +2620,11 @@ write (stdlogunit, generic_bling_nml)
     real, dimension(:), Allocatable :: tmp_irr_band 
     real :: s_over_p_R, s_over_p_Ai, s_over_p, fe_2_p, fpoc_btm
     real :: TK, PRESS, PKSPC
+    real, dimension(:,:), Allocatable :: rho_dzt_100
+    real :: drho_dzt
+    integer                                                 :: stdoutunit
+
+    stdoutunit=stdout()
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
@@ -1966,12 +2695,12 @@ write (stdlogunit, generic_bling_nml)
                                 !InOut
          bling%f_htotal(:,:,k),                       & 
                                 !Optional In
-         co2_calc=trim(co2_calc),                      & 
-         zt=bling%zt(:,:,k),                           & 
+         co2_calc=trim(co2_calc),                     & 
+         zt=bling%zt(:,:,k),                          & 
                                 !OUT
          co2star=bling%co2_csurf(:,:), alpha=bling%co2_alpha(:,:), &
-         pCO2surf=bling%pco2_csurf(:,:), &
-         co3_ion=bling%f_co3_ion(:,:,k), &
+         pCO2surf=bling%pco2_csurf(:,:),              &
+         co3_ion=bling%f_co3_ion(:,:,k),              &
          omega_calc=bling%omega_calc(:,:,k))
 
 
@@ -1987,14 +2716,14 @@ write (stdlogunit, generic_bling_nml)
             bling%f_po4(:,:,k),                          &  
             bling%f_po4(:,:,k)*14.4,                     &
             bling%f_alk(:,:,k),                          &
-            bling%htotallo, bling%htotalhi,&
+            bling%htotallo, bling%htotalhi,              &
                                 !InOut
             bling%f_htotal(:,:,k),                       & 
                                 !Optional In
             co2_calc=trim(co2_calc),                     & 
             zt=bling%zt(:,:,k),                          & 
                                 !OUT
-            co3_ion=bling%f_co3_ion(:,:,k), &
+            co3_ion=bling%f_co3_ion(:,:,k),              &
             omega_calc=bling%omega_calc(:,:,k))
     enddo
 
@@ -2029,16 +2758,16 @@ write (stdlogunit, generic_bling_nml)
     ! DIC_sat is not used).
  
     call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
-         Temp(:,:,k), Salt(:,:,k),                    &
-         bling%f_dic_sat(:,:,k),                      &
-         bling%f_po4(:,:,k),                          &  
-         bling%f_po4(:,:,k)*14.4,                     &  
-         bling%f_alk(:,:,k),                          &
-         bling%htotal_satlo, bling%htotal_sathi,&
+         Temp(:,:,k), Salt(:,:,k),                       &
+         bling%f_dic_sat(:,:,k),                         &
+         bling%f_po4(:,:,k),                             &
+         bling%f_po4(:,:,k)*14.4,                        &
+         bling%f_alk(:,:,k),                             &
+         bling%htotal_satlo, bling%htotal_sathi,         &
                                 !InOut
-         bling%f_htotal_sat(:,:,k),                   & 
+         bling%f_htotal_sat(:,:,k),                      & 
                                 !OUT
-         co2star=bling%co2_sat_csurf(:,:),            &
+         co2star=bling%co2_sat_csurf(:,:),               &
          pCO2surf=bling%pco2_sat_csurf(:,:))
 
     do k = 2, nk
@@ -2133,7 +2862,7 @@ write (stdlogunit, generic_bling_nml)
 
        do nb=1,nbands !{
           if (max_wavelength_band(nb) .lt. 710) then !{
-             tmp_irr_band(nb) = max(0.0, sw_pen_band(nb,i,j))
+             tmp_irr_band(nb) = sw_pen_band(nb,i,j)
           else
              tmp_irr_band(nb) = 0.0
           endif !}
@@ -2171,7 +2900,7 @@ write (stdlogunit, generic_bling_nml)
        ! Phytoplankton photoadaptation timescale
        
        bling%f_irr_mem(i,j,k) = (bling%f_irr_mem(i,j,k) +                   &
-            (bling%irr_mix(i,j,k) - bling%f_irr_mem(i,j,k)) * min( 1.0 ,   &
+            (bling%irr_mix(i,j,k) - bling%f_irr_mem(i,j,k)) * min( 1.0 ,    &
             bling%gamma_irr_mem * dt)) * grid_tmask(i,j,k)
 
        !--------------------------------------------------------------------
@@ -2222,7 +2951,7 @@ write (stdlogunit, generic_bling_nml)
            (1. - bling%def_fe_min) * bling%fe_2_p_uptake(i,j,k) /          & 
            (bling%k_fe_2_p + bling%fe_2_p_uptake(i,j,k)) *                 &
            (bling%k_fe_2_p + bling%fe_2_p_max) / bling%fe_2_p_max 
-         bling%pc_m(i,j,k) = bling%pc_0 * bling%expkT(i,j,k) * min(      &
+         bling%pc_m(i,j,k) = bling%pc_0 * bling%expkT(i,j,k) * min(        &
            bling%f_po4(i,j,k) / (bling%k_po4 + bling%f_po4(i,j,k)) ,       &
            bling%def_fe(i,j,k))
          bling%thetamax_fe(i,j,k) = bling%thetamax_lo +                    &
@@ -2260,7 +2989,7 @@ write (stdlogunit, generic_bling_nml)
     ! to set a level of energy availability below which net growth (and 
     ! therefore nutrient uptake) is zero, given by resp_frac * pc_m.
     
-          bling%mu(i,j,k) = (1.0 - bling%resp_frac) * bling%pc_m(i,j,k) *&
+          bling%mu(i,j,k) = (1.0 - bling%resp_frac) * bling%pc_m(i,j,k) *  &
             (1. - exp(-bling%irr_mix(i,j,k) / (epsln + bling%irrk(i,j,k))))
 
     !-----------------------------------------------------------------------
@@ -2380,7 +3109,7 @@ write (stdlogunit, generic_bling_nml)
     ! Note the calculation is made in P units, rather than C.
     ! This is also used for the CaCO3 production.
     !
-    !     s_over_p = ( -1. + ( 1. + 4. * bling%jp_uptake(i,j,k) / &
+    !     s_over_p = ( -1. + ( 1. + 4. * bling%jp_uptake(i,j,k) /          &
     !       (bling%expkT(i,j,k) * bling%lambda0 * bling%p_star))**0.5) * .5
     !     bling%frac_lg(i,j,k) = s_over_p / (1 + s_over_p)
     !
@@ -2400,7 +3129,7 @@ write (stdlogunit, generic_bling_nml)
     !
 
       s_over_p_R = 0.5 * bling%biomass_p_100(i,j) / bling%p_star
-      s_over_p_Ai = (s_over_p_R + (s_over_p_R * s_over_p_R +                 &
+      s_over_p_Ai = (s_over_p_R + (s_over_p_R * s_over_p_R +               &
         1.0/27.0)**(0.5))**(1.0/3.0)
       s_over_p = s_over_p_Ai - 1.0 / (3.0 * s_over_p_Ai)
 
@@ -2418,8 +3147,8 @@ write (stdlogunit, generic_bling_nml)
     ! And frac_pop is calculated from equation 13 in Dunne et al., 2005    
     !
 
-      bling%frac_pop(i,j,k) = min(bling%frac_pop_max,                        &
-        exp(bling%kappa_remin * Temp(i,j,k)) * (bling%phi_sm * (1.0 -        &
+      bling%frac_pop(i,j,k) = min(bling%frac_pop_max,                      &
+        exp(bling%kappa_remin * Temp(i,j,k)) * (bling%phi_sm * (1.0 -      &
         bling%frac_lg(i,j)) + bling%phi_lg * bling%frac_lg(i,j)))
 
       bling%jpop(i,j,k) = bling%frac_pop(i,j,k) * bling%jp_uptake(i,j,k)
@@ -2431,13 +3160,13 @@ write (stdlogunit, generic_bling_nml)
     ! Then the remainder is divided between instantaneously recycled and
     ! long-lived dissolved organic matter,
     !      
-      bling%jdop(i,j,k) = bling%phi_dop * (bling%jp_uptake(i,j,k) - &
+      bling%jdop(i,j,k) = bling%phi_dop * (bling%jp_uptake(i,j,k) -        &
         bling%jpop(i,j,k))
             
-      bling%jp_recycle(i,j,k) = bling%jp_uptake(i,j,k) - &
+      bling%jp_recycle(i,j,k) = bling%jp_uptake(i,j,k) -                   &
         bling%jpop(i,j,k) - bling%jdop(i,j,k)
 
-      bling%jfe_recycle(i,j,k) = bling%jfe_uptake(i,j,k) -  &
+      bling%jfe_recycle(i,j,k) = bling%jfe_uptake(i,j,k) -                 &
         bling%jpofe(i,j,k)
 
     enddo; enddo ; enddo !} i,j,k
@@ -2454,7 +3183,7 @@ write (stdlogunit, generic_bling_nml)
     !-----------------------------------------------------------------------
 
          do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-            bling%jca_uptake(i,j,k) = (1.0 - bling%frac_lg(i,j)) *       &
+            bling%jca_uptake(i,j,k) = (1.0 - bling%frac_lg(i,j)) *         &
               bling%jp_uptake(i,j,k) * bling%ca_2_p
          enddo; enddo ; enddo !} i,j,k
        
@@ -2525,7 +3254,7 @@ write (stdlogunit, generic_bling_nml)
      ! CO3 / CO3solubility, such that the lengthscale decreases from
      ! infinity at CO3 > CO3solubility to zero at CO3 = 0.
      
-     bling%inv_zremin_caco3(i,j,k) = 1. / bling%ca_remin_depth * (1.0 -        &
+     bling%inv_zremin_caco3(i,j,k) = 1. / bling%ca_remin_depth * (1.0 -    &
        min(1., bling%f_co3_ion(i,j,k) / (bling%co3_solubility(i,j,k) +     &
        epsln)))
          
@@ -2641,8 +3370,8 @@ write (stdlogunit, generic_bling_nml)
           bling%remin_min)+ bling%remin_min) / (bling%wsink(i,j,k) +       &
           epsln) * bling%zt(i,j,k) / (bling%zt(i,j,k) + bling%z_bact)
 
-        bling%fpop(i,j,k) = (bling%fpop(i,j,k-1) +                           &
-          bling%jpop(i,j,k) * rho_dzt(i,j,k)) /                              &
+        bling%fpop(i,j,k) = (bling%fpop(i,j,k-1) +                         &
+          bling%jpop(i,j,k) * rho_dzt(i,j,k)) /                            &
           (1.0 + dzt(i,j,k) * bling%inv_zremin(i,j,k)) 
 
       enddo; enddo ; enddo !} i,j,k
@@ -3058,18 +3787,15 @@ write (stdlogunit, generic_bling_nml)
     !   
     do j = jsc, jec ; do i = isc, iec  !{
        tmp_100 = dzt(i,j,1)
-       bling%intpp(i,j) = 0.0
        bling%intjpo4(i,j) = 0.0
        bling%intjdop(i,j) = 0.0
        do k = 1, nk !{
           if ((k == 1) .or. (tmp_100 .lt. 100.0)) then !{
              if ((tmp_100 + dzt(i,j,k)) .lt. 100.0) then !{
-                bling%intpp(i,j) = bling%intpp(i,j) + bling%jp_uptake(i,j,k) *bling%rho_0 * dzt(i,j,k) * bling%c_2_p
                 bling%intjpo4(i,j) = bling%intjpo4(i,j) + bling%jpo4(i,j,k) *bling%rho_0 * dzt(i,j,k)
                 bling%intjdop(i,j) = bling%intjdop(i,j) + bling%jdop(i,j,k) *bling%rho_0 * dzt(i,j,k)
                 tmp_100 = tmp_100 + dzt(i,j,k)
              else
-                bling%intpp(i,j) = bling%intpp(i,j) + bling%jp_uptake(i,j,k) * bling%rho_0 * (100.0 - tmp_100) * bling%c_2_p
                 bling%intjpo4(i,j) = bling%intjpo4(i,j) + bling%jpo4(i,j,k) * bling%rho_0 * (100.0 - tmp_100)
                 bling%intjdop(i,j) = bling%intjdop(i,j) + bling%jdop(i,j,k) * bling%rho_0 * (100.0 - tmp_100)
                 tmp_100 = 100.0
@@ -3097,8 +3823,105 @@ write (stdlogunit, generic_bling_nml)
              endif !}
           enddo !} k-loop
        enddo; enddo  !} i, j
-    endif                                                    !CARBON CYCLE>>
 
+!****************************************************************************************************
+
+    allocate(rho_dzt_100(isc:iec,jsc:jec))
+    !
+    !---------------------------------------------------------------------
+    ! calculate upper 100 m vertical integrals
+    !---------------------------------------------------------------------
+    !
+    do j = jsc, jec ; do i = isc, iec !{
+       rho_dzt_100(i,j) = rho_dzt(i,j,1)
+! CHECK: copied from TOPAZ
+       bling%f_alk_int_100(i,j) = bling%p_alk(i,j,1,tau) * rho_dzt(i,j,1)
+       bling%f_dic_int_100(i,j) = bling%p_dic(i,j,1,tau) * rho_dzt(i,j,1)
+       bling%f_fed_int_100(i,j) = bling%p_fed(i,j,1,tau) * rho_dzt(i,j,1)
+       bling%f_po4_int_100(i,j) = bling%p_po4(i,j,1,tau) * rho_dzt(i,j,1)
+       bling%jalk_100(i,j) = bling%jalk(i,j,1) * rho_dzt(i,j,1)
+       bling%jdic_100(i,j) = bling%jdic(i,j,1) * rho_dzt(i,j,1)
+       bling%jfed_100(i,j) = (bling%jfe_recycle(i,j,1) + bling%jfe_reminp(i,j,1) - bling%jfe_uptake(i,j,1) - &
+         bling%jfe_ads_org(i,j,1) - bling%jfe_ads_inorg(i,j,1)) * rho_dzt(i,j,1)
+       bling%jpo4_100(i,j) = bling%jpo4(i,j,1) * rho_dzt(i,j,1)
+       bling%jp_uptake_100(i,j) = bling%jp_uptake(i,j,1) * rho_dzt(i,j,1)
+       bling%jfe_uptake_100(i,j) = bling%jfe_uptake(i,j,1) * rho_dzt(i,j,1)
+       bling%jca_uptake_100(i,j) = bling%jca_uptake(i,j,1) * rho_dzt(i,j,1)
+       bling%fpop_100(i,j) = bling%fpop(i,j,1)
+       bling%fpofe_100(i,j) = bling%fpofe(i,j,1)
+       bling%fcaco3_100(i,j) = bling%fcaco3(i,j,1)
+    enddo; enddo !} i,j
+
+    do j = jsc, jec ; do i = isc, iec ; !{
+       k_100 = 1
+       do k = 2, grid_kmt(i,j)  !{
+          if (rho_dzt_100(i,j) .lt. bling%Rho_0 * 100.0) then 
+             k_100 = k
+             rho_dzt_100(i,j) = rho_dzt_100(i,j) + rho_dzt(i,j,k)
+! CHECK: copied from TOPAZ
+             bling%f_alk_int_100(i,j) = bling%f_alk_int_100(i,j) + bling%p_alk(i,j,k,tau) * rho_dzt(i,j,k)
+             bling%f_dic_int_100(i,j) = bling%f_dic_int_100(i,j) + bling%p_dic(i,j,k,tau) * rho_dzt(i,j,k)
+             bling%f_fed_int_100(i,j) = bling%f_fed_int_100(i,j) + bling%p_fed(i,j,k,tau) * rho_dzt(i,j,k)
+             bling%f_po4_int_100(i,j) = bling%f_po4_int_100(i,j) + bling%p_po4(i,j,k,tau) * rho_dzt(i,j,k)
+             bling%jalk_100(i,j) = bling%jalk_100(i,j) + bling%jalk(i,j,k) * rho_dzt(i,j,k)
+             bling%jdic_100(i,j) = bling%jdic_100(i,j) + bling%jdic(i,j,k) * rho_dzt(i,j,k)
+             bling%jfed_100(i,j) = bling%jfed_100(i,j) + (bling%jfe_recycle(i,j,k) + bling%jfe_reminp(i,j,k) - &
+         bling%jfe_uptake(i,j,k) - bling%jfe_ads_org(i,j,k) - bling%jfe_ads_inorg(i,j,k)) * rho_dzt(i,j,k)
+             bling%jpo4_100(i,j) = bling%jpo4_100(i,j) + bling%jpo4(i,j,k) * rho_dzt(i,j,k)
+             bling%jp_uptake_100(i,j) = bling%jp_uptake_100(i,j) + bling%jp_uptake(i,j,k) * rho_dzt(i,j,k)
+             bling%jfe_uptake_100(i,j) = bling%jfe_uptake_100(i,j) + bling%jfe_uptake(i,j,k)*rho_dzt(i,j,k)
+             bling%jca_uptake_100(i,j) = bling%jca_uptake_100(i,j) + bling%jca_uptake(i,j,k) * rho_dzt(i,j,k)
+             bling%fpop_100(i,j) = bling%fpop(i,j,k)
+             bling%fpofe_100(i,j) = bling%fpofe(i,j,k)
+             bling%fcaco3_100(i,j) = bling%fcaco3(i,j,k)
+          endif
+       enddo  !} k
+
+       if (k_100 .gt. 1 .and. k_100 .lt. grid_kmt(i,j)) then
+          drho_dzt = bling%Rho_0 * 100.0 - rho_dzt_100(i,j)
+! CHECK: copied from TOPAZ
+          bling%f_alk_int_100(i,j) = bling%f_alk_int_100(i,j) + bling%p_alk(i,j,k_100,tau) * drho_dzt
+          bling%f_dic_int_100(i,j) = bling%f_dic_int_100(i,j) + bling%p_dic(i,j,k_100,tau) * drho_dzt
+          bling%f_fed_int_100(i,j) = bling%f_fed_int_100(i,j) + bling%p_fed(i,j,k_100,tau) * drho_dzt
+          bling%f_po4_int_100(i,j) = bling%f_po4_int_100(i,j) + bling%p_po4(i,j,k_100,tau) * drho_dzt
+          bling%jalk_100(i,j) = bling%jalk_100(i,j) + bling%jalk(i,j,k_100) * drho_dzt
+          bling%jdic_100(i,j) = bling%jdic_100(i,j) + bling%jdic(i,j,k_100) * drho_dzt
+          bling%jfed_100(i,j) = bling%jfed_100(i,j) + (bling%jfe_recycle(i,j,k_100) +                         &
+                bling%jfe_reminp(i,j,k_100) - bling%jfe_uptake(i,j,k_100) - bling%jfe_ads_org(i,j,k_100) -    &
+                bling%jfe_ads_inorg(i,j,k_100)) * drho_dzt
+          bling%jpo4_100(i,j) = bling%jpo4_100(i,j) + bling%jpo4(i,j,k_100) * drho_dzt
+          bling%jp_uptake_100(i,j) = bling%jp_uptake_100(i,j) + bling%jp_uptake(i,j,k_100) * drho_dzt
+          bling%jfe_uptake_100(i,j) = bling%jfe_uptake_100(i,j) + bling%jfe_uptake(i,j,k_100)*drho_dzt
+          bling%jca_uptake_100(i,j) = bling%jca_uptake_100(i,j) + bling%jca_uptake(i,j,k_100)* &
+                drho_dzt
+          bling%fpop_100(i,j) = bling%fpop(i,j,k_100)
+          bling%fpofe_100(i,j) = bling%fpofe(i,j,k_100)
+          bling%fcaco3_100(i,j) = bling%fcaco3(i,j,k_100)
+       endif
+
+    enddo ; enddo  !} i,j
+    deallocate(rho_dzt_100)
+
+    !
+    !---------------------------------------------------------------------
+    ! calculate water column vertical integrals for diagnostics
+    !---------------------------------------------------------------------
+    !
+    do j = jsc, jec ; do i = isc, iec !{
+       bling%wc_vert_int_c(i,j) = 0.0
+       bling%wc_vert_int_dic(i,j) = 0.0
+       bling%wc_vert_int_doc(i,j) = 0.0
+    enddo; enddo !} i,j
+    do j = jsc, jec ; do i = isc, iec ; do k = 1, nk  !{
+       bling%wc_vert_int_dic(i,j) = bling%wc_vert_int_dic(i,j) + bling%p_dic(i,j,k,tau) *            &
+          rho_dzt(i,j,k) * grid_tmask(i,j,k)
+       bling%wc_vert_int_doc(i,j) = bling%wc_vert_int_doc(i,j) + (bling%doc_background +             &
+          bling%p_dop(i,j,k,tau) * bling%c_2_p) * rho_dzt(i,j,k) * grid_tmask(i,j,k)
+       bling%wc_vert_int_c(i,j) = bling%wc_vert_int_dic(i,j) + bling%wc_vert_int_doc(i,j) +          &
+          bling%f_biomass_p(i,j,k) * bling%c_2_p * rho_dzt(i,j,k) * grid_tmask(i,j,k)
+    enddo; enddo; enddo  !} i,j,k
+
+    endif                                                    !CARBON CYCLE>>
 
     !
     !Set the diagnostics tracer fields.
@@ -3106,8 +3929,27 @@ write (stdlogunit, generic_bling_nml)
     call g_tracer_set_values(tracer_list,'chl',       'field',bling%f_chl       ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'biomass_p', 'field',bling%f_biomass_p ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'irr_mem' ,  'field',bling%f_irr_mem   ,isd,jsd,ntau=1)
+
+    call g_tracer_get_values(tracer_list,'fed','runoff_tracer_flux',bling%runoff_flux_fed,isd,jsd)
+    call g_tracer_get_values(tracer_list,'fed','drydep',bling%dry_fed,isd,jsd)
+    call g_tracer_get_values(tracer_list,'fed','wetdep',bling%wet_fed,isd,jsd)
+!dop does not have runoff    call g_tracer_get_values(tracer_list,'dop','runoff_tracer_flux',bling%runoff_flux_dop,isd,jsd)
+    call g_tracer_get_values(tracer_list,'po4','runoff_tracer_flux',bling%runoff_flux_po4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'po4','drydep',bling%dry_po4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'po4','wetdep',bling%wet_po4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'o2','stf_gas',bling%stf_gas_o2,isd,jsd)
+    call g_tracer_get_values(tracer_list,'o2','deltap',bling%deltap_o2,isd,jsd)
+
+    if (do_carbon) then                                      !<<CARBON CYCLE
+    call g_tracer_get_values(tracer_list,'dic','runoff_tracer_flux',bling%runoff_flux_dic,isd,jsd)
+    call g_tracer_get_values(tracer_list,'alk','runoff_tracer_flux',bling%runoff_flux_alk,isd,jsd)
+    call g_tracer_get_values(tracer_list,'dic','stf_gas',bling%stf_gas_dic,isd,jsd)
+    call g_tracer_get_values(tracer_list,'dic','deltap',bling%deltap_dic,isd,jsd)
     if (bury_caco3) &
       call g_tracer_set_values(tracer_list,'cased',   'field',bling%f_cased     ,isd,jsd,ntau=1)
+    if (do_14c) &
+      call g_tracer_get_values(tracer_list,'di14c','runoff_tracer_flux',bling%runoff_flux_di14c,isd,jsd)
+    endif                                                    !CARBON CYCLE>>
 
     !-----------------------------------------------------------------------
     !       Save variables for diagnostics
@@ -3154,6 +3996,10 @@ write (stdlogunit, generic_bling_nml)
          used = g_send_data(bling%id_biomass_p_ts,   bling%biomass_p_ts,         &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (bling%id_cased_top .gt. 0)                                               &
+         used = g_send_data(bling%id_cased_top,   bling%f_cased(:,:,1),          &
+         model_time, rmask = grid_tmask(:,:,1),                                  &
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (bling%id_def_fe .gt. 0)                                                  &
          used = g_send_data(bling%id_def_fe,         bling%def_fe,               &
          model_time, rmask = grid_tmask,                                         & 
@@ -3232,10 +4078,6 @@ write (stdlogunit, generic_bling_nml)
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (bling%id_intjpo4 .gt. 0)                                                 &
          used = g_send_data(bling%id_intjpo4,           bling%intjpo4,           &
-         model_time, rmask = grid_tmask(:,:,1),                                  & 
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    if (bling%id_intpp .gt. 0)                                                   &
-         used = g_send_data(bling%id_intpp,           bling%intpp,               &
          model_time, rmask = grid_tmask(:,:,1),                                  & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (bling%id_irr_inst .gt. 0)                                                &
@@ -3458,6 +4300,499 @@ write (stdlogunit, generic_bling_nml)
          used = g_send_data(bling%id_jdo14c,         bling%jdo14c * bling%rho_0, &
          model_time, rmask = grid_tmask,                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem Oyr and Omon: 3-D Marine Biogeochemical Tracer Fields
+!
+    if (bling%id_dissic .gt. 0)                                                  &
+        used = g_send_data(bling%id_dissic,  bling%p_dic(:,:,:,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+!    if (bling%id_dissi14cabio .gt. 0)            
+!        used = g_send_data(bling%id_dissi14cabio,   bling%p_di14c(:,:,:,tau) * bling%Rho_0, &
+!         model_time, rmask = grid_tmask,                                        &
+!         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CHECK:
+    ! CAS comment on spreadsheet implies that this is the explicitly represented
+    ! pool and seems to suggest that we shouldn't add the background
+    !add background of 42 uM (as in other parts of bling)- may need to change to 3.8e-5 per JPD
+
+    if (bling%id_dissoc .gt. 0)                                                  &
+        used = g_send_data(bling%id_dissoc,  (bling%doc_background + bling%p_dop(:,:,:,tau) * bling%c_2_p) * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_phyc .gt. 0)                                                    &
+        used = g_send_data(bling%id_phyc,  bling%f_biomass_p * bling%c_2_p * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_talk .gt. 0)                                                    &
+        used = g_send_data(bling%id_talk,  bling%p_alk(:,:,:,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CHECK: this is using ntau=1
+    if (bling%id_ph .gt. 0)                                                      &
+        used = g_send_data(bling%id_ph,  log10(bling%f_htotal) * -1.0,           &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_o2_cmip .gt. 0)                                                 &
+        used = g_send_data(bling%id_o2_cmip,  bling%p_o2(:,:,:,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! Oyr only
+! PENDING:
+!    if (bling%id_o2sat .gt. 0)            &
+!        used = g_send_data(bling%id_o2sat,  bling%o2sat 
+!        model_time, rmask = grid_tmask,&
+!        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_po4_cmip .gt. 0)                                                &
+        used = g_send_data(bling%id_po4_cmip,  bling%p_po4(:,:,:,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_dfe .gt. 0)                                                     &
+        used = g_send_data(bling%id_dfe,  bling%p_fed(:,:,:,tau) * bling%Rho_0,  &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_chl_cmip .gt. 0)                                                &
+        used = g_send_data(bling%id_chl_cmip,  bling%f_chl * bling%Rho_0 / 1e9,  &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_co3 .gt. 0)                                                     &
+        used = g_send_data(bling%id_co3,  bling%f_co3_ion * bling%Rho_0,         &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_co3satcalc .gt. 0)                                              &
+        used = g_send_data(bling%id_co3satcalc,  bling%co3_solubility * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem Oyr: Marine Biogeochemical 3-D Fields: Rates of Production and Removal
+! only pp, graz and expc are in Omon also
+!
+! CHECK: using dzt for layer thickness
+! Maybe just use bling%Rho_0 instead of rho_dzt / dzt in production terms
+!
+! also in Omon
+    if (bling%id_pp .gt. 0)                                                      &
+        used = g_send_data(bling%id_pp,  bling%jp_uptake * bling%Rho_0 * bling%c_2_p,  &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_remoc .gt. 0)                                                   &
+        used = g_send_data(bling%id_remoc,  (bling%jp_recycle + (1. -            &
+        bling%phi_dop) * bling%jp_reminp + bling%gamma_dop * bling%f_dop) *      &
+        bling%Rho_0 * bling%c_2_p,                                               &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! Not requested
+    if (bling%id_pphosphate .gt. 0)                                              &
+        used = g_send_data(bling%id_pphosphate,   bling%jp_uptake * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_pbfe .gt. 0)                                                    &
+        used = g_send_data(bling%id_pbfe, bling%jfe_uptake * bling%Rho_0,        &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CHECK: no rho_dzt ?
+! CAS: Should have rho_dzt, I have updated
+    if (bling%id_pcalc .gt. 0)                                                   &
+        used = g_send_data(bling%id_pcalc,  bling%jca_uptake * bling%Rho_0,      &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! also in Omon
+    if (bling%id_expc .gt. 0)                                                    &
+        used = g_send_data(bling%id_expc,  bling%fpop * bling%c_2_p,             &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_expp .gt. 0)                                                    &
+        used = g_send_data(bling%id_expp,  bling%fpop,                           &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_expfe .gt. 0)                                                   &
+        used = g_send_data(bling%id_expfe,  bling%fpofe,                         &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_expcalc .gt. 0)                                                 &
+        used = g_send_data(bling%id_expcalc,  bling%fcaco3,                      &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+! CHECK: add redissolution term  fcased_redis/dht ??
+! CAS: added redisolution from sediment
+    if (bling%id_dcalc .gt. 0)                                                   &
+        used = g_send_data(bling%id_dcalc,  bling%jca_reminp * bling%Rho_0,      &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CHECK: _z regridding
+! CAS fixed conversion for all bddt terms 
+    if (bling%id_bddtdic .gt. 0)                                                 &
+        used = g_send_data(bling%id_bddtdic,  bling%jdic * bling%Rho_0,          &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_bddtdip .gt. 0)                                                 &
+        used = g_send_data(bling%id_bddtdip,  bling%jpo4 * bling%Rho_0,          &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_bddtdife .gt. 0)                                                &
+        used = g_send_data(bling%id_bddtdife,  (bling%jfe_recycle + bling%jfe_reminp - &
+         bling%jfe_uptake - bling%jfe_ads_org - bling%jfe_ads_inorg) * bling%Rho_0,  &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_bddtalk .gt. 0)                                                 &
+        used = g_send_data(bling%id_bddtalk,  bling%jalk * bling%Rho_0,          &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CAS: fixed conversion
+    if (bling%id_fescav .gt. 0)                                                  &
+        used = g_send_data(bling%id_fescav,  (bling%jfe_ads_org + bling%jfe_ads_inorg) * bling%Rho_0,  &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CHECK: fediss = jfedet + jfe_des in TOPAZ
+! CAS: fixed conversion
+    if (bling%id_fediss .gt. 0)                                                  &
+        used = g_send_data(bling%id_fediss,  (bling%jfe_recycle + bling%jfe_reminp) * bling%Rho_0,  &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! also in Omon
+! CAS: fixed conversion
+    if (bling%id_graz .gt. 0)                                                    &
+        used = g_send_data(bling%id_graz,  bling%jp_recycle * bling%c_2_p  * bling%Rho_0, &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem Omon: Marine Biogeochemical 2-D Surface Fields 
+!  Identical to Oyr 3-D Tracer fields but for surface only
+
+    if (bling%id_sfc_dissic .gt. 0)                                              &
+        used = g_send_data(bling%id_sfc_dissic,  bling%p_dic(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!    if (bling%id_sfc_dissi14cabio .gt. 0)            
+!        used = g_send_data(bling%id_sfc_dissi14cabio,                           &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK:
+    !see above - added background of 42 uM (as in other parts of bling)- may need to change to 3.8e-5 per JPD
+    if (bling%id_sfc_dissoc .gt. 0)                                              &
+        used = g_send_data(bling%id_sfc_dissoc,  (bling%doc_background + bling%p_dop(:,:,1,tau) * bling%c_2_p) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_phyc .gt. 0)                                                &
+        used = g_send_data(bling%id_sfc_phyc,  bling%f_biomass_p(:,:,1) * bling%c_2_p * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_talk .gt. 0)                                                &
+        used = g_send_data(bling%id_sfc_talk,  bling%p_alk(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: this is using ntau=1
+    if (bling%id_sfc_ph .gt. 0)                                                  &
+        used = g_send_data(bling%id_sfc_ph,  log10(bling%f_htotal(:,:,1)) * -1.0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_o2_cmip .gt. 0)                                             &
+        used = g_send_data(bling%id_sfc_o2_cmip,  bling%p_o2(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! PENDING:
+!    if (bling%id_sfc_o2sat .gt. 0)                                              &
+!        used = g_send_data(bling%id_sfc_o2sat,  bling%o2sat (:,:,1)             &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_po4_cmip .gt. 0)                                            &
+        used = g_send_data(bling%id_sfc_po4_cmip,  bling%p_po4(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_dfe .gt. 0)                                                 &
+        used = g_send_data(bling%id_sfc_dfe,  bling%p_fed(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_chl_cmip .gt. 0)                                            &
+        used = g_send_data(bling%id_sfc_chl_cmip,  bling%f_chl(:,:,1) * bling%Rho_0 / 1e9, &
+        model_time, rmask = grid_tmask(:,:,1),                                    &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: Orange on spreadsheet 
+    if (bling%id_sfc_phyp .gt. 0)                                                &
+        used = g_send_data(bling%id_sfc_phyp,  bling%f_biomass_p(:,:,1) * bling%Rho_0,  &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_co3 .gt. 0)                                          &
+        used = g_send_data(bling%id_sfc_co3,  bling%f_co3_ion(:,:,1) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_sfc_co3satcalc .gt. 0)                                          &
+        used = g_send_data(bling%id_sfc_co3satcalc,  bling%co3_solubility(:,:,1) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem Omon: Marine Biogeochemical 2-D Fields  
+
+    if (bling%id_intpp .gt. 0)                                                   &
+        used = g_send_data(bling%id_intpp,  bling%jp_uptake_100 * bling%c_2_p,   &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: add jprod_ptot_100, check units
+! CAS: I've added juptake_po4_100 in a manner analagous to iron below
+    if (bling%id_intpbp .gt. 0)                                                  & 
+        used = g_send_data(bling%id_intpbp, bling%jp_uptake_100,                 &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: units
+    if (bling%id_intpbfe .gt. 0)                                                 &
+        used = g_send_data(bling%id_intpbfe,  bling%jfe_uptake_100,              &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_intpcalcite .gt. 0)                                             &
+        used = g_send_data(bling%id_intpcalcite,  bling%jca_uptake_100,          &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: should be AT 100m 
+    if (bling%id_expc100 .gt. 0)                                                 &
+        used = g_send_data(bling%id_expc100,  bling%fpop_100 * bling%c_2_p,      &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: should be AT 100m 
+    if (bling%id_expp100 .gt. 0)                                                 &
+        used = g_send_data(bling%id_expp100,  bling%fpop_100,                    &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: should be AT 100m 
+    if (bling%id_expfe100 .gt. 0)                                                &
+        used = g_send_data(bling%id_expfe100,  bling%fpofe_100,                  &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: should be AT 100m 
+    if (bling%id_expcalc100 .gt. 0)                                              &
+        used = g_send_data(bling%id_expcalc100,  bling%fcaco3_100,               &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CAS: should be wc_vert_int_dic?, *12e-3 to go from moles C m-2 to kg C m-2
+    if (bling%id_intdissic .gt. 0)                                               &
+        used = g_send_data(bling%id_intdissic,  bling%wc_vert_int_dic*12e-3,     &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CAS: added wc_vert_int_doc, *12e-3 to go from moles C m-2 to kg C m-2
+    if (bling%id_intdissoc .gt. 0)                                               &          
+        used = g_send_data(bling%id_intdissoc,  bling%wc_vert_int_doc*12e-3,     &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_spco2 .gt. 0)                                                   &
+        used = g_send_data(bling%id_spco2,  bling%pco2_csurf * 0.1013,           &
+        model_time, rmask = grid_tmask(:,:,1), &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK:
+    if (bling%id_dpco2 .gt. 0)                                                   &
+        used = g_send_data(bling%id_dpco2,  bling%deltap_dic * 0.1013,           &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_dpo2 .gt. 0)                                                    &
+        used = g_send_data(bling%id_dpo2,  bling%deltap_o2 * 0.1013,             &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_fgco2 .gt. 0)                                                   &
+        used = g_send_data(bling%id_fgco2,  bling%stf_gas_dic * 12e-3,           &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!    if (bling%id_fg14co2abio .gt. 0)                                            &
+!        used = g_send_data(bling%id_fg14co2abio,                                &                                
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_fgo2 .gt. 0)                                                    &
+        used = g_send_data(bling%id_fgo2,  bling%stf_gas_o2,                     &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: icfriver = runoff_flux_dic  + fcased_redis ??
+! CAS: fcased_redis is accounted for elsewhere, just keep runoff
+    if (bling%id_icfriver .gt. 0)                                                &
+        used = g_send_data(bling%id_icfriver,  bling%runoff_flux_dic,            &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: fric = fcased_redis ??
+! CAS: I think this should be fcased_burial
+    if (bling%id_fric .gt. 0)                                                    &
+        used = g_send_data(bling%id_fric,  bling%fcased_burial,                  &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: TOPAZ: nongas_source_fe=runoff_flux_fed+wc_vert_int_jfe_coast+dry_fed+  &
+!     wet_fed+ffe_sed, where wc_vert_int_jfe_coast=jfe_coast*rho_dzt (sum over k)
+    if (bling%id_fsfe .gt. 0)                                                    &
+        used = g_send_data(bling%id_fsfe,  bling%runoff_flux_fed(:,:) +          &
+        bling%dry_fed(:,:) + bling%wet_fed(:,:) + bling%ffe_sed,                 &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_frfe .gt. 0)                                                    &                                
+        used = g_send_data(bling%id_frfe,   bling%fpofe(:,:,nk),                 &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! 2016/08/15 - we will not be providing these fields
+! CHECK: rate was computed offline for TOPAZ by saving a reference history file, dividing by secs_per_month and differencing monthly averages
+! can we compute rates in the code this time?
+!    if (bling%id_fddtdic .gt. 0)                                                &
+!        used = g_send_data(bling%id_fddtdic,  bling%f_dic_int_100,              &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: rate was computed offline for TOPAZ by saving a reference history file, dividing by secs_per_month and differencing monthly averages
+! can we compute rates in the code this time?
+!    if (bling%id_fddtdip .gt. 0)                                                &
+!        used = g_send_data(bling%id_fddtdip,  bling%f_po4_int_100,              &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: rate was computed offline for TOPAZ by saving a reference history file, dividing by secs_per_month and differencing monthly averages
+! can we compute rates in the code this time?
+!    if (bling%id_fddtdife .gt. 0)                                               &
+!        used = g_send_data(bling%id_fddtdife,  bling%f_fed_int_100,             &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! CHECK: rate was computed offline for TOPAZ by saving a reference history file, dividing by secs_per_month and differencing monthly averages
+! can we compute rates in the code this time?
+!    if (bling%id_fddtalk .gt. 0)                                                &
+!        used = g_send_data(bling%id_fddtalk,  bling%f_alk_int_100,              &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!    if (bling%id_fbddtdic .gt. 0)                                               &
+!        used = g_send_data(bling%id_fbddtdic,  bling%jdic_100,                  &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!    if (bling%id_fbddtdip .gt. 0)                                               &
+!        used = g_send_data(bling%id_fbddtdip,  bling%jpo4_100,                  &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!    if (bling%id_fbddtdife .gt. 0)                                              &
+!        used = g_send_data(bling%id_fbddtdife,  bling%jfed_100,                 &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!    if (bling%id_fbddtalk .gt. 0)                                               &
+!        used = g_send_data(bling%id_fbddtalk,  bling%jalk_100,                  &
+!        model_time, rmask = grid_tmask(:,:,1),                                  &
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!==============================================================================================================
+! JGJ 2016/08/08 CMIP6 OcnBgchem day: Marine Biogeochemical daily fields
+! chlos = Sea Surface Total Chlorophyll Mass Concentration - same calculation as id_sfc_chl
+! phycos = Sea Surface Phytoplankton Carbon Concentration - same calculation as id_sfc_phyc
+
+    if (bling%id_chlos .gt. 0)                                                   &
+        used = g_send_data(bling%id_chlos,  bling%f_chl(:,:,1) * bling%Rho_0 / 1e9, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_phycos .gt. 0)                                                  &
+        used = g_send_data(bling%id_phycos,  bling%f_biomass_p(:,:,1) * bling%c_2_p * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!==============================================================================================================
+! 2016/08/15 JGJ: 100m integrals w/o CMOR conversion 
+
+    if (bling%id_f_dic_int_100 .gt. 0)                                           &
+        used = g_send_data(bling%id_f_dic_int_100,  bling%f_dic_int_100,         &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_f_po4_int_100 .gt. 0)                                           &
+        used = g_send_data(bling%id_f_po4_int_100,  bling%f_po4_int_100,         &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_f_fed_int_100 .gt. 0)                                           &
+        used = g_send_data(bling%id_f_fed_int_100,  bling%f_fed_int_100,         &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_f_alk_int_100 .gt. 0)                                           &
+        used = g_send_data(bling%id_f_alk_int_100,  bling%f_alk_int_100,         &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_jdic_100 .gt. 0)                                                &
+        used = g_send_data(bling%id_jdic_100,  bling%jdic_100,                   &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_jpo4_100 .gt. 0)                                                &
+        used = g_send_data(bling%id_jpo4_100,  bling%jpo4_100,                   &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_jfed_100 .gt. 0)                                                &
+        used = g_send_data(bling%id_jfed_100,  bling%jfed_100,                   &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (bling%id_jalk_100 .gt. 0)                                                &
+        used = g_send_data(bling%id_jalk_100,  bling%jalk_100,                   &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+!==============================================================================================================
 
   end subroutine generic_BLING_update_from_source
 
@@ -3803,63 +5138,87 @@ write (stdlogunit, generic_bling_nml)
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau) 
 
-    allocate(bling%alpha(isd:ied, jsd:jed, 1:nk));          bling%alpha=0.0
-    allocate(bling%biomass_p_ts(isd:ied, jsd:jed, 1:nk));   bling%biomass_p_ts=0.0
-    allocate(bling%def_fe(isd:ied, jsd:jed, 1:nk));         bling%def_fe=0.0
-    allocate(bling%expkT(isd:ied, jsd:jed, 1:nk));          bling%expkT=0.0
-    allocate(bling%f_biomass_p(isd:ied, jsd:jed, 1:nk));    bling%f_biomass_p=0.0
-    allocate(bling%f_chl(isd:ied, jsd:jed, 1:nk));          bling%f_chl=0.0
-    allocate(bling%f_dop(isd:ied, jsd:jed, 1:nk));          bling%f_dop=0.0
-    allocate(bling%f_fed(isd:ied, jsd:jed, 1:nk));          bling%f_fed=0.0
-    allocate(bling%f_irr_mem(isd:ied, jsd:jed, 1:nk));      bling%f_irr_mem=0.0
-    allocate(bling%f_o2(isd:ied, jsd:jed, 1:nk));           bling%f_o2=0.0
-    allocate(bling%f_po4(isd:ied, jsd:jed, 1:nk));          bling%f_po4=0.0
-    allocate(bling%fe_2_p_uptake(isd:ied, jsd:jed, 1:nk));  bling%fe_2_p_uptake=0.0
-    allocate(bling%feprime(isd:ied, jsd:jed, 1:nk));        bling%feprime=0.0
-    allocate(bling%fpofe(isd:ied, jsd:jed, 1:nk));          bling%fpofe=0.0
-    allocate(bling%fpop(isd:ied, jsd:jed, 1:nk));           bling%fpop=0.0
-    allocate(bling%frac_pop(isd:ied, jsd:jed, 1:nk));       bling%frac_pop=0.0
-    allocate(bling%intjdop(isd:ied, jsd:jed));              bling%intjdop=0.0
-    allocate(bling%intjpo4(isd:ied, jsd:jed));              bling%intjpo4=0.0
-    allocate(bling%intpp(isd:ied, jsd:jed));                bling%intpp=0.0
-    allocate(bling%irr_inst(isd:ied, jsd:jed, 1:nk));       bling%irr_inst=0.0
-    allocate(bling%irr_mix(isd:ied, jsd:jed, 1:nk));        bling%irr_mix=0.0
-    allocate(bling%irrk(isd:ied, jsd:jed, 1:nk));           bling%irrk=0.0
-    allocate(bling%jdop(isd:ied, jsd:jed, 1:nk));           bling%jdop=0.0
-    allocate(bling%jfe_ads_org(isd:ied, jsd:jed, 1:nk));    bling%jfe_ads_org=0.0
-    allocate(bling%jfe_ads_inorg(isd:ied, jsd:jed, 1:nk));  bling%jfe_ads_inorg=0.0
-    allocate(bling%jfe_recycle(isd:ied, jsd:jed, 1:nk));    bling%jfe_recycle=0.0
-    allocate(bling%jfe_reminp(isd:ied, jsd:jed, 1:nk));     bling%jfe_reminp=0.0
-    allocate(bling%jfe_uptake(isd:ied, jsd:jed, 1:nk));     bling%jfe_uptake=0.0
-    allocate(bling%jo2(isd:ied, jsd:jed, 1:nk));            bling%jo2=0.0
-    allocate(bling%jp_recycle(isd:ied, jsd:jed, 1:nk));     bling%jp_recycle=0.0
-    allocate(bling%jp_reminp(isd:ied, jsd:jed, 1:nk));      bling%jp_reminp=0.0
-    allocate(bling%jp_uptake(isd:ied, jsd:jed, 1:nk));      bling%jp_uptake=0.0
-    allocate(bling%jpo4(isd:ied, jsd:jed, 1:nk));           bling%jpo4=0.0
-    allocate(bling%jpofe(isd:ied, jsd:jed, 1:nk));          bling%jpofe=0.0
-    allocate(bling%jpop(isd:ied, jsd:jed, 1:nk));           bling%jpop=0.0
-    allocate(bling%kfe_eq_lig(isd:ied, jsd:jed, 1:nk));     bling%kfe_eq_lig=0.0
-    allocate(bling%pc_m(isd:ied, jsd:jed, 1:nk));           bling%pc_m=0.0
-    allocate(bling%mu(isd:ied, jsd:jed, 1:nk));             bling%mu=0.0
-    allocate(bling%theta(isd:ied, jsd:jed, 1:nk));          bling%theta=0.0
-    allocate(bling%thetamax_fe(isd:ied, jsd:jed, 1:nk));    bling%thetamax_fe=0.0
-    allocate(bling%wsink(isd:ied, jsd:jed, 1:nk));          bling%wsink=0.0
-    allocate(bling%inv_zremin(isd:ied, jsd:jed, 1:nk));     bling%inv_zremin=0.0
-    allocate(bling%zt(isd:ied, jsd:jed, 1:nk));             bling%zt=0.0
-    allocate(bling%biomass_p_100(isd:ied, jsd:jed));        bling%biomass_p_100=0.0
-    allocate(bling%fe_burial    (isd:ied, jsd:jed));        bling%fe_burial=0.0
-    allocate(bling%ffe_sed      (isd:ied, jsd:jed));        bling%ffe_sed=0.0
-    allocate(bling%frac_lg      (isd:ied, jsd:jed));        bling%frac_lg=0.0
-    allocate(bling%hblt_depth   (isd:ied, jsd:jed));        bling%hblt_depth=0.0
-    allocate(bling%b_fed        (isd:ied, jsd:jed));        bling%b_fed=0.0
-    allocate(bling%b_o2         (isd:ied, jsd:jed));        bling%b_o2=0.0
-    allocate(bling%b_po4        (isd:ied, jsd:jed));        bling%b_po4=0.0
+    allocate(bling%alpha      (isd:ied, jsd:jed, 1:nk));      bling%alpha=0.0
+    allocate(bling%biomass_p_ts(isd:ied, jsd:jed, 1:nk));     bling%biomass_p_ts=0.0
+    allocate(bling%def_fe     (isd:ied, jsd:jed, 1:nk));      bling%def_fe=0.0
+    allocate(bling%expkT      (isd:ied, jsd:jed, 1:nk));      bling%expkT=0.0
+    allocate(bling%f_biomass_p(isd:ied, jsd:jed, 1:nk));      bling%f_biomass_p=0.0
+    allocate(bling%f_chl      (isd:ied, jsd:jed, 1:nk));      bling%f_chl=0.0
+    allocate(bling%f_dop      (isd:ied, jsd:jed, 1:nk));      bling%f_dop=0.0
+    allocate(bling%f_fed      (isd:ied, jsd:jed, 1:nk));      bling%f_fed=0.0
+    allocate(bling%f_fed_int_100    (isd:ied, jsd:jed));      bling%f_fed_int_100=0.0
+    allocate(bling%f_irr_mem  (isd:ied, jsd:jed, 1:nk));      bling%f_irr_mem=0.0
+    allocate(bling%f_o2       (isd:ied, jsd:jed, 1:nk));      bling%f_o2=0.0
+    allocate(bling%f_po4      (isd:ied, jsd:jed, 1:nk));      bling%f_po4=0.0
+    allocate(bling%f_po4_int_100    (isd:ied, jsd:jed));      bling%f_po4_int_100=0.0
+    allocate(bling%fe_2_p_uptake(isd:ied, jsd:jed, 1:nk));    bling%fe_2_p_uptake=0.0
+    allocate(bling%feprime    (isd:ied, jsd:jed, 1:nk));      bling%feprime=0.0
+    allocate(bling%fpofe      (isd:ied, jsd:jed, 1:nk));      bling%fpofe=0.0
+    allocate(bling%fpofe_100        (isd:ied, jsd:jed));      bling%fpofe_100=0.0
+    allocate(bling%fpop       (isd:ied, jsd:jed, 1:nk));      bling%fpop=0.0
+    allocate(bling%fpop_100         (isd:ied, jsd:jed));      bling%fpop_100=0.0
+    allocate(bling%frac_pop   (isd:ied, jsd:jed, 1:nk));      bling%frac_pop=0.0
+    allocate(bling%intjdop          (isd:ied, jsd:jed));      bling%intjdop=0.0
+    allocate(bling%intjpo4          (isd:ied, jsd:jed));      bling%intjpo4=0.0
+    allocate(bling%intpp            (isd:ied, jsd:jed));      bling%intpp=0.0
+    allocate(bling%irr_inst   (isd:ied, jsd:jed, 1:nk));      bling%irr_inst=0.0
+    allocate(bling%irr_mix    (isd:ied, jsd:jed, 1:nk));      bling%irr_mix=0.0
+    allocate(bling%irrk       (isd:ied, jsd:jed, 1:nk));      bling%irrk=0.0
+    allocate(bling%jdop       (isd:ied, jsd:jed, 1:nk));      bling%jdop=0.0
+    allocate(bling%jfe_ads_org(isd:ied, jsd:jed, 1:nk));      bling%jfe_ads_org=0.0
+    allocate(bling%jfe_ads_inorg(isd:ied, jsd:jed, 1:nk));    bling%jfe_ads_inorg=0.0
+    allocate(bling%jfe_recycle(isd:ied, jsd:jed, 1:nk));      bling%jfe_recycle=0.0
+    allocate(bling%jfe_reminp (isd:ied, jsd:jed, 1:nk));      bling%jfe_reminp=0.0
+    allocate(bling%jfe_uptake (isd:ied, jsd:jed, 1:nk));      bling%jfe_uptake=0.0
+    allocate(bling%jfe_uptake_100   (isd:ied, jsd:jed));      bling%jfe_uptake_100=0.0
+    allocate(bling%jfed_100         (isd:ied, jsd:jed));      bling%jfed_100=0.0
+    allocate(bling%jo2        (isd:ied, jsd:jed, 1:nk));      bling%jo2=0.0
+    allocate(bling%jp_recycle (isd:ied, jsd:jed, 1:nk));      bling%jp_recycle=0.0
+    allocate(bling%jp_reminp  (isd:ied, jsd:jed, 1:nk));      bling%jp_reminp=0.0
+    allocate(bling%jp_uptake  (isd:ied, jsd:jed, 1:nk));      bling%jp_uptake=0.0
+    allocate(bling%jp_uptake_100    (isd:ied, jsd:jed));      bling%jp_uptake_100=0.0
+    allocate(bling%jpo4       (isd:ied, jsd:jed, 1:nk));      bling%jpo4=0.0
+    allocate(bling%jpo4_100         (isd:ied, jsd:jed));      bling%jpo4_100=0.0
+    allocate(bling%jpofe      (isd:ied, jsd:jed, 1:nk));      bling%jpofe=0.0
+    allocate(bling%jpop       (isd:ied, jsd:jed, 1:nk));      bling%jpop=0.0
+    allocate(bling%kfe_eq_lig (isd:ied, jsd:jed, 1:nk));      bling%kfe_eq_lig=0.0
+    allocate(bling%pc_m       (isd:ied, jsd:jed, 1:nk));      bling%pc_m=0.0
+    allocate(bling%mu         (isd:ied, jsd:jed, 1:nk));      bling%mu=0.0
+    allocate(bling%theta      (isd:ied, jsd:jed, 1:nk));      bling%theta=0.0
+    allocate(bling%thetamax_fe(isd:ied, jsd:jed, 1:nk));      bling%thetamax_fe=0.0
+    allocate(bling%wsink      (isd:ied, jsd:jed, 1:nk));      bling%wsink=0.0
+    allocate(bling%inv_zremin (isd:ied, jsd:jed, 1:nk));      bling%inv_zremin=0.0
+    allocate(bling%zt         (isd:ied, jsd:jed, 1:nk));      bling%zt=0.0
+    allocate(bling%biomass_p_100    (isd:ied, jsd:jed));      bling%biomass_p_100=0.0
+    allocate(bling%cased_top        (isd:ied, jsd:jed));      bling%cased_top=0.0
+    allocate(bling%fe_burial        (isd:ied, jsd:jed));      bling%fe_burial=0.0
+    allocate(bling%ffe_sed          (isd:ied, jsd:jed));      bling%ffe_sed=0.0
+    allocate(bling%frac_lg          (isd:ied, jsd:jed));      bling%frac_lg=0.0
+    allocate(bling%hblt_depth       (isd:ied, jsd:jed));      bling%hblt_depth=0.0
+    allocate(bling%b_fed            (isd:ied, jsd:jed));      bling%b_fed=0.0
+    allocate(bling%b_o2             (isd:ied, jsd:jed));      bling%b_o2=0.0
+    allocate(bling%b_po4            (isd:ied, jsd:jed));      bling%b_po4=0.0
+    allocate(bling%runoff_flux_alk  (isd:ied, jsd:jed));      bling%runoff_flux_alk=0.0
+    allocate(bling%runoff_flux_dic  (isd:ied, jsd:jed));      bling%runoff_flux_dic=0.0
+    allocate(bling%runoff_flux_di14c(isd:ied, jsd:jed));      bling%runoff_flux_di14c=0.0
+    allocate(bling%runoff_flux_fed  (isd:ied, jsd:jed));      bling%runoff_flux_fed=0.0
+    allocate(bling%runoff_flux_po4  (isd:ied, jsd:jed));      bling%runoff_flux_po4=0.0
+    allocate(bling%runoff_flux_dop  (isd:ied, jsd:jed));      bling%runoff_flux_dop=0.0
+    allocate(bling%dry_fed          (isd:ied, jsd:jed));      bling%dry_fed=0.0
+    allocate(bling%wet_fed          (isd:ied, jsd:jed));      bling%wet_fed=0.0
+    allocate(bling%dry_po4          (isd:ied, jsd:jed));      bling%dry_po4=0.0
+    allocate(bling%wet_po4          (isd:ied, jsd:jed));      bling%wet_po4=0.0
+    allocate(bling%stf_gas_dic      (isd:ied, jsd:jed));      bling%stf_gas_dic=0.0
+    allocate(bling%stf_gas_o2       (isd:ied, jsd:jed));      bling%stf_gas_o2=0.0
+    allocate(bling%deltap_dic       (isd:ied, jsd:jed));      bling%deltap_dic=0.0
+    allocate(bling%deltap_o2        (isd:ied, jsd:jed));      bling%deltap_o2=0.0
 
-    if (do_po4_pre) then                                          !<<PO4_PRE
-    allocate(bling%f_po4_pre(isd:ied, jsd:jed, 1:nk));      bling%f_po4_pre=0.0
-    endif                                                         !PO4_PRE>>
 
-    if (do_carbon) then                                      !<<CARBON CYCLE
+    if (do_po4_pre) then                                   !<<PO4_PRE
+    allocate(bling%f_po4_pre(isd:ied, jsd:jed, 1:nk));        bling%f_po4_pre=0.0
+    endif                                                  !PO4_PRE>>
+
+    if (do_carbon) then                                    !<<CARBON CYCLE
     !Used in ocmip2_co2calc
     CO2_dope_vec%isc = isc ; CO2_dope_vec%iec = iec 
     CO2_dope_vec%jsc = jsc ; CO2_dope_vec%jec = jec
@@ -3867,59 +5226,69 @@ write (stdlogunit, generic_bling_nml)
     CO2_dope_vec%jsd = jsd ; CO2_dope_vec%jed = jed    
     allocate(bling%htotallo(isd:ied, jsd:jed))
     allocate(bling%htotalhi(isd:ied, jsd:jed))
-    allocate(bling%co3_solubility(isd:ied, jsd:jed, 1:nk)); bling%co3_solubility=0.0
-    allocate(bling%f_alk(isd:ied, jsd:jed, 1:nk));          bling%f_alk=0.0
-    allocate(bling%f_co3_ion(isd:ied, jsd:jed, 1:nk));      bling%f_co3_ion=0.0
-    allocate(bling%f_dic(isd:ied, jsd:jed, 1:nk));          bling%f_dic=0.0
-    allocate(bling%f_htotal(isd:ied, jsd:jed, 1:nk));       bling%f_htotal=0.0
-    allocate(bling%fcaco3(isd:ied, jsd:jed, 1:nk));         bling%fcaco3=0.0
-    allocate(bling%intjalk(isd:ied, jsd:jed));              bling%intjalk=0.0
-    allocate(bling%intjdic(isd:ied, jsd:jed));              bling%intjdic=0.0
-    allocate(bling%inv_zremin_caco3(isd:ied, jsd:jed, 1:nk));   bling%inv_zremin_caco3=0.0
-    allocate(bling%jalk(isd:ied, jsd:jed, 1:nk));           bling%jalk=0.0
-    allocate(bling%jca_reminp(isd:ied, jsd:jed, 1:nk));     bling%jca_reminp=0.0
-    allocate(bling%jca_uptake(isd:ied, jsd:jed, 1:nk));     bling%jca_uptake=0.0
-    allocate(bling%jdic(isd:ied, jsd:jed, 1:nk));           bling%jdic=0.0
-    allocate(bling%omega_calc(isd:ied, jsd:jed, 1:nk));     bling%omega_calc=0.0
-    allocate(bling%co2_csurf    (isd:ied, jsd:jed));        bling%co2_csurf=0.0
-    allocate(bling%pco2_csurf   (isd:ied, jsd:jed));        bling%pco2_csurf=0.0
-    allocate(bling%co2_alpha    (isd:ied, jsd:jed));        bling%co2_alpha=0.0
-    allocate(bling%fcaco3_to_sed(isd:ied, jsd:jed));        bling%fcaco3_to_sed=0.0
-    allocate(bling%b_alk        (isd:ied, jsd:jed));        bling%b_alk=0.0
-    allocate(bling%b_dic        (isd:ied, jsd:jed));        bling%b_dic=0.0
-      if (bury_caco3) then                                     !<<BURY CACO3  
-    allocate(bling%f_cased(isd:ied, jsd:jed, 1:nk));        bling%f_cased=0.0
-    allocate(bling%fcased_burial(isd:ied, jsd:jed));        bling%fcased_burial=0.0
-    allocate(bling%fcased_redis (isd:ied, jsd:jed));        bling%fcased_redis=0.0
-      endif                                                    !BURY CACO3>>
-      if (bury_pop) then                                     !<<BURY POP
-    allocate(bling%fpop_burial(isd:ied, jsd:jed));        bling%fcased_burial=0.0
-      endif                                                    !BURY POP>>
-      if (do_carbon_pre) then                                     !<<DIC_PRE  
-    allocate(bling%htotal_satlo(isd:ied, jsd:jed))
-    allocate(bling%htotal_sathi(isd:ied, jsd:jed))
-    allocate(bling%f_alk_pre(isd:ied, jsd:jed, 1:nk));      bling%f_alk_pre=0.0
-    allocate(bling%f_dic_pre(isd:ied, jsd:jed, 1:nk));      bling%f_dic_pre=0.0
-    allocate(bling%f_dic_sat(isd:ied, jsd:jed, 1:nk));      bling%f_dic_sat=0.0
-    allocate(bling%f_htotal_sat(isd:ied, jsd:jed, 1:nk));   bling%f_htotal_sat=0.0
-    allocate(bling%co2_sat_csurf(isd:ied, jsd:jed));        bling%co2_sat_csurf=0.0
-    allocate(bling%pco2_sat_csurf(isd:ied, jsd:jed));       bling%pco2_sat_csurf=0.0
-      endif                                                       !DIC_PRE>>
-      if (do_14c) then                                        !<<RADIOCARBON
-    allocate(bling%c14_2_p(isd:ied, jsd:jed, 1:nk));        bling%c14_2_p=0.0
-    allocate(bling%f_di14c(isd:ied, jsd:jed, 1:nk));        bling%f_di14c=0.0
-    allocate(bling%f_do14c(isd:ied, jsd:jed, 1:nk));        bling%f_do14c=0.0
-    allocate(bling%fpo14c(isd:ied, jsd:jed, 1:nk));         bling%fpo14c=0.0
-    allocate(bling%j14c_decay_dic(isd:ied, jsd:jed, 1:nk)); bling%j14c_decay_dic=0.0
-    allocate(bling%j14c_decay_doc(isd:ied, jsd:jed, 1:nk)); bling%j14c_decay_doc=0.0
-    allocate(bling%j14c_reminp(isd:ied, jsd:jed, 1:nk));    bling%j14c_reminp=0.0
-    allocate(bling%jdi14c(isd:ied, jsd:jed, 1:nk));         bling%jdi14c=0.0
-    allocate(bling%jdo14c(isd:ied, jsd:jed, 1:nk));         bling%jdo14c=0.0
-    allocate(bling%c14o2_csurf  (isd:ied, jsd:jed));        bling%c14o2_csurf=0.0
-    allocate(bling%c14o2_alpha  (isd:ied, jsd:jed));        bling%c14o2_alpha=0.0
-    allocate(bling%b_di14c      (isd:ied, jsd:jed));        bling%b_di14c=0.0
-      endif                                                   !RADIOCARBON>>
-    endif                                                    !CARBON CYCLE>>
+    allocate(bling%co3_solubility(isd:ied, jsd:jed, 1:nk));   bling%co3_solubility=0.0
+    allocate(bling%f_alk(isd:ied, jsd:jed, 1:nk));            bling%f_alk=0.0
+    allocate(bling%f_alk_int_100(isd:ied, jsd:jed));          bling%f_alk_int_100=0.0
+    allocate(bling%f_co3_ion(isd:ied, jsd:jed, 1:nk));        bling%f_co3_ion=0.0
+    allocate(bling%f_dic(isd:ied, jsd:jed, 1:nk));            bling%f_dic=0.0
+    allocate(bling%f_dic_int_100(isd:ied, jsd:jed));          bling%f_dic_int_100=0.0
+    allocate(bling%f_htotal(isd:ied, jsd:jed, 1:nk));         bling%f_htotal=0.0
+    allocate(bling%fcaco3(isd:ied, jsd:jed, 1:nk));           bling%fcaco3=0.0
+    allocate(bling%fcaco3_100(isd:ied, jsd:jed));             bling%fcaco3_100=0.0
+    allocate(bling%intjalk(isd:ied, jsd:jed));                bling%intjalk=0.0
+    allocate(bling%intjdic(isd:ied, jsd:jed));                bling%intjdic=0.0
+    allocate(bling%inv_zremin_caco3(isd:ied, jsd:jed, 1:nk)); bling%inv_zremin_caco3=0.0
+    allocate(bling%jalk(isd:ied, jsd:jed, 1:nk));             bling%jalk=0.0
+    allocate(bling%jalk_100(isd:ied, jsd:jed));               bling%jalk_100=0.0
+    allocate(bling%jca_reminp(isd:ied, jsd:jed, 1:nk));       bling%jca_reminp=0.0
+    allocate(bling%jca_uptake(isd:ied, jsd:jed, 1:nk));       bling%jca_uptake=0.0
+    allocate(bling%jca_uptake_100(isd:ied, jsd:jed));         bling%jca_uptake_100=0.0
+    allocate(bling%jdic(isd:ied, jsd:jed, 1:nk));             bling%jdic=0.0
+    allocate(bling%jdic_100(isd:ied, jsd:jed));               bling%jdic_100=0.0
+    allocate(bling%omega_calc(isd:ied, jsd:jed, 1:nk));       bling%omega_calc=0.0
+    allocate(bling%co2_csurf    (isd:ied, jsd:jed));          bling%co2_csurf=0.0
+    allocate(bling%pco2_csurf   (isd:ied, jsd:jed));          bling%pco2_csurf=0.0
+    allocate(bling%co2_alpha    (isd:ied, jsd:jed));          bling%co2_alpha=0.0
+    allocate(bling%fcaco3_to_sed(isd:ied, jsd:jed));          bling%fcaco3_to_sed=0.0
+    allocate(bling%b_alk        (isd:ied, jsd:jed));          bling%b_alk=0.0
+    allocate(bling%b_dic        (isd:ied, jsd:jed));          bling%b_dic=0.0
+    allocate(bling%wc_vert_int_c(isd:ied, jsd:jed));          bling%wc_vert_int_c=0.0
+    allocate(bling%wc_vert_int_dic(isd:ied, jsd:jed));        bling%wc_vert_int_dic=0.0
+    allocate(bling%wc_vert_int_doc(isd:ied, jsd:jed));        bling%wc_vert_int_doc=0.0
+    if (bury_caco3) then                                   !<<BURY CACO3  
+      allocate(bling%f_cased(isd:ied, jsd:jed, 1:nk));        bling%f_cased=0.0
+      allocate(bling%fcased_burial(isd:ied, jsd:jed));        bling%fcased_burial=0.0
+      allocate(bling%fcased_redis (isd:ied, jsd:jed));        bling%fcased_redis=0.0
+    endif                                                  !BURY CACO3>>
+    if (bury_pop) then                                     !<<BURY POP
+      allocate(bling%fpop_burial(isd:ied, jsd:jed));          bling%fcased_burial=0.0
+    endif                                                  !BURY POP>>
+    if (do_carbon_pre) then                                !<<DIC_PRE  
+      allocate(bling%htotal_satlo(isd:ied, jsd:jed))
+      allocate(bling%htotal_sathi(isd:ied, jsd:jed))
+      allocate(bling%f_alk_pre(isd:ied, jsd:jed, 1:nk));      bling%f_alk_pre=0.0
+      allocate(bling%f_dic_pre(isd:ied, jsd:jed, 1:nk));      bling%f_dic_pre=0.0
+      allocate(bling%f_dic_sat(isd:ied, jsd:jed, 1:nk));      bling%f_dic_sat=0.0
+      allocate(bling%f_htotal_sat(isd:ied, jsd:jed, 1:nk));   bling%f_htotal_sat=0.0
+      allocate(bling%co2_sat_csurf(isd:ied, jsd:jed));        bling%co2_sat_csurf=0.0
+      allocate(bling%pco2_sat_csurf(isd:ied, jsd:jed));       bling%pco2_sat_csurf=0.0
+    endif                                                  !DIC_PRE>>
+    if (do_14c) then                                       !<<RADIOCARBON
+      allocate(bling%c14_2_p(isd:ied, jsd:jed, 1:nk));        bling%c14_2_p=0.0
+      allocate(bling%f_di14c(isd:ied, jsd:jed, 1:nk));        bling%f_di14c=0.0
+      allocate(bling%f_do14c(isd:ied, jsd:jed, 1:nk));        bling%f_do14c=0.0
+      allocate(bling%fpo14c(isd:ied, jsd:jed, 1:nk));         bling%fpo14c=0.0
+      allocate(bling%j14c_decay_dic(isd:ied, jsd:jed, 1:nk)); bling%j14c_decay_dic=0.0
+      allocate(bling%j14c_decay_doc(isd:ied, jsd:jed, 1:nk)); bling%j14c_decay_doc=0.0
+      allocate(bling%j14c_reminp(isd:ied, jsd:jed, 1:nk));    bling%j14c_reminp=0.0
+      allocate(bling%jdi14c(isd:ied, jsd:jed, 1:nk));         bling%jdi14c=0.0
+      allocate(bling%jdo14c(isd:ied, jsd:jed, 1:nk));         bling%jdo14c=0.0
+      allocate(bling%c14o2_csurf  (isd:ied, jsd:jed));        bling%c14o2_csurf=0.0
+      allocate(bling%c14o2_alpha  (isd:ied, jsd:jed));        bling%c14o2_alpha=0.0
+      allocate(bling%b_di14c      (isd:ied, jsd:jed));        bling%b_di14c=0.0
+      allocate(bling%runoff_flux_di14c(isd:ied, jsd:jed));    bling%runoff_flux_di14c=0.0
+    endif                                                  !RADIOCARBON>>
+    endif                                                  !CARBON CYCLE>>
 
   end subroutine user_allocate_arrays
 
@@ -3934,6 +5303,7 @@ write (stdlogunit, generic_bling_nml)
          bling%alpha,&
          bling%biomass_p_100,&
          bling%biomass_p_ts,&
+         bling%cased_top,&
          bling%def_fe,&
          bling%expkT,&
          bling%f_biomass_p,&
@@ -3982,13 +5352,26 @@ write (stdlogunit, generic_bling_nml)
          bling%b_fed,&
          bling%b_o2,&
          bling%b_po4 )
-
-    if (do_po4_pre) then                                          !<<PO4_PRE
+    deallocate(&
+          bling%runoff_flux_alk,&
+          bling%runoff_flux_dic,&
+          bling%runoff_flux_di14c,&
+          bling%runoff_flux_fed,&
+          bling%runoff_flux_po4,&
+          bling%runoff_flux_dop,&
+          bling%dry_fed, bling%wet_fed,&
+          bling%dry_po4, bling%wet_po4, &
+          bling%stf_gas_dic,&
+          bling%stf_gas_o2,&
+          bling%deltap_dic,&
+          bling%deltap_o2)
+    
+    if (do_po4_pre) then                                       !<<PO4_PRE
     deallocate(&
          bling%f_po4_pre )
-    endif                                                         !PO4_PRE>>
+    endif                                                      !PO4_PRE>>
 
-    if (do_carbon) then                                      !<<CARBON CYCLE
+    if (do_carbon) then                                        !<<CARBON CYCLE
     deallocate(&
          bling%f_alk,&
          bling%co3_solubility,&
@@ -4011,7 +5394,25 @@ write (stdlogunit, generic_bling_nml)
          bling%htotalhi,&
          bling%fcaco3_to_sed,&
          bling%b_alk,&
-         bling%b_dic )
+         bling%b_dic,&
+         bling%f_alk_int_100,& 
+         bling%f_dic_int_100,& 
+         bling%f_fed_int_100,&  
+         bling%f_po4_int_100,&  
+         bling%jalk_100,&  
+         bling%jdic_100,&  
+         bling%jfed_100,&  
+         bling%jpo4_100,&  
+         bling%jp_uptake_100,&
+         bling%jfe_uptake_100,&
+         bling%jca_uptake_100,&
+         bling%fpop_100,&  
+         bling%fpofe_100,&  
+         bling%fcaco3_100,&  
+         bling%wc_vert_int_c,&  
+         bling%wc_vert_int_dic,&  
+         bling%wc_vert_int_doc )
+  
       if (bury_caco3) then                                     !<<BURY CACO3  
       deallocate(&
            bling%f_cased,&
@@ -4022,7 +5423,7 @@ write (stdlogunit, generic_bling_nml)
       deallocate(&
            bling%fpop_burial )
       endif                                                    !BURY POP>>
-      if (do_carbon_pre) then                                     !<<DIC_PRE  
+      if (do_carbon_pre) then                                  !<<DIC_PRE  
       deallocate(&
            bling%f_alk_pre,&
            bling%f_dic_pre,&
@@ -4032,8 +5433,8 @@ write (stdlogunit, generic_bling_nml)
            bling%pco2_sat_csurf,&
            bling%htotal_satlo,&
            bling%htotal_sathi )
-      endif                                                       !DIC_PRE>>
-      if (do_14c) then                                        !<<RADIOCARBON
+      endif                                                    !DIC_PRE>>
+      if (do_14c) then                                         !<<RADIOCARBON
       deallocate(&
            bling%c14_2_p,&
            bling%f_di14c,&
@@ -4047,8 +5448,9 @@ write (stdlogunit, generic_bling_nml)
            bling%c14o2_alpha,&
            bling%c14o2_csurf,&
            bling%b_di14c )
-      endif                                                   !RADIOCARBON>>
-    endif                                                    !CARBON CYCLE>>
+      endif                                                    !RADIOCARBON>>
+
+    endif                                                      !CARBON CYCLE>>
 
   end subroutine user_deallocate_arrays
 
