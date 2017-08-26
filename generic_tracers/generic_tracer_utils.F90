@@ -159,6 +159,10 @@ module g_tracer_utils
      ! Tracer name, descriptive name, package that instantiates it 
      character(len=fm_string_len) :: name, longname, alias, package_name
 
+     
+     character(len=fm_string_len) :: diag_name, standard_name, diag_field_units
+     real :: diag_field_scaling_factor = 1.0
+
      ! Tracer molecular wt
      real :: flux_gas_molwt
 
@@ -744,7 +748,8 @@ contains
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
-       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, flux_gas_type,requires_src_info) 
+       flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, &
+       flux_gas_type,requires_src_info,standard_name,diag_name,diag_field_units,diag_field_scaling_factor) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -767,6 +772,10 @@ contains
     character(len=*),   intent(in), optional :: flux_gas_type
     character(len=*),   intent(in), optional :: flux_gas_restart_file
     logical,            intent(in), optional :: requires_src_info
+    character(len=*),   intent(in), optional :: standard_name
+    character(len=*),   intent(in), optional :: diag_name
+    character(len=*),   intent(in), optional :: diag_field_units
+    real,               intent(in), optional :: diag_field_scaling_factor
 
     !
     !       Local parameters
@@ -780,6 +789,7 @@ contains
     type(g_tracer_type), pointer :: g_tracer => NULL()
     integer, save :: index = 0
 
+    
     !===================================================================
     !Initialize the node
     !===================================================================
@@ -793,6 +803,25 @@ contains
     g_tracer%package_name = trim(package)
     g_tracer%units        = trim(units)
     g_tracer%prog         = prog 
+
+    if (present(standard_name)) then
+      g_tracer%standard_name = trim(standard_name)
+    else
+      g_tracer%standard_name = ""
+    endif
+
+    if (present(diag_field_scaling_factor)) then
+      g_tracer%diag_field_scaling_factor = diag_field_scaling_factor
+    else
+      g_tracer%diag_field_scaling_factor = 1.0
+    endif
+
+
+    if (present(diag_field_units)) then
+      g_tracer%diag_field_units = trim(diag_field_units)
+    else
+      g_tracer%diag_field_units = trim(units)
+    endif
 
     !Restart files for tracers 
     g_tracer%ocean_restart_file = trim(g_tracer_com%ocean_restart_file)
@@ -811,6 +840,11 @@ contains
     !This can be done for all tracers by:
     !g_tracer%alias        = trim("g_") // trim(name)
 
+    if (present(diag_name)) then
+      g_tracer%diag_name = trim(diag_name)
+    else
+      g_tracer%diag_name = g_tracer%alias
+    endif
 
     !===================================================================
     !Allocate and initialize member field arrays
@@ -1059,13 +1093,24 @@ contains
 
     character(len=fm_string_len) :: string
 
-    g_tracer%diag_id_field = g_register_diag_field(g_tracer%package_name, &
-         trim(g_tracer%alias),         &
+    if (g_tracer%standard_name .EQ. "") then
+      g_tracer%diag_id_field = g_register_diag_field(g_tracer%package_name, &
+         trim(g_tracer%diag_name),&
          g_tracer_com%axes(1:3),       &
          g_tracer_com%init_time,       &
          trim(g_tracer%longname),      &
-         trim(g_tracer%units),         &
+         trim(g_tracer%diag_field_units),    &
          missing_value = -1.0e+20)
+    else
+      g_tracer%diag_id_field = g_register_diag_field(g_tracer%package_name, &
+         trim(g_tracer%diag_name),&
+         g_tracer_com%axes(1:3),       &
+         g_tracer_com%init_time,       &
+         trim(g_tracer%longname),      &
+         trim(g_tracer%diag_field_units),    &
+         missing_value = -1.0e+20,     &
+         standard_name = g_tracer%standard_name)
+    endif
 
     string=trim(g_tracer%alias) // trim("_taup1")
     g_tracer%diag_id_field_taup1 = g_register_diag_field(g_tracer%package_name, &
@@ -2659,7 +2704,7 @@ contains
 
   subroutine g_tracer_send_diag(g_tracer_list,model_time,tau)
     type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer
-    type(time_type),      intent(in) :: model_time
+    type(time_type),        intent(in) :: model_time
     integer,                intent(in) :: tau
     integer :: tau_1
     logical :: used
@@ -2678,13 +2723,13 @@ contains
           if(.NOT. g_tracer_is_prog(g_tracer)) tau_1=1
 
        if(associated(g_tracer%field)) then 
-          used = g_send_data(g_tracer%diag_id_field, g_tracer%field(:,:,:,tau_1), model_time,&
-               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+          used = g_send_data(g_tracer%diag_id_field, (g_tracer%field(:,:,:,tau_1) * g_tracer%diag_field_scaling_factor), &
+               model_time, rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
        elseif(associated(g_tracer%field3d_ptr)) then 
-          used = g_send_data(g_tracer%diag_id_field, g_tracer%field3d_ptr(:,:,:), model_time,&
-               rmask = g_tracer_com%grid_tmask(:,:,:),& 
+          used = g_send_data(g_tracer%diag_id_field, (g_tracer%field3d_ptr(:,:,:) * g_tracer%diag_field_scaling_factor), &
+               model_time, rmask = g_tracer_com%grid_tmask(:,:,:),& 
                is_in=g_tracer_com%isc, js_in=g_tracer_com%jsc, ks_in=1,&
                ie_in=g_tracer_com%iec, je_in=g_tracer_com%jec, ke_in=g_tracer_com%nk)
 

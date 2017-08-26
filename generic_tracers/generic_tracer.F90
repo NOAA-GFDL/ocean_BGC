@@ -63,6 +63,7 @@ module generic_tracer
   use generic_CFC,    only : generic_CFC_register
   use generic_CFC,    only : generic_CFC_init, generic_CFC_update_from_source,generic_CFC_update_from_coupler
   use generic_CFC,    only : generic_CFC_set_boundary_values, generic_CFC_end, do_generic_CFC
+  use generic_CFC,    only : generic_CFC_register_diag
 
   use generic_SF6,    only : generic_SF6_register
   use generic_SF6,    only : generic_SF6_init, generic_SF6_update_from_source,generic_SF6_update_from_coupler
@@ -321,6 +322,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_COBALT)  call generic_COBALT_register_diag(diag_list)
 
     if(do_generic_SF6) call generic_SF6_register_diag(diag_list)
+    
+    if(do_generic_CFC) call generic_CFC_register_diag(diag_list)
 
   end subroutine generic_tracer_register_diag
 
@@ -497,10 +500,6 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     !    if(do_generic_argon)    call generic_argon_update_from_source(tracer_list) !Nothing to do for argon
 
-    !    if(do_generic_CFC)    call generic_CFC_update_from_source(tracer_list) !Nothing to do for CFC
-
-    !    if(do_generic_SF6)    call generic_SF6_update_from_source(tracer_list) !Nothing to do for SF6
-
     if(do_generic_abiotic) call generic_abiotic_update_from_source(tracer_list,Temp,Salt,sosga,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time)
 
@@ -525,6 +524,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
          nbands,max_wavelength_band,sw_pen_band,opacity_band)
 
     if(do_generic_SF6)  call generic_SF6_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+         ilb,jlb,tau,dtts,grid_dat,model_time)
+
+    if(do_generic_CFC)  call generic_CFC_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
          ilb,jlb,tau,dtts,grid_dat,model_time)
 
     return

@@ -103,10 +103,11 @@ module generic_SF6
   end type vardesc
 
   type generic_SF6_type
-    integer ::          &
-      id_sf6_cmip   = -1
-    real, dimension(:,:,:,:), pointer :: &
-      p_sf6
+    integer :: &
+      id_fgsf6      = -1
+    real, dimension (:,:), pointer :: &
+      stf_gas_sf6
+
   end type generic_SF6_type
 
   type(generic_SF6_type) :: sf6
@@ -182,13 +183,10 @@ contains
     ! 64-bit doubles). For most tracers, only the name, longname and units should
     ! be changed.
 
-    !! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("sf6_raw","Mole Concentration of SF6 in sea water",'h','L','s','mol kg-1','f')
-    sf6%id_sf6_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("fgsf6","Surface Downward SF6 Flux",'h','1','s','mol sec-1 m-2','f')
+    sf6%id_fgsf6 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sf6_cmip", cmor_units="mol kg-1",                          &
-         cmor_standard_name="moles_of_sf6_per_unit_mass_in_sea_water", &
-         cmor_long_name="Mole Concentration of SF6 in sea water")
+         standard_name="surface_downward_mole_flux_of_sf6")
 
   end subroutine generic_SF6_register_diag
 
@@ -236,6 +234,8 @@ contains
     !     Solubility coefficients for alpha in mol/l/atm
     !      for SF6
     !     after Wanninkhof (2014), L&O: Methods, 12, 351-362
+    !
+    ! NOTE: Constants below DO NOT match those in Orr et al. 2017 GMDD
     !-----------------------------------------------------------------------
     call g_tracer_add_param('A1', param%A1, -96.5975)
     call g_tracer_add_param('A2', param%A2,  139.883)
@@ -291,16 +291,18 @@ contains
     !diag_tracers: none
     !
     !sf6
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'sf6',               &
-         longname   = 'sf6 Concentration', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_gas       = .true.,                      &
-         flux_gas_type  = 'air_sea_gas_flux_generic',                  &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
-         flux_gas_restart_file  = 'ocmip_sf6_airsea_flux.res.nc' )
-
+    call g_tracer_add(tracer_list,package_name,                   &
+         name = 'sf6',                                            &
+         longname = 'Moles Per Unit Mass of SF6 in sea water',    &
+         units = 'mol/kg',                                        &
+         prog = .true.,                                           &
+         flux_gas = .true.,                                       &
+         flux_gas_type  = 'air_sea_gas_flux_generic',             &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),             &
+         flux_gas_restart_file  = 'ocmip_sf6_airsea_flux.res.nc', &
+         standard_name = "mole_concentration_of_sulfur_hexafluoride_in_sea_water", &
+         diag_field_units = 'mol m-3', &
+         diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
   end subroutine user_add_tracers
 
@@ -357,12 +359,12 @@ contains
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
 
-    call g_tracer_get_pointer(tracer_list,'sf6','field',sf6%p_sf6)
+    call g_tracer_get_pointer(tracer_list,'sf6','stf_gas',sf6%stf_gas_sf6)
  
-    if (sf6%id_sf6_cmip .gt. 0)            &
-        used = g_send_data(sf6%id_sf6_cmip,  sf6%p_sf6(:,:,:,tau),   &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (sf6%id_fgsf6 .gt. 0)            &
+        used = g_send_data(sf6%id_fgsf6,  sf6%stf_gas_sf6,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     return
   end subroutine generic_SF6_update_from_source

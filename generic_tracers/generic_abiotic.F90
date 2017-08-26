@@ -122,50 +122,68 @@
 !! space.  The full list of diagnostics are provided here to aid with debugging, if needed
 !!
 !! <pre>
-!! "ocean_abiotic",      0, "hours", 1, "days", "time",
-!! "ocean_abiotic_z"     0, "hours", 1, "days", "time",
+!! "ocean_abiotic",           1, "months", 1, "days", "time",
+!! "ocean_abiotic_z"          1, "months", 1, "days", "time",
+!! "ocean_abiotic_annual",   12, "months", 1, "days", "time",
+!! "ocean_abiotic_annual_z"  12, "months", 1, "days", "time",
 !!
-!! "generic_abiotic","dissicabio",  "dissicabio",  "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissi14cabio","dissi14cabio","ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","jdecay_di14c","jdecay_di14c","ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","phabio",      "phabio",      "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_htotal",   "ab_htotal",   "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_htotal14c","ab_htotal14c","ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_alk",      "ab_alk",      "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_po4",      "ab_po4",      "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_sio4",     "ab_sio4",     "ocean_abiotic","all",.true.,"none",2
+!! #-- CMIP Tracer Fields
+!! "generic_abiotic",   "dissicabio",           "dissicabio",           "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "dissi14cabio",         "dissi14cabio",         "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "phabio",               "phabio",               "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic_z", "dissicabio",           "dissicabio",           "ocean_abiotic_z","all",.true.,"none", 2
+!! "generic_abiotic_z", "dissi14cabio",         "dissi14cabio",         "ocean_abiotic_z","all",.true.,"none", 2
+!! "generic_abiotic_z", "phabio",               "phabio",               "ocean_abiotic_z","all",.true.,"none", 2
+!! "generic_abiotic",   "dissicabio",           "dissicabio",           "ocean_abiotic_annual","all",.true.,"none", 2
+!! "generic_abiotic",   "dissi14cabio",         "dissi14cabio",         "ocean_abiotic_annual","all",.true.,"none", 2
+!! "generic_abiotic",   "phabio",               "phabio",               "ocean_abiotic_annual","all",.true.,"none", 2
+!! "generic_abiotic_z", "dissicabio",           "dissicabio",           "ocean_abiotic_annual_z","all",.true.,"none", 2
+!! "generic_abiotic_z", "dissi14cabio",         "dissi14cabio",         "ocean_abiotic_annual_z","all",.true.,"none", 2
+!! "generic_abiotic_z", "phabio",               "phabio",               "ocean_abiotic_annual_z","all",.true.,"none", 2
+!!
+!! #-- CMIP Surface Fields
+!! "generic_abiotic",   "dissicabioos",         "dissicabioos",         "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissi14cabioos",       "dissi14cabioos",       "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dpco2abio",            "dpco2abio",            "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "fgco2abio",            "fgco2abio",            "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "fg14co2abio",          "fg14co2abio",          "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "phabioos",             "phabioos",             "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "spco2abio",            "spco2abio",            "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "fgco2abio",            "fgco2abio",            "ocean_abiotic_annual","all",.true.,"none",2
+!! "generic_abiotic",   "fg14co2abio",          "fg14co2abio",          "ocean_abiotic_annual","all",.true.,"none",2
+!!
+!! #-- Non-CMIP Tracer Fields
+!! "generic_abiotic",   "ab_alk",               "ab_alk",               "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "ab_htotal",            "ab_htotal",            "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "ab_htotal14c",         "ab_htotal14c",         "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "ab_po4",               "ab_po4",               "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "ab_sio4",              "ab_sio4",              "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic",   "jdecay_di14c",         "jdecay_di14c",         "ocean_abiotic","all",.true.,"none", 2
+!! "generic_abiotic_z", "ab_alk",               "ab_alk",               "ocean_abiotic_z","all",.true.,"none",2
+!! "generic_abiotic_z", "ab_htotal",            "ab_htotal",            "ocean_abiotic_z","all",.true.,"none",2
+!! "generic_abiotic_z", "ab_htotal14c",         "ab_htotal14c",         "ocean_abiotic_z","all",.true.,"none",2
+!! "generic_abiotic_z", "ab_po4",               "ab_po4",               "ocean_abiotic_z","all",.true.,"none",2
+!! "generic_abiotic_z", "ab_sio4",              "ab_sio4",              "ocean_abiotic_z","all",.true.,"none",2
+
+!! #-- Non-CMIP Surface Fields
+!! "generic_abiotic",   "sfc_ab_alk",           "sfc_ab_alk",           "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "sfc_ab_htotal",        "sfc_ab_htotal",        "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "sfc_ab_htotal14c",     "sfc_ab_htotal14c",     "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "sfc_ab_po4",           "sfc_ab_po4",           "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "sfc_ab_sio4",          "sfc_ab_sio4",          "ocean_abiotic","all",.true.,"none",2
 !! 
-!! #-- Surface Diagnostics
-!! "generic_abiotic","sfc_dissicabio",  "sfc_dissicabio",  "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","sfc_dissi14cabio","sfc_dissi14cabio","ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","sfc_ab_htotal",   "sfc_ab_htotal",   "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","sfc_ab_htotal14c","sfc_ab_htotal14c","ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","sfc_ab_alk",      "sfc_ab_alk",      "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","sfc_ab_po4",      "sfc_ab_po4",      "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","sfc_ab_sio4",     "sfc_ab_sio4",     "ocean_abiotic","all",.true.,"none",2
-!! 
-!! #-- Gas exchange
-!! "generic_abiotic","delta_14catm",        "delta_14catm",        "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissicabio_stf_gas",  "dissicabio_stf_gas",  "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissi14cabio_stf_gas","dissi14cabio_stf_gas","ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissicabio_alpha",    "dissicabio_alpha",    "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissi14cabio_alpha",  "dissi14cabio_alpha",  "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissicabio_csurf",    "dissicabio_csurf",    "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissi14cabio_csurf",  "dissi14cabio_csurf",  "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissicabio_sc_no",    "dissicabio_sc_no",    "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","dissi14cabio_sc_no",  "dissi14cabio_sc_no",  "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_pco2surf",         "ab_pco2surf",         "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic","ab_p14co2surf",       "ab_p14co2surf",       "ocean_abiotic","all",.true.,"none",2
-!! 
-!! #-- Z-diagnostics
-!! "generic_abiotic_z_new","dissicabio",  "dissicabio",  "ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","dissi14cabio","dissi14cabio","ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","phabio",      "phabio",      "ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","ab_htotal",   "ab_htotal",   "ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","ab_htotal14c","ab_htotal14c","ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","ab_alk",      "ab_alk",      "ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","ab_po4",      "ab_po4",      "ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z_new","ab_sio4",     "ab_sio4",     "ocean_abiotic_z","all",.true.,"none",2
+!! #-- Non-CMIP Gas exchange
+!! "generic_abiotic",   "ab_pco2surf",          "ab_pco2surf",          "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "ab_p14co2surf",        "ab_p14co2surf",        "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "delta_14catm",         "delta_14catm",         "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissicabio_alpha",     "dissicabio_alpha",     "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissi14cabio_alpha",   "dissi14cabio_alpha",   "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissicabio_csurf",     "dissicabio_csurf",     "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissi14cabio_csurf",   "dissi14cabio_csurf",   "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissicabio_sc_no",     "dissicabio_sc_no",     "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissi14cabio_sc_no",   "dissi14cabio_sc_no",   "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissicabio_stf_gas",   "dissicabio_stf_gas",   "ocean_abiotic","all",.true.,"none",2
+!! "generic_abiotic",   "dissi14cabio_stf_gas", "dissi14cabio_stf_gas", "ocean_abiotic","all",.true.,"none",2
 !!</pre>
 !!
 
@@ -246,13 +264,15 @@ namelist /generic_abiotic_nml/ co2_calc
      character(len=fm_string_len) :: ocean_restart_file,IC_file
 
      ! Diagnostic Output IDs
-     integer :: id_sfc_dissicabio=-1, id_sfc_dissi14cabio=-1
+     integer :: id_dissicabioos=-1, id_dissi14cabioos=-1
      integer :: id_sfc_ab_htotal=-1, id_sfc_ab_htotal14c=-1
      integer :: id_ab_alk=-1, id_ab_po4=-1, id_ab_sio4=-1
      integer :: id_sfc_ab_alk=-1, id_sfc_ab_po4=-1, id_sfc_ab_sio4=-1
      integer :: id_ab_pco2surf=-1, id_ab_p14co2surf=-1
      integer :: id_jdecay_di14c=-1, id_delta_14catm=-1
-     integer :: id_phabio=-1
+     integer :: id_phabio=-1, id_phabioos=-1
+     integer :: id_fgco2abio=-1, id_fg14co2abio=-1
+     integer :: id_spco2abio=-1, id_dpco2abio=-1
 
      ! 2-dimensional fields
      real, dimension(:,:), ALLOCATABLE ::   &
@@ -263,6 +283,12 @@ namelist /generic_abiotic_nml/ co2_calc
           abpco2_csurf,abp14co2_csurf,      &!< Oceanic pCO2 (ppmv)
           delta_14catm                       !< Atm. Delta of 14C 
  
+     ! 2-dimensional pointers
+     real, dimension(:,:), pointer :: &
+          stf_gas_dissicabio,               &!< Surface partial pressure of DIC
+          stf_gas_dissi14cabio,             &!< Sufface partial pressure of DI14C
+          deltap_dissicabio                  !< Delta Abiotic pCO2
+
      ! 3-dimensional fields
      real, dimension(:,:,:), ALLOCATABLE :: &
           f_dissicabio, f_dissi14cabio,     &!< Abiotic DIC & DI14C fields
@@ -414,15 +440,17 @@ contains
     abiotic%id_sfc_ab_sio4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("sfc_dissicabio","Surface Abiotic Dissolved Inorganic Carbon",&
-                           'h','1','s','mol kg-1','f')
-    abiotic%id_sfc_dissicabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc("dissicabioos","Surface Abiotic Dissolved Inorganic Carbon Concentration",&
+                           'h','1','s','mol m-3','f')
+    abiotic%id_dissicabioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name = "mole_concentration_of_dissolved_inorganic_carbon_abiotic_analogue_in_sea_water")
 
-    vardesc_temp = vardesc("sfc_dissi14cabio","Surface Abiotic Dissolved Inorganic Radiocarbon",&
-                           'h','1','s','mol kg-1','f')
-    abiotic%id_sfc_dissi14cabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+    vardesc_temp = vardesc("dissi14cabioos","Surface Abiotic Dissolved Inorganic 14Carbon Concentration",&
+                           'h','1','s','mol m-3','f')
+    abiotic%id_dissi14cabioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name = "mole_concentration_of_dissolved_inorganic_carbon14_in_sea_water")
 
     vardesc_temp = vardesc("sfc_ab_htotal","Surface Abiotic Htotal",'h','1','s','mol kg-1','f')
     abiotic%id_sfc_ab_htotal = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
@@ -445,9 +473,36 @@ contains
     abiotic%id_jdecay_di14c = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("phabio","Abiotic pH",'h','L','s','1','f')
+    vardesc_temp = vardesc("phabio","Abiotic pH",'h','L','s','1.0','f')
     abiotic%id_phabio = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         standard_name="sea_water_ph_abiotic_analogue_reported_on_total_scale")
+
+    vardesc_temp = vardesc("phabioos","Surface Abiotic pH",'h','L','s','1.0','f')
+    abiotic%id_phabioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1,&
+         standard_name="sea_water_ph_abiotic_analogue_reported_on_total_scale")
+
+    vardesc_temp = vardesc("fgco2abio","Surface Downward Abiotic CO2 Flux",'h','1','s','kg m-2 s-1','f')
+    abiotic%id_fgco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_downward_mass_flux_of_carbon_dioxide_abiotic_analogue_expressed_as_carbon")
+
+    vardesc_temp = vardesc("fg14co2abio","Surface Downward Abiotic 14CO2 Flux",'h','1','s','kg m-2 s-1','f')
+    abiotic%id_fgco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_downward_mass_flux_of_carbon14_dioxide_abiotic_analogue_expressed_as_carbon")
+
+    vardesc_temp = vardesc("spco2abio","Abiotic Surface Aqueous Partial Pressure of CO2",'h','1','s','Pa','f')
+    abiotic%id_spco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_partial_pressure_of_carbon_dioxide_abiotic_analogue_in_sea_water")
+
+    vardesc_temp = vardesc("dpco2abio","Abiotic Delta PCO2",'h','1','s','Pa','f')
+    abiotic%id_dpco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_carbon_dioxide_abiotic_analogue_partial_pressure_difference_between_sea_water_and_air")
+
 
   end subroutine generic_abiotic_register_diag
 
@@ -594,7 +649,7 @@ contains
 
     call g_tracer_add(tracer_list,package_name,                        &
          name       = 'dissicabio',                                    &
-         longname   = 'Abiotic Dissolved Inorganic Carbon',            &
+         longname   = 'Abiotic Dissolved Inorganic Carbon Concentration',&
          units      = 'mol/kg',                                        &
          prog       = .true.,                                          &
          flux_gas   = .true.,                                          &
@@ -606,11 +661,14 @@ contains
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
          flux_bottom= .true.,                                          &
-         init_value = 0.001 )          
+         init_value = 0.001,                                           &
+         standard_name = "mole_concentration_of_dissolved_inorganic_carbon_abiotic_analogue_in_sea_water", &
+         diag_field_units = 'mol m-3',                                 &
+         diag_field_scaling_factor = 1035.0)  !rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
     call g_tracer_add(tracer_list,package_name,                        &
          name       = 'dissi14cabio',                                  &
-         longname   = 'Abiotic Dissolved Inorganic Radioarbon',        &
+         longname   = 'Abiotic Dissolved Inorganic 14Carbon Concentration',&
          units      = 'mol/kg',                                        &
          prog       = .true.,                                          &
          flux_gas   = .true.,                                          &
@@ -622,7 +680,10 @@ contains
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
          flux_bottom= .true.,                                          &
-         init_value = 0.001 )        
+         init_value = 0.001,                                           &
+         standard_name = "mole_concentration_of_dissolved_inorganic_carbon14_in_sea_water", &
+         diag_field_units = 'mol m-3',                                &
+         diag_field_scaling_factor = 1035.0) ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
     call g_tracer_add(tracer_list,package_name,       &
          name       = 'ab_htotal',                    &
@@ -757,6 +818,11 @@ contains
     call g_tracer_get_pointer(tracer_list,'ab_htotal','field',abiotic%p_htotal)
     call g_tracer_get_pointer(tracer_list,'ab_htotal14c','field',abiotic%p_htotal14c)
 
+    call g_tracer_get_pointer(tracer_list,'dissicabio','stf_gas',abiotic%stf_gas_dissicabio)
+    call g_tracer_get_pointer(tracer_list,'dissi14cabio','stf_gas',abiotic%stf_gas_dissi14cabio)
+
+    call g_tracer_get_pointer(tracer_list,'dissicabio','deltap',abiotic%deltap_dissicabio)
+
     ! Decay the radiocarbon
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{        
 
@@ -814,13 +880,13 @@ contains
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
-    if (abiotic%id_sfc_dissicabio .gt. 0)  &
-       used = g_send_data(abiotic%id_sfc_dissicabio, abiotic%p_dissicabio(:,:,1,tau),         &
+    if (abiotic%id_dissicabioos .gt. 0)  &
+       used = g_send_data(abiotic%id_dissicabioos, (abiotic%p_dissicabio(:,:,1,tau) * abiotic%Rho_0),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
-    if (abiotic%id_sfc_dissi14cabio .gt. 0)  &
-       used = g_send_data(abiotic%id_sfc_dissi14cabio, abiotic%p_dissi14cabio(:,:,1,tau),         &
+    if (abiotic%id_dissi14cabioos .gt. 0)  &
+       used = g_send_data(abiotic%id_dissi14cabioos, (abiotic%p_dissi14cabio(:,:,1,tau) * abiotic%Rho_0),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -844,7 +910,33 @@ contains
          model_time, rmask = grid_tmask(:,:,:),                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-  end subroutine generic_abiotic_update_from_source
+    if (abiotic%id_phabioos .gt. 0) &
+         used = g_send_data(abiotic%id_phabioos, -1. * log(abiotic%p_htotal(:,:,1,tau)),      &
+         model_time, rmask = grid_tmask(:,:,1),                                         & 
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+
+    if (abiotic%id_fgco2abio .gt. 0)  &
+        used = g_send_data(abiotic%id_fgco2abio, abiotic%stf_gas_dissicabio * 12e-3, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (abiotic%id_fg14co2abio .gt. 0)            &
+        used = g_send_data(abiotic%id_fg14co2abio, abiotic%stf_gas_dissi14cabio * 12e-3, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (abiotic%id_spco2abio .gt. 0)            &
+        used = g_send_data(abiotic%id_spco2abio,  abiotic%abpco2_csurf(:,:) * 0.1013,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (abiotic%id_dpco2abio .gt. 0)            &
+        used = g_send_data(abiotic%id_dpco2abio,  abiotic%deltap_dissicabio * 0.1013,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+
+ end subroutine generic_abiotic_update_from_source
 
 
 
