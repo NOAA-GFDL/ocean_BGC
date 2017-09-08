@@ -662,8 +662,10 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           id_talkos         = -1, &
           id_phos           = -1, &
           id_o2os           = -1, &
+          id_o2os_cmip      = -1, &
           id_o2satos        = -1, &
           id_po4os          = -1, &
+          id_po4os_cmip     = -1, &
           id_dfeos          = -1, &
           id_chlos          = -1, &
           id_phypos         = -1, &
@@ -1274,6 +1276,14 @@ write (stdlogunit, generic_bling_nml)
          cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water", &
          cmor_long_name="Dissolved Oxygen Concentration")
 
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("o2os_raw","Surface Dissolved Oxygen Concentration",'h','L','s','mol m-3','f')
+    bling%id_o2os_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="o2os_cmip", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water", &
+         cmor_long_name="Dissolved Oxygen Concentration")
+
     vardesc_temp = vardesc("o2sat_raw","Dissolved Oxygen Concentration at Saturation",'h','L','s','mol m-3','f')
     bling%id_o2sat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -1286,6 +1296,14 @@ write (stdlogunit, generic_bling_nml)
     bling%id_po4_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="po4_cmip", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_phosphate_in_sea_water", &
+         cmor_long_name="Dissolved Phosphate Concentration")
+
+!! same name in model and CMOR, but different units - use _cmip for now
+    vardesc_temp = vardesc("po4os_raw","Surface Dissolved Phosphate Concentration",'h','L','s','mol m-3','f')
+    bling%id_po4os_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="po4os_cmip", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phosphate_in_sea_water", &
          cmor_long_name="Dissolved Phosphate Concentration")
 
@@ -1468,13 +1486,6 @@ write (stdlogunit, generic_bling_nml)
          cmor_field_name="dissi14cabioos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon14_in_sea_water", &
          cmor_long_name="Surface Abiotic Dissolved Inorganic 14Carbon Concentration")
-
-    vardesc_temp = vardesc("dissocos_raw","Surface Dissolved Organic Carbon Concentration",'h','1','s','mol m-3','f')
-    bling%id_dissocos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="dissocos", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_organic_carbon_in_sea_water",  &
-         cmor_long_name="Surface Dissolved Organic Carbon Concentration")
 
     vardesc_temp = vardesc("phycos_raw","Sea Surface Phytoplankton Carbon Concentration",'h','1','s','mol m-3','f')
     bling%id_phycos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
@@ -2051,14 +2062,14 @@ write (stdlogunit, generic_bling_nml)
     ! Now, they are given as:
     !   wsink = wsink0 + (wsinkmax - wsink0) * z / (z + wsinkz)
     !
-    call g_tracer_add_param('wsinkmax', bling%wsinkmax, 100.0 / sperd)           ! m s-1 
-    call g_tracer_add_param('wsink0', bling%wsink0, 0.0 / sperd)                 ! m s-1
-    call g_tracer_add_param('wsinkz', bling%wsinkz, 400. )                       ! m
+    call g_tracer_add_param('wsinkmax', bling%wsinkmax, 200.0 / sperd)           ! m s-1 
+    call g_tracer_add_param('wsink0', bling%wsink0, 50.0 / sperd)                 ! m s-1
+    call g_tracer_add_param('wsinkz', bling%wsinkz, 1000.0 )                       ! m
     !
     ! Reduced slightly to account for temperature effect with zero C reference
     ! call g_tracer_add_param('gamma_pop', bling%gamma_pop, 0.12 / sperd )          ! s-1
     !
-    call g_tracer_add_param('gamma_pop', bling%gamma_pop, 0.1 / sperd )          ! s-1
+    call g_tracer_add_param('gamma_pop', bling%gamma_pop, 100.0 / 350.0 / sperd )          ! s-1
     !
     ! Organic matter protection by mineral - after Klaas and
     ! Archer (2002)
@@ -4340,7 +4351,7 @@ write (stdlogunit, generic_bling_nml)
 
 ! CHECK: this is using ntau=1
     if (bling%id_ph .gt. 0)                                                      &
-        used = g_send_data(bling%id_ph,  log10(bling%f_htotal) * -1.0,           &
+        used = g_send_data(bling%id_ph,  log10(bling%f_htotal + epsln) * -1.0,           &
         model_time, rmask = grid_tmask,                                          &
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -4349,17 +4360,31 @@ write (stdlogunit, generic_bling_nml)
         model_time, rmask = grid_tmask,                                          &
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
+    if (bling%id_o2os_cmip .gt. 0)                                               &
+        used = g_send_data(bling%id_o2os_cmip,  bling%p_o2(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
 ! Oyr only
 ! PENDING:
 !    if (bling%id_o2sat .gt. 0)            &
 !        used = g_send_data(bling%id_o2sat,  bling%o2sat 
 !        model_time, rmask = grid_tmask,&
 !        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+!    if (bling%id_o2satos .gt. 0)            &
+!        used = g_send_data(bling%id_o2satos,  bling%o2sat(:,:,1) 
+!        model_time, rmask = grid_tmask(:,:,1),&
+!        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (bling%id_po4_cmip .gt. 0)                                                &
         used = g_send_data(bling%id_po4_cmip,  bling%p_po4(:,:,:,tau) * bling%Rho_0, &
         model_time, rmask = grid_tmask,                                          &
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+    if (bling%id_po4os_cmip .gt. 0)                                              &
+        used = g_send_data(bling%id_po4os_cmip,  bling%p_po4(:,:,1,tau) * bling%Rho_0, &
+        model_time, rmask = grid_tmask(:,:,1),                                   &
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (bling%id_dfe .gt. 0)                                                     &
         used = g_send_data(bling%id_dfe,  bling%p_fed(:,:,:,tau) * bling%Rho_0,  &
@@ -4522,7 +4547,7 @@ write (stdlogunit, generic_bling_nml)
 
 ! CHECK: this is using ntau=1
     if (bling%id_phos .gt. 0)                                                  &
-        used = g_send_data(bling%id_phos,  log10(bling%f_htotal(:,:,1)) * -1.0, &
+        used = g_send_data(bling%id_phos,  log10(bling%f_htotal(:,:,1) + epsln) * -1.0, &
         model_time, rmask = grid_tmask(:,:,1),                                   &
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
