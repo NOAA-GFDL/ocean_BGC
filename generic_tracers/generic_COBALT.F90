@@ -1,4 +1,3 @@
-
 ! <CONTACT EMAIL="Charles.Stock@noaa.gov"> Charles Stock 
 ! </CONTACT>
 !
@@ -40,13 +39,11 @@
 !       cadet_arag: calcium carbonate detritus (aragonite)                
 !       cadet_calc: calcium carbonate detritus (calcite)                  
 !       dic: dissolved inorganic carbon                                   
-!       fec: colloidal iron                                               
 !       fed: dissolved iron                                               
 !       fedi: diazotroph iron                                             
 !       felg: large phytoplankton iron
 !       fedet: iron detritus                                              
 !       fesm: small phytoplankton iron
-!       h2o2: hydrogen peroxide
 !       ldon: labile dissolved organic nitrogen                           
 !       ldop: labile dissolved organic phosphorous
 !       lith: lithogenic aluminosilicate particles                        
@@ -78,13 +75,6 @@
 !   
 !<NAMELIST NAME="generic_COBALT_nml">
 !
-!  <DATA NAME="do_fan_dunne_fe" TYPE="logical">
-!  If true, then simulate radiocarbon. Includes 2 prognostic tracers, DI14C
-! and DO14C. Requires that do_carbon = .true. Note that 14C is not taken up
-! by CaCO3 at the current time, but cycles only through the soft tissue.
-! This is a mistake that will be fixed later.
-!  </DATA> 
-!
 !  <DATA NAME="do_14c" TYPE="logical">
 !  If true, then simulate radiocarbon. Includes 2 prognostic tracers, DI14C
 ! and DO14C. Requires that do_carbon = .true. Note that 14C is not taken up
@@ -93,7 +83,7 @@
 !  </DATA> 
 !
 !  <DATA NAME="co2_calc" TYPE="character">
-!  Defines the carbon equiliabration method.  Default is 'ocmip2' which uses
+!  Defines the carbon equilibration method.  Default is 'ocmip2' which uses
 ! the FMS_ocmip2_co2calc routine.  The other option is 'mocsy', which uses
 ! the set of routines authored by J. Orr. See reference at: 
 ! http://ocmip5.ipsl.jussieu.fr/mocsy/index.html
@@ -149,8 +139,8 @@ module generic_COBALT
 
   implicit none ; private
 !-----------------------------------------------------------------------
-  character(len=128) :: version = '$Id$'
-  character(len=128) :: tag = '$Name$'
+  character(len=128) :: version = '$Id: generic_COBALT.F90,v 20.0.2.1.2.1 2014/09/29 16:40:08 Niki.Zadeh Exp $'
+  character(len=128) :: tag = '$Name: bugfix_nnz $'
 !-----------------------------------------------------------------------
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_COBALT'
@@ -179,9 +169,9 @@ module generic_COBALT
 
   character(len=10) ::  co2_calc = 'ocmip2'  ! other option is 'mocsy'
   logical :: do_14c             = .false.
-  logical :: do_fan_dunne_fe    = .false.
+  logical :: debug              = .false.
 
-namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
+namelist /generic_COBALT_nml/ do_14c, co2_calc, debug
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -214,6 +204,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jexuloss_n_100,   &
           f_n_100,          &
           juptake_fe_100,   &
+          juptake_po4_100,  &
           juptake_sio4_100
      real, ALLOCATABLE, dimension(:,:,:)  :: &
           def_fe      , & 
@@ -514,6 +505,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           doc_background,   &
           fe_2_n_upt_fac,   &
           fe_2_n_sed,       &
+          ffe_sed_max,      &
           fe_coast,         &
           felig_2_don,      &
           felig_bkg ,       &
@@ -533,12 +525,11 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           k_o2,             &
           kappa_eppley,     &
           kappa_remin,      &
+          remin_ramp_scale, &
           kfe_eq_lig_hl,    &
           kfe_eq_lig_ll,    &
           alpha_fescav,     &
-          beta_fescav,      &
           gamma_fescav,     &
-          ki_fescav,        & 
           io_fescav,        &
           remin_eff_fedet,  &
           half_life_14c,    &
@@ -613,10 +604,8 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           f_cadet_arag,&
           f_cadet_calc,&
           f_dic,&
-          f_fec,&
           f_fed,&
           f_fedet,&
-          f_h2o2,&
           f_ldon,&
           f_ldop,&
           f_lith,&
@@ -638,8 +627,6 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           co3_sol_calc,&
           f_chl,&
           f_co3_ion,&
-          f_fe2,&
-          f_fe3,&
           f_htotal,&
           f_irr_mem,&
           f_cased,&
@@ -664,14 +651,12 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jdic,&
           jdic_plus_btm,&
           jdin_plus_btm,&
-          jfec,&
           jfed,&
           jfed_plus_btm,&
           jfedi,&
           jfelg,&
           jfesm,&
           jfedet,&
-          jh2o2,&
           jldon,&
           jldop,&
           jlith,&
@@ -702,16 +687,15 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jprod_sldop,&
           jprod_srdon,&
           jprod_srdop,&
-          jprod_fec,&
           jprod_fed,&
           jprod_fedet,&
-          jprod_h2o2, &
           jprod_sidet,&
           jprod_sio4, &
           jprod_lithdet,&
           jprod_cadet_arag,&
           jprod_cadet_calc,&
           jprod_nh4,&
+          jprod_nh4_plus_btm,&
           jprod_po4,&
           det_jzloss_n,&
           det_jzloss_p,&
@@ -722,7 +706,9 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           det_jhploss_fe,&
           det_jhploss_si,&
           jdiss_cadet_arag,&
+          jdiss_cadet_arag_plus_btm,&
           jdiss_cadet_calc,&
+          jdiss_cadet_calc_plus_btm,&
           jdiss_sidet,&
           jremin_ndet,&
           jremin_pdet,&
@@ -731,6 +717,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jfe_coast,&
           kfe_eq_lig,&
           expkT,&
+          expkreminT,&
           hp_temp_lim,&
           hp_jingest_n,&
           hp_jingest_p,&
@@ -739,6 +726,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           irr_inst,&
           irr_mix,&
           jno3denit_wc,&
+          jo2resp_wc, &
           jnitrif,&
           omega_arag,&
           omega_calc,&                                                  
@@ -750,8 +738,6 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           tot_layer_int_p,&
           tot_layer_int_si,&
           total_filter_feeding,&
-          net_prim_prod,&
-          gross_prim_prod,&
           nlg_diatoms,&
           q_si_2_n_lg_diatoms,&
           zt, &
@@ -767,11 +753,13 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jdo14c, &
 !==============================================================================================================
 ! JGJ 2016/08/08 CMIP6 Ocnbgc 
+! CAS: added tot_layer_int_dic 
           dissoc, &
           o2sat, &
           remoc, &
           tot_layer_int_doc,&
-          tot_layer_int_poc
+          tot_layer_int_poc,&
+          tot_layer_int_dic
  
 !==============================================================================================================
 
@@ -796,6 +784,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           fndet_burial,&
           fpdet_burial,&
           jprod_allphytos_100,&
+          jprod_diat_100,&
           htotallo, htotalhi,&
           hp_jingest_n_100,&
           hp_jremin_n_100,&
@@ -840,6 +829,8 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           jprod_ptot_100, &
           wc_vert_int_c,&
           wc_vert_int_dic,&
+          wc_vert_int_doc,&
+          wc_vert_int_poc,&
           wc_vert_int_jfe_coast,&
           wc_vert_int_jno3denit,&
           wc_vert_int_nfix
@@ -852,13 +843,11 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           p_dic,&
           p_di14c,&
           p_do14c,&
-          p_fec,&
           p_fed,&
           p_fedet,&
           p_fedi,&
           p_felg,&
           p_fesm,&
-          p_h2o2,&
           p_ldon,&
           p_ldop,&
           p_lith,&
@@ -884,14 +873,13 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           p_nmdz,&
           p_nlgz
 
-      real, dimension (:,:), pointer :: &
+      real, dimension (:,:), allocatable :: &
           runoff_flux_alk,&
           runoff_flux_dic,&
           runoff_flux_di14c,&
           runoff_flux_lith,&
           runoff_flux_fed,&
           runoff_flux_no3,&
-          runoff_flux_h2o2,&
           runoff_flux_ldon,&
           runoff_flux_sldon,&
           runoff_flux_srdon,&
@@ -901,7 +889,6 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           runoff_flux_sldop,&
           runoff_flux_srdop,&
           dry_fed, wet_fed,&
-          dry_h2o2, wet_h2o2,&
           dry_lith, wet_lith,&
           dry_no3, wet_no3,&
           dry_nh4, wet_nh4,&
@@ -928,13 +915,11 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_cadet_arag    = -1,       &
           id_cadet_calc    = -1,       &
           id_dic           = -1,       &
-          id_fec           = -1,       &
           id_fed           = -1,       &
           id_fedet         = -1,       &
           id_fedi          = -1,       &
           id_felg          = -1,       &
           id_fesm          = -1,       &
-          id_h2o2          = -1,       &
           id_ldon          = -1,       &
           id_ldop          = -1,       &
           id_lith          = -1,       &
@@ -955,12 +940,10 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_co3_sol_arag  = -1,       &
           id_co3_sol_calc  = -1,       &
           id_dep_dry_fed   = -1,       &
-          id_dep_dry_h2o2  = -1,       &
           id_dep_dry_nh4   = -1,       & 
           id_dep_dry_no3   = -1,       &
           id_dep_dry_po4   = -1,       & 
           id_dep_wet_fed   = -1,       & 
-          id_dep_wet_h2o2  = -1,       & 
           id_dep_wet_nh4   = -1,       &
           id_dep_wet_no3   = -1,       &
           id_dep_wet_po4   = -1,       &
@@ -970,8 +953,6 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_omega_calc    = -1,       &
           id_chl           = -1,       &
           id_co3_ion       = -1,       &
-          id_fe2           = -1,       &
-          id_fe3           = -1,       &
           id_htotal        = -1,       &
           id_irr_mem       = -1,       &
           id_cased         = -1,       &
@@ -982,7 +963,6 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_ndet_btf      = -1,       & 
           id_pdet_btf      = -1,       & 
           id_sidet_btf     = -1,       &
-          id_jfec          = -1,       &
           id_jfed          = -1,       &
           id_jprod_ndet    = -1,       &
           id_jprod_pdet    = -1,       &
@@ -992,10 +972,8 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_jprod_sldop   = -1,       &
           id_jprod_ldop    = -1,       &
           id_jprod_srdop   = -1,       &
-          id_jprod_fec     = -1,       &
           id_jprod_fed     = -1,       &
           id_jprod_fedet   = -1,       &
-          id_jprod_h2o2    = -1,       &
           id_jprod_sidet   = -1,       &
           id_jprod_sio4    = -1,       &
           id_jprod_lithdet = -1,       &
@@ -1003,6 +981,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_jprod_cadet_calc = -1,    & 
           id_jprod_po4     = -1,       &
           id_jprod_nh4     = -1,       &
+          id_jprod_nh4_plus_btm = -1,  &
           id_det_jzloss_n  = -1,       &
           id_det_jzloss_p  = -1,       &
           id_det_jzloss_fe = -1,       &
@@ -1013,7 +992,9 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_det_jhploss_si = -1,      &
           id_jdiss_sidet   = -1,       &
           id_jdiss_cadet_arag = -1,    &
+          id_jdiss_cadet_arag_plus_btm = -1, &
           id_jdiss_cadet_calc = -1,    &
+          id_jdiss_cadet_calc_plus_btm = -1, &
           id_jremin_ndet   = -1,       &
           id_jremin_pdet   = -1,       & 
           id_jremin_fedet  = -1,       &
@@ -1021,6 +1002,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_jfe_coast     = -1,       &
           id_kfe_eq_lig    = -1,       &
           id_expkT         = -1,       &
+          id_expkreminT    = -1,       &
           id_hp_temp_lim   = -1,       &
           id_hp_jingest_n  = -1,       &
           id_hp_jingest_p  = -1,       &
@@ -1036,6 +1018,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_jndet          = -1,       & 
           id_jnh4_plus_btm = -1,       & 
           id_jno3denit_wc  = -1,       &
+          id_jo2resp_wc    = -1,       &
           id_jnitrif       = -1,       &
           id_co2_csurf     = -1,       & 
           id_pco2_csurf    = -1,       &
@@ -1071,9 +1054,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_sfc_cadet_arag= -1,       & 
           id_sfc_cadet_calc= -1,       & 
           id_sfc_dic       = -1,       & 
-          id_sfc_fec       = -1,       & 
           id_sfc_fed       = -1,       & 
-          id_sfc_h2o2      = -1,       &
           id_sfc_ldon      = -1,       &
           id_sfc_sldon     = -1,       &
           id_sfc_srdon     = -1,       &
@@ -1092,15 +1073,12 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_sfc_co3_ion   = -1,       &
           id_sfc_co3_sol_arag = -1,    &
           id_sfc_co3_sol_calc = -1,    &
-          id_sfc_fe2       = -1,       &
-          id_sfc_fe3       = -1,       &
           id_runoff_flux_alk = -1,     &
           id_runoff_flux_dic = -1,     &
           id_runoff_flux_di14c = -1,     &
           id_runoff_flux_fed = -1,     &
           id_runoff_flux_lith = -1,    &
           id_runoff_flux_no3 = -1,     &
-          id_runoff_flux_h2o2 = -1,    &
           id_runoff_flux_ldon = -1,    &
           id_runoff_flux_sldon = -1,   &
           id_runoff_flux_srdon = -1,   &
@@ -1115,10 +1093,9 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_tot_layer_int_p = -1,     & 
           id_tot_layer_int_si = -1,    & 
           id_total_filter_feeding = -1,&
-          id_net_prim_prod = -1,       &
-          id_gross_prim_prod = -1,     &
           id_nlg_diatoms = -1,         &
           id_jprod_allphytos_100 = -1, &
+          id_jprod_diat_100 = -1,      &
           id_q_si_2_n_lg_diatoms = -1, &
           id_hp_jingest_n_100 = -1,    &
           id_hp_jremin_n_100 = -1,     &
@@ -1186,8 +1163,8 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_phydiaz        = -1, &
           id_phypico        = -1, &
           id_phymisc        = -1, &
-          id_zoomicro       = -1, &
-          id_zoomeso        = -1, &
+          id_zmicro         = -1, &
+          id_zmeso          = -1, &
           id_talk           = -1, &
           id_talknat        = -1, &
           id_ph             = -1, &
@@ -1249,54 +1226,55 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_fescav         = -1, &
           id_fediss         = -1, &
           id_graz           = -1, &
-          id_sfc_dissic         = -1, & 
-          id_sfc_dissicnat      = -1, & 
-          id_sfc_dissicabio     = -1, & 
-          id_sfc_dissi14cabio   = -1, & 
-          id_sfc_dissoc         = -1, &
-          id_sfc_phyc           = -1, &
-          id_sfc_zooc           = -1, &
-          id_sfc_bacc           = -1, &
-          id_sfc_detoc          = -1, &
-          id_sfc_calc           = -1, &
-          id_sfc_arag           = -1, &
-          id_sfc_phydiat        = -1, &
-          id_sfc_phydiaz        = -1, &
-          id_sfc_phypico        = -1, &
-          id_sfc_phymisc        = -1, &
-          id_sfc_zoomicro       = -1, &
-          id_sfc_zoomeso        = -1, &
-          id_sfc_talk           = -1, &
-          id_sfc_talknat        = -1, &
-          id_sfc_ph             = -1, &
-          id_sfc_phnat          = -1, &
-          id_sfc_phabio         = -1, &
-          id_sfc_o2_cmip        = -1, &
-          id_sfc_o2sat          = -1, &
-          id_sfc_no3_cmip       = -1, &
-          id_sfc_nh4_cmip       = -1, &
-          id_sfc_po4_cmip       = -1, &
-          id_sfc_dfe            = -1, &
-          id_sfc_si             = -1, &
-          id_sfc_chl_cmip       = -1, &
-          id_sfc_chldiat        = -1, &
-          id_sfc_chldiaz        = -1, &
-          id_sfc_chlpico        = -1, &
-          id_sfc_chlmisc        = -1, &
-          id_sfc_pon            = -1, &
-          id_sfc_pop            = -1, &
-          id_sfc_bfe            = -1, &
-          id_sfc_bsi            = -1, &
-          id_sfc_phyn           = -1, &
-          id_sfc_phyp           = -1, &
-          id_sfc_phyfe          = -1, &
-          id_sfc_physi          = -1, &
-          id_sfc_co3            = -1, &
-          id_sfc_co3nat         = -1, &
-          id_sfc_co3abio        = -1, &
-          id_sfc_co3satcalc     = -1, &
-          id_sfc_co3satarag     = -1, &
+          id_dissicos           = -1, & 
+          id_dissicnatos        = -1, & 
+          id_dissicabioos       = -1, & 
+          id_dissi14cabioos     = -1, & 
+          id_dissocos           = -1, &
+          id_phycos             = -1, &
+          id_zoocos             = -1, &
+          id_baccos             = -1, &
+          id_detocos            = -1, &
+          id_calcos             = -1, &
+          id_aragos             = -1, &
+          id_phydiatos          = -1, &
+          id_phydiazos          = -1, &
+          id_phypicoos          = -1, &
+          id_phymiscos          = -1, &
+          id_zmicroos           = -1, &
+          id_zmesoos            = -1, &
+          id_talkos             = -1, &
+          id_talknatos          = -1, &
+          id_phos               = -1, &
+          id_phnatos            = -1, &
+          id_phabioos           = -1, &
+          id_o2os               = -1, &
+          id_o2satos            = -1, &
+          id_no3os              = -1, &
+          id_nh4os              = -1, &
+          id_po4os              = -1, &
+          id_dfeos              = -1, &
+          id_sios               = -1, &
+          id_chlos              = -1, &
+          id_chldiatos          = -1, &
+          id_chldiazos          = -1, &
+          id_chlpicoos          = -1, &
+          id_chlmiscos          = -1, &
+          id_ponos              = -1, &
+          id_popos              = -1, &
+          id_bfeos              = -1, &
+          id_bsios              = -1, &
+          id_phynos             = -1, &
+          id_phypos             = -1, &
+          id_phyfeos            = -1, &
+          id_physios            = -1, &
+          id_co3os              = -1, &
+          id_co3natos           = -1, &
+          id_co3abioos          = -1, &
+          id_co3satcalcos       = -1, &
+          id_co3sataragos       = -1, &
           id_limndiat           = -1, &
+          id_limndiaz           = -1, &
           id_limnpico           = -1, &
           id_limnmisc           = -1, &
           id_limirrdiat         = -1, &
@@ -1308,7 +1286,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_limfepico          = -1, &
           id_limfemisc          = -1, &
           id_intpp              = -1, &
-          id_intpnitrate        = -1, &
+          id_intppnitrate       = -1, &
           id_intppdiat          = -1, &
           id_intppdiaz          = -1, &
           id_intpppico          = -1, &
@@ -1319,15 +1297,15 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_intpbsi            = -1, &
           id_intpcalcite        = -1, &
           id_intparag           = -1, &
-          id_expc100            = -1, &
-          id_expn100            = -1, &
-          id_expp100            = -1, &
-          id_expfe100           = -1, &
-          id_expsi100           = -1, &
-          id_expcalc100         = -1, &
-          id_exparag100         = -1, &
-          id_intdissic          = -1, &
-          id_intdissoc          = -1, &
+          id_epc100             = -1, &
+          id_epn100             = -1, &
+          id_epp100             = -1, &
+          id_epfe100            = -1, &
+          id_epsi100            = -1, &
+          id_epcalc100          = -1, &
+          id_eparag100          = -1, &
+          id_intdic             = -1, &
+          id_intdoc             = -1, &
           id_intpoc             = -1, &
           id_spco2              = -1, &
           id_spco2nat           = -1, &
@@ -1365,9 +1343,7 @@ namelist /generic_COBALT_nml/ do_14c, do_fan_dunne_fe, co2_calc
           id_fbddtdip           = -1, &
           id_fbddtdife          = -1, &
           id_fbddtdisi          = -1, &
-          id_fbddtalk           = -1, &
-          id_chlos              = -1, &
-          id_phycos             = -1
+          id_fbddtalk           = -1
 
 !==============================================================================================================
   end type generic_COBALT_type
@@ -1450,10 +1426,6 @@ write (stdlogunit, generic_COBALT_nml)
     write (stdoutunit,*) trim(note_header), 'Simulating radiocarbon'
   endif
 
-  if (do_fan_dunne_fe) then
-    write (stdoutunit,*) trim(note_header), 'Using Fan and Dunne 2011 Chemistry'
-  endif
-  
   if (trim(co2_calc) == 'ocmip2') then
     write (stdoutunit,*) trim(note_header), 'Using FMS OCMIP2 CO2 routine'
   else if (trim(co2_calc) == 'mocsy') then
@@ -1463,7 +1435,7 @@ write (stdlogunit, generic_COBALT_nml)
   endif
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
-    
+
   end subroutine generic_COBALT_register
 
   !  <SUBROUTINE NAME="generic_COBALT_init">
@@ -1783,8 +1755,8 @@ write (stdlogunit, generic_COBALT_nml)
     !
     ! Register dynamic silicate diagnostics
     !
-    vardesc_temp = vardesc("nlg_diatoms","Fraction of large phytos that are diatoms",&
-                           'h','L','s','dimensionless','f')
+    vardesc_temp = vardesc("nlg_diatoms","large phytoplankton nitrogen from diatoms",&
+                           'h','L','s','mol kg-1','f')
     cobalt%id_nlg_diatoms = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -2415,6 +2387,11 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_jprod_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
     
+! CAS added a "plus_btm" version of jprod_nh4 to use for the remoc CMIP variable
+    vardesc_temp = vardesc("jprod_nh4_plus_btm","NH4 production layer integral plus bottom fluxes",'h','L','s','mol NH4 m-2 s-1','f')
+    cobalt%id_jprod_nh4_plus_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+   
     !
     ! loss diagnostics: detrital loss terms
     !
@@ -2443,9 +2420,21 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_jdiss_cadet_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    ! CAS added diagnostic including bottom fluxes for cmip5
+    vardesc_temp = vardesc("jdiss_cadet_arag_plus_btm","CaCO3 detritus dissolution plus bottom dissolution, layer integral", &
+                           'h','L','s','mol CaCO3 m-2 s-1','f')
+    cobalt%id_jdiss_cadet_arag_plus_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("jdiss_cadet_calc","CaCO3 detritus dissolution, layer integral", &
                            'h','L','s','mol CaCO3 m-2 s-1','f')
     cobalt%id_jdiss_cadet_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    ! CAS added diagnostic including bottom fluxes for cmip5
+    vardesc_temp = vardesc("jdiss_cadet_calc_plus_btm","CaCO3 detritus dissolution plus bottom dissolution, layer integral", &
+                           'h','L','s','mol CaCO3 m-2 s-1','f')
+    cobalt%id_jdiss_cadet_calc_plus_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jremin_ndet","Nitrogen detritus remineralization, layer integral",&
@@ -2467,25 +2456,11 @@ write (stdlogunit, generic_COBALT_nml)
     ! iron cycling diagnostics 
     !
 
-    vardesc_temp = vardesc("jprod_fec","colloidal iron production layer integral",&
-                            'h','L','s','mol Fe m-2 s-1','f')
-    cobalt%id_jprod_fec = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-    
     vardesc_temp = vardesc("jprod_fed","dissolved iron production layer integral",&
                             'h','L','s','mol Fe m-2 s-1','f')
     cobalt%id_jprod_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
         
-    vardesc_temp = vardesc("jprod_h2o2","Hydrogen Peroxide production layer integral",&
-                            'h','L','s','mol H2O2 m-2 s-1','f')
-    cobalt%id_jprod_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("jfec","Colloidal Iron Change layer integral",'h','L','s','mol Fe m-2 s-1','f')
-    cobalt%id_jfec = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
     vardesc_temp = vardesc("jfed","Dissolved Iron Change layer integral",'h','L','s','mol Fe m-2 s-1','f')
     cobalt%id_jfed = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -2508,6 +2483,10 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("expkT","Eppley temperature limitation factor",'h','L','s','dimensionless','f')
     cobalt%id_expkT = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("expkreminT","Detritus remineralization temperature limitation factor",'h','L','s','dimensionless','f')
+    cobalt%id_expkreminT = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("hp_temp_lim","Temperature limitation of higher predators",'h','L','s','dimensionless','f')
@@ -2538,6 +2517,13 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_jno3denit_wc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    !
+    ! Track total aerobic respiration in the water column
+    !
+
+    vardesc_temp = vardesc("jo2resp_wc","Water column aerobic respiration layer integral",'h','L','s','mol m-2 s-1','f')
+    cobalt%id_jo2resp_wc = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     !
     ! Some useful total layer integrals
@@ -2571,24 +2557,12 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_total_filter_feeding = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("net_prim_prod","net primary production by all phytoplankton",'h','L','s','mol C m-2 yr-1','f')
-    cobalt%id_net_prim_prod = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("gross_prim_prod","gross primary production by all phytoplankton",'h','L','s','mol C m-2 yr-1','f')
-    cobalt%id_gross_prim_prod = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
     !
     !  Save river, depositon and bulk elemental fluxes
     !
 
     vardesc_temp = vardesc("dep_dry_fed","Dry Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_dry_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("dep_dry_h2o2","Dry Deposition of H2O2 to the ocean",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_dep_dry_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("dep_dry_lith","Dry Deposition of Lithogenic Material",'h','1','s','g m-2 s-1','f')
@@ -2609,10 +2583,6 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("dep_wet_fed","Wet Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_wet_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("dep_wet_h2o2","Wet Deposition of H2O2 to the ocean",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_dep_wet_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("dep_wet_lith","Wet Deposition of Lithogenic Material",'h','1','s','g m-2 s-1','f')
@@ -2652,10 +2622,6 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("runoff_flux_no3","Nitrate runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_runoff_flux_no3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("runoff_flux_h2o2","h2o2 runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_runoff_flux_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("runoff_flux_ldon","LDON runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
@@ -2818,16 +2784,8 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_sfc_dic = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("sfc_fec","Surface Colloidal Iron",'h','1','s','mol kg-1','f')
-    cobalt%id_sfc_fec = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
     vardesc_temp = vardesc("sfc_fed","Surface Dissolved Iron",'h','1','s','mol kg-1','f')
     cobalt%id_sfc_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("sfc_h2o2","Surface Hydrogen Peroxide",'h','1','s','mol kg-1','f')
-    cobalt%id_sfc_h2o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("sfc_ldon","Surface Labile Dissolved Organic Nitrogen",'h','1','s','mol kg-1','f')
@@ -2900,14 +2858,6 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("sfc_co3_sol_calc","Surface Carbonate Ion Solubility for Calcite ",'h','1','s','mol kg-1','f')
     cobalt%id_sfc_co3_sol_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("sfc_fe2","Surface Iron(II)",'h','1','s','mol kg-1','f')
-    cobalt%id_sfc_fe2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("sfc_fe3","Surface Iron(III)",'h','1','s','mol kg-1','f')
-    cobalt%id_sfc_fe3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("sfc_nsmp","Surface small phyto. nitrogen",'h','1','s','mol kg-1','f')
@@ -3040,6 +2990,11 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("jprod_allphytos_100","Total Nitrogen prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
     cobalt%id_jprod_allphytos_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+! CAS: Added diagnostic for diatom NPP in top 100m for CMIP
+    vardesc_temp = vardesc("jprod_diat_100","Diatom prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_jprod_diat_100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("jprod_ndi_100","Diazotroph nitrogen prim. prod. integral in upper 100m",'h','1','s','mol m-2 s-1','f')
@@ -3423,35 +3378,37 @@ write (stdlogunit, generic_COBALT_nml)
 !==============================================================================================================
 ! JGJ 2016/08/08 CMIP6 OcnBgchem Oyr/Omon/day: Marine Biogeochemical Fields
 
-    vardesc_temp = vardesc("dissic_raw","Total Dissolved Inorganic Carbon",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("dissic_raw","Dissolved Inorganic Carbon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_dissic = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dissic", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water",  &
          cmor_long_name="Dissolved Inorganic Carbon Concentration")
 
-    vardesc_temp = vardesc("dissicnat_raw","Total Natural Dissolved Inorganic Carbon",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("dissicnat_raw","Natural Dissolved Inorganic Carbon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_dissicnat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dissicnat", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water_natural_component",  &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_natural_analogue_in_sea_water",  &
          cmor_long_name="Natural Dissolved Inorganic Carbon Concentration")
 
-    vardesc_temp = vardesc("dissicabio_raw","Total Abiotic Dissolved Inorganic Carbon",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("dissicabio_raw","Abiotic Dissolved Inorganic Carbon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_dissicabio = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dissicabio", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water_abiotic_component",  &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_abiotic_analogue_in_sea_water",  &
          cmor_long_name="Abiotic Dissolved Inorganic Carbon Concentration")
 
-    vardesc_temp = vardesc("dissi14cabio_raw","Total Natural Dissolved Inorganic Carbon",'h','L','s','mol m-3','f')
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has long name as mole_concentration_of_dissolved_inorganic_carbon14_in_sea_water  (missing abiotic_analogue)
+    vardesc_temp = vardesc("dissi14cabio_raw","Abiotic Dissolved Inorganic 14Carbon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_dissi14cabio = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dissi14cabio", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_inorganic_14carbon_in_sea_water_abiotic_component", &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon14_abiotic_analogue_in_sea_water", &
          cmor_long_name="Abiotic Dissolved Inorganic 14Carbon Concentration")
 
-    vardesc_temp = vardesc("dissoc_raw","Total Dissolved Organic Carbon",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("dissoc_raw","Dissolved Organic Carbon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_dissoc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dissoc", cmor_units="mol m-3",                          &
@@ -3500,45 +3457,50 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="mole_concentration_of_aragonite_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Aragonite Concentration")
 
-    vardesc_temp = vardesc("phydiat_raw","Mole Concentration of Diatoms",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("phydiat_raw","Mole Concentration of Diatoms expressed as Carbon in Sea Water",'h','L','s','mol m-3','f')
     cobalt%id_phydiat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="phydiat", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_diatoms_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Mole Concentration of Diatoms expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("phydiaz_raw","Mole Concentration of Diazotrophs",'h','L','s','mol m-3','f')
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has uppercase 'E' for 'expressed' in long_name
+    vardesc_temp = vardesc("phydiaz_raw","Mole Concentration of Diazotrophs expressed as Carbon in Sea Water",'h','L','s','mol m-3','f')
     cobalt%id_phydiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="phydiaz", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_diazotrophs_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Mole Concentration of Diazotrophs expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("phypico_raw","Mole Concentration of Picophytoplankton",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("phypico_raw","Mole Concentration of Picophytoplankton expressed as Carbon in Sea Water",'h','L','s','mol m-3','f')
     cobalt%id_phypico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="phypico", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_picophytoplankton_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Mole Concentration of Picophytoplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("phymisc_raw","Mole Concentration of Miscellaneous Phytoplankton",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("phymisc_raw","Mole Concentration of Miscellaneous Phytoplankton expressed as Carbon in Sea Water",'h','L','s','mol m-3','f')
     cobalt%id_phymisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="phymisc", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_miscellaneous_phytoplankton_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Mole Concentration of Miscellaneous Phytoplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("zoomicro_raw","Mole Concentration of Microzooplankton",'h','L','s','mol m-3','f')
-    cobalt%id_zoomicro = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+! CAS: zooplankton listed as "zmicro" and "zmeso" in spreadsheet
+! 2017/08/04 was supposed to change spreadsheet to match zooplankton carbon concentration (check OCMIP paper for name)
+! 2017/08/04 - updated to zmicro, zmeso instead of zoomicro, zoomeso
+    vardesc_temp = vardesc("zmicro_raw","Mole Concentration of Microzooplankton expressed as Carbon in Sea Water",'h','L','s','mol m-3','f')
+    cobalt%id_zmicro = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="zoomicro", cmor_units="mol m-3",                          &
+         cmor_field_name="zmicro", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_microzooplankton_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Mole Concentration of Microzooplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("zoomeso_raw","Mole Concentration of Mesozooplankton",'h','L','s','mol m-3','f')
-    cobalt%id_zoomeso = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("zmeso_raw","Mole Concentration of Mesozooplankton expressed as Carbon in Sea Water",'h','L','s','mol m-3','f')
+    cobalt%id_zmeso = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="zoomeso", cmor_units="mol m-3",                          &
+         cmor_field_name="zmeso", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_mesozooplankton_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Mole Concentration of Mesozooplankton expressed as Carbon in Sea Water")
 
@@ -3546,37 +3508,35 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_talk = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="talk", cmor_units="mol m-3",                          &
-         cmor_standard_name="seawater_alkalinity_expressed_as_mole_equivalent", &
+         cmor_standard_name="sea_water_alkalinity_expressed_as_mole_equivalent", &
          cmor_long_name="Total Alkalinity")
 
     vardesc_temp = vardesc("talknat_raw","Natural Total Alkalinity",'h','L','s','mol m-3','f')
     cobalt%id_talknat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="talknat", cmor_units="mol m-3",                          &
-         cmor_standard_name="seawater_alkalinity_expressed_as_mole_equivalent_natural_component", &
+         cmor_standard_name="sea_water_alkalinity_natural_analogue_expressed_as_mole_equivalent", &
          cmor_long_name="Natural Total Alkalinity")
 
     vardesc_temp = vardesc("ph_raw","pH",'h','L','s','1','f')
     cobalt%id_ph = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="ph", cmor_units="1",                          &
-         cmor_standard_name="seawater_ph_reported_on_total_scale", &
+         cmor_standard_name="sea_water_ph_reported_on_total_scale", &
          cmor_long_name="pH")
 
-! PENDING: CHECK: (not in spreadsheet)
     vardesc_temp = vardesc("phnat_raw","Natural pH",'h','L','s','1','f')
     cobalt%id_phnat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="phnat", cmor_units="1",                          &
-         cmor_standard_name="seawater_ph_reported_on_total_scale_natural_component", &
+         cmor_standard_name="sea_water_ph_natural_analogue_reported_on_total_scale", &
          cmor_long_name="Natural pH")
 
-! PENDING: CHECK: (not in spreadsheet)
     vardesc_temp = vardesc("phabio_raw","Abiotic pH",'h','L','s','1','f')
     cobalt%id_phabio = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="phabio", cmor_units="1",                          &
-         cmor_standard_name="seawater_ph_reported_on_total_scale_abiotic_component", &
+         cmor_standard_name="sea_water_ph_abiotic_analogue_reported_on_total_scale", &
          cmor_long_name="Abiotic pH")
 
 !! same name in model and CMOR, but different units - use _cmip for now
@@ -3584,14 +3544,14 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_o2_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="o2_cmip", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water", &
+         cmor_standard_name="mole_concentration_of_dissolved_molecular_oxygen_in_sea_water", &
          cmor_long_name="Dissolved Oxygen Concentration")
 
     vardesc_temp = vardesc("o2sat_raw","Dissolved Oxygen Concentration at Saturation",'h','L','s','mol m-3','f')
     cobalt%id_o2sat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="o2sat", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water_at_saturation", &
+         cmor_standard_name="mole_concentration_of_dissolved_molecular_oxygen_in_sea_water_at_saturation", &
          cmor_long_name="Dissolved Oxygen Concentration at Saturation")
 
 !! same name in model and CMOR, but different units - use _cmip for now
@@ -3611,12 +3571,12 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_long_name="Dissolved Ammonium Concentration")
 
 !! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("po4_raw","Dissolved Phosphate Concentration",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("po4_raw","Total Dissolved Inorganic Phosphorus Concentration",'h','L','s','mol m-3','f')
     cobalt%id_po4_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="po4_cmip", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_phosphate_in_sea_water", &
-         cmor_long_name="Dissolved Phosphate Concentration")
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_phosphorus_in_sea_water", &
+         cmor_long_name="Total Dissolved Inorganic Phosphorus Concentration")
 
     vardesc_temp = vardesc("dfe_raw","Dissolved Iron Concentration",'h','L','s','mol m-3','f')
     cobalt%id_dfe = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
@@ -3625,12 +3585,12 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="mole_concentration_of_dissolved_iron_in_sea_water", &
          cmor_long_name="Dissolved Iron Concentration")
 
-    vardesc_temp = vardesc("si_raw","Dissolved Silicate Concentration",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("si_raw","Total Dissolved Inorganic Silicon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_si = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="si", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_silicate_in_sea_water", &
-         cmor_long_name="Dissolved Silicate Concentration")
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_silicon_in_sea_water", &
+         cmor_long_name="Total Dissolved Inorganic Silicon Concentration")
 
 !! same name in model and CMOR, but different units - use _cmip for now
     vardesc_temp = vardesc("chl_raw","Total Chlorophyll Mass Concentration",'h','L','s','kg m-3','f')
@@ -3647,14 +3607,14 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="mass_concentration_of_diatoms_expressed_as_chlorophyll_in_sea_water", &
          cmor_long_name="Diatom Chlorophyll Mass Concentration")
 
-    vardesc_temp = vardesc("chldiaz_raw","Diazotrophs Chlorophyll Mass Concentration",'h','L','s','kg m-3','f')
+    vardesc_temp = vardesc("chldiaz_raw","Mass Concentration of Diazotrophs expressed as Chlorophyll in Sea Water",'h','L','s','kg m-3','f')
     cobalt%id_chldiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="chldiaz", cmor_units="kg m-3",                          &
          cmor_standard_name="mass_concentration_of_diazotrophs_expressed_as_chlorophyll_in_sea_water", &
          cmor_long_name="Mass Concentration of Diazotrophs expressed as Chlorophyll in Sea Water")
 
-    vardesc_temp = vardesc("chlpico_raw","Picophytoplankton Chlorophyll Mass Concentration",'h','L','s','kg m-3','f')
+    vardesc_temp = vardesc("chlpico_raw","Mass Concentration of Picophytoplankton expressed as Chlorophyll in Sea Water",'h','L','s','kg m-3','f')
     cobalt%id_chlpico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="chlpico", cmor_units="kg m-3",                          &
@@ -3669,6 +3629,7 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_long_name="Other Phytoplankton Chlorophyll Mass Concentration")
 
 ! Omon only
+! 2017/08/04 poc appears to be missing in data request spreadsheet
     vardesc_temp = vardesc("poc_raw","Particulate Organic Carbon Concentration",'h','L','s','mol m-3','f')
     cobalt%id_poc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3697,6 +3658,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="mole_concentration_of_particulate_organic_matter_expressed_as_iron_in_sea_water", &
          cmor_long_name="Particulate Biogenic Iron Concentration")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silica in long_name: should long_name be Silicon to match standard name and other Si terms?
     vardesc_temp = vardesc("bsi_raw","Particulate Biogenic Silica Concentration",'h','L','s','mol m-3','f')
     cobalt%id_bsi = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3725,6 +3688,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_iron_in_sea_water", &
          cmor_long_name="Phytoplankton Iron Concentration")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silica in long_name: should long_name be Silicon to match standard name and other Si terms?
     vardesc_temp = vardesc("physi_raw","Phytoplankton Silica Concentration",'h','L','s','mol m-3','f')
     cobalt%id_physi = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3737,42 +3702,44 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_co3 = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="co3", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater", &
-         cmor_long_name="Mole Concentration of Carbonate ion in Seawater")
+         cmor_standard_name="mole_concentration_of_carbonate_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Carbonate Ion Concentration")
 
-! CHECK: not in spreadsheet
+! CHECK2
+! 2017/08/04 Spreadsheet has lowercase 'i' for 'ion' in long_name - should it be uppercase?  (I used uppercase here)
 ! Per JPD, use Omon long_name and standard_name
     vardesc_temp = vardesc("co3nat_raw","Natural Carbonate Ion Concentration",'h','L','s','mol m-3','f')
     cobalt%id_co3nat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="co3nat", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater_natural_component", &
-         cmor_long_name="Natural Mole Concentration of Carbonate ion in Seawater")
+         cmor_standard_name="mole_concentration_of_carbonate_natural_analogue_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Natural Carbonate Ion Concentration")
 
-! CHECK: not in spreadsheet
+! CHECK2
+! 2017/08/04 Spreadsheet has lowercase 'i' for 'ion' in long_name - should it be uppercase?  (I used uppercase here)
 ! Per JPD, use Omon long_name and standard_name
     vardesc_temp = vardesc("co3abio_raw","Abiotic Carbonate Ion Concentration",'h','L','s','mol m-3','f')
     cobalt%id_co3abio = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="co3abio", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater_abiotic_component", &
-         cmor_long_name="Abiotic Mole Concentration of Carbonate ion in Seawater")
+         cmor_standard_name="mole_concentration_of_carbonate_abiotic_analogue_expressed_as_carbon_in_sea_water", &
+         cmor_long_name="Abiotic Carbonate Ion Concentration")
 
 ! Per JPD, use Omon long_name and standard_name
-    vardesc_temp = vardesc("co3satcalc_raw","Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("co3satcalc_raw","Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Calcite",'h','L','s','mol m-3','f')
     cobalt%id_co3satcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="co3satcalc", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_for_seawater_in equilibrium_with_pure_calcite", &
-         cmor_long_name="Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite")
+         cmor_standard_name="mole_concentration_of_carbonate_ion_for_sea_water_in equilibrium_with_pure_calcite", &
+         cmor_long_name="Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Calcite")
 
 ! Per JPD, use Omon long_name and standard_name
-    vardesc_temp = vardesc("co3satarag_raw","Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Aragonite",'h','L','s','mol m-3','f')
+    vardesc_temp = vardesc("co3satarag_raw","Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Aragonite",'h','L','s','mol m-3','f')
     cobalt%id_co3satarag = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="co3satarag", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_for_seawater_in equilibrium_with_pure_aragonite", &
-         cmor_long_name="Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Aragonite")
+         cmor_standard_name="mole_concentration_of_carbonate_ion_for_sea_water_in equilibrium_with_pure_aragonite", &
+         cmor_long_name="Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Aragonite")
 
 !------------------------------------------------------------------------------------------------------------------
 ! 3-D rates
@@ -3807,6 +3774,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_iron_in_sea_water_due_to_biological_production", &
          cmor_long_name="Biogenic Iron Production")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silica in long_name: should long_name be Silicon to match standard name and other Si terms?
     vardesc_temp = vardesc("pbsi_raw","Biogenic Silica Production",'h','L','s','mol m-3 s-1','f')
     cobalt%id_pbsi = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3828,12 +3797,14 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_aragonite_expressed_as_carbon_in_sea_water_due_to_biological_production", &
          cmor_long_name="Aragonite Production")
 
-    vardesc_temp = vardesc("expc_raw","Sinking Particulate Organic Carbon Flux",'h','L','s','mol m-2 s-1','f')
+! CHECK2
+! 2017/08/04 jgj: CMOR requires positive down, area:areacello, volume:volcello
+    vardesc_temp = vardesc("expc_raw","Downward Flux of Particulate Organic Carbon",'h','L','s','mol m-2 s-1','f')
     cobalt%id_expc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="expc", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_particulate_organic_matter_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Sinking Particulate Organic Carbon Flux")
+         cmor_long_name="Downward Flux of Particulate Organic Carbon")
 
     vardesc_temp = vardesc("expn_raw","Sinking Particulate Organic Nitrogen Flux",'h','L','s','mol m-2 s-1','f')
     cobalt%id_expn = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
@@ -3856,6 +3827,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="sinking_mole_flux_of_particulate_iron_in_sea_water", &
          cmor_long_name="Sinking Particulate Iron Flux")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silica in long_name: should long_name be Silicon to match standard name and other Si terms?
     vardesc_temp = vardesc("expsi_raw","Sinking Particulate Silica Flux",'h','L','s','mol m-2 s-1','f')
     cobalt%id_expsi = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3863,19 +3836,19 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="sinking_mole_flux_of_particulate_silicon_in_sea_water", &
          cmor_long_name="Sinking Particulate Silica Flux")
 
-    vardesc_temp = vardesc("expcalc_raw","Sinking Calcite Flux",'h','L','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("expcalc_raw","Downward Flux of Calcite",'h','L','s','mol m-2 s-1','f')
     cobalt%id_expcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="expcalc", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_calcite_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Sinking Calcite Flux")
+         cmor_long_name="Downward Flux of Calcite")
 
-    vardesc_temp = vardesc("exparag_raw","Sinking Aragonite Flux",'h','L','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("exparag_raw","Downward Flux of Aragonite",'h','L','s','mol m-2 s-1','f')
     cobalt%id_exparag = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="exparag", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_aragonite_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Sinking Aragonite Flux")
+         cmor_long_name="Downward Flux of Aragonite")
 
     vardesc_temp = vardesc("remoc_raw","Remineralization of Organic Carbon",'h','L','s','mol m-3 s-1','f')
     cobalt%id_remoc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
@@ -3898,6 +3871,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_aragonite_expressed_as_carbon_in_sea_water_due_to_dissolution", &
          cmor_long_name="Aragonite Dissolution")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has pdi and ppdiat as the same quantity (Oyr: Diatom Primary Carbon Production, rows 80 and 84)
     vardesc_temp = vardesc("ppdiat_raw","Diatom Primary Carbon Production",'h','L','s','mol m-3 s-1','f')
     cobalt%id_ppdiat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3905,20 +3880,23 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_particulate_organic_matter_expressed_as_carbon_in_sea_water_due_to_net_primary_production_by_diatoms", &
          cmor_long_name="Diatom Primary Carbon Production")
 
-    vardesc_temp = vardesc("ppdiaz_raw","Diazotrophs Primary Carbon Production",'h','L','s','mol m-3 s-1','f')
+    ! CAS: noted name discrepancy from spreadsheet
+    vardesc_temp = vardesc("ppdiaz_raw","Tendency of Mole Concentration of Organic Carbon in Sea Water due to Net Primary Production by Diazotrophs",'h','L','s','mol m-3 s-1','f')
     cobalt%id_ppdiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="ppdiaz", cmor_units="mol m-3 s-1",                          &
          cmor_standard_name="tendency_of_mole_concentration_of_particulate_organic_matter_expressed_as_carbon_in_sea_water_due_to_net_primary_production_by_diazotrophs", &
          cmor_long_name="Tendency of Mole Concentration of Organic Carbon in Sea Water due to Net Primary Production by Diazotrophs")
 
-    vardesc_temp = vardesc("pppico_raw","Picophytoplankton Primary Carbon Production",'h','L','s','mol m-3 s-1','f')
+    ! CAS: noted name discrepancy from spreadsheet
+    vardesc_temp = vardesc("pppico_raw","Tendency of Mole Concentration of Organic Carbon in Sea Water due to Net Primary Production by Picophytoplankton",'h','L','s','mol m-3 s-1','f')
     cobalt%id_pppico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="pppico", cmor_units="mol m-3 s-1",                          &
          cmor_standard_name="tendency_of_mole_concentration_of_particulate_organic_matter_expressed_as_carbon_in_sea_water_due_to_net_primary_production_by_picophytoplankton", &
          cmor_long_name="Tendency of Mole Concentration of Organic Carbon in Sea Water due to Net Primary Production by Picophytoplankton")
 
+    ! CAS: noted name discrepancy from spreadsheet
     vardesc_temp = vardesc("ppmisc_raw","Other Phytoplankton Carbon Production",'h','L','s','mol m-3 s-1','f')
     cobalt%id_ppmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -3940,12 +3918,12 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_nitrogen_in_sea_water_due_to_biological_processes", &
          cmor_long_name="Rate of Change of Nitrogen Nutrient due to Biological Activity")
 
-    vardesc_temp = vardesc("bddtdip_raw","Rate of Change of Dissolved Phosphate due to Biological Activity",'h','L','s','mol m-3 s-1','f')
+    vardesc_temp = vardesc("bddtdip_raw","Rate of Change of Dissolved Phosphorus due to Biological Activity",'h','L','s','mol m-3 s-1','f')
     cobalt%id_bddtdip = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="bddtdip", cmor_units="mol m-3 s-1",                          &
-         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_phosphate_in_sea_water_due_to_biological_processes", &
-         cmor_long_name="Rate of Change of Dissolved Phosphate due to Biological Activity")
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_phosphorus_in_sea_water_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Phosphorus due to Biological Activity")
 
     vardesc_temp = vardesc("bddtdife_raw","Rate of Change of Dissolved Inorganic Iron due to Biological Activity",'h','L','s','mol m-3 s-1','f')
     cobalt%id_bddtdife = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
@@ -3954,12 +3932,12 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_iron_in_sea_water_due_to_biological_processes", &
          cmor_long_name="Rate of Change of Dissolved Inorganic Iron due to Biological Activity")
 
-    vardesc_temp = vardesc("bddtdisi_raw","Rate of Change of Dissolved Inorganic Silicate due to Biological Activity",'h','L','s','mol m-3 s-1','f')
+    vardesc_temp = vardesc("bddtdisi_raw","Rate of Change of Dissolved Inorganic Silicon due to Biological Activity",'h','L','s','mol m-3 s-1','f')
     cobalt%id_bddtdisi = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="bddtdisi", cmor_units="mol m-3 s-1",                          &
-         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_silicate_in_sea_water_due_to_biological_processes", &
-         cmor_long_name="Rate of Change of Dissolved Inorganic Silicate due to Biological Activity")
+         cmor_standard_name="tendency_of_mole_concentration_of_dissolved_inorganic_silicon_in_sea_water_due_to_biological_processes", &
+         cmor_long_name="Rate of Change of Dissolved Inorganic Silicon due to Biological Activity")
 
     vardesc_temp = vardesc("bddtalk_raw","Rate of Change of Alkalinity due to Biological Activity",'h','L','s','mol m-3 s-1','f')
     cobalt%id_bddtalk = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
@@ -3982,11 +3960,13 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_mole_concentration_of_dissolved_iron_in_sea_water_due_to_dissolution_from_inorganic_particles", &
          cmor_long_name="Particle Source of Dissolved Iron")
 
+! CHECK2
+! 2017/08/04 jgj: CMOR requires area:areacello, volume:volcello
     vardesc_temp = vardesc("graz_raw","Total Grazing of Phytoplankton by Zooplankton",'h','L','s','mol m-3 s-1','f')
     cobalt%id_graz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="graz", cmor_units="mol m-3 s-1",                          &
-         cmor_standard_name="tendency_of_mole_concentration_of_organic_matter_expressed_as_carbon_in_sea_water_due_to_grazing_of_phytoplankton", &
+         cmor_standard_name="tendency_of_mole_concentration_of_particulate_organic_matter_expressed_as_carbon_in_sea_water_due_to_grazing_of_phytoplankton", &
          cmor_long_name="Total Grazing of Phytoplankton by Zooplankton")
 
 !------------------------------------------------------------------------------------------------------------------
@@ -3996,423 +3976,434 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_limndiat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limndiat", cmor_units="1",                          &
-         cmor_standard_name="nitrogen_limitation_of_diatoms", &
+         cmor_standard_name="nitrogen_growth_limitation_of_diatoms", &
          cmor_long_name="Nitrogen limitation of Diatoms")
+
+! CHECK2
+! 2017/08/04 jgj added limndiaz - check if we have this term and correct as needed 
+    vardesc_temp = vardesc("limndiaz_raw","Nitrogen limitation of Diazotrophs",'h','L','s','1','f')
+    cobalt%id_limndiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="limndiaz", cmor_units="1",                          &
+         cmor_standard_name="nitrogen_growth_limitation_of_diazotrophs", &
+         cmor_long_name="Nitrogen limitation of Diazotrophs")
 
     vardesc_temp = vardesc("limnpico_raw","Nitrogen limitation of Picophytoplankton",'h','L','s','1','f')
     cobalt%id_limnpico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limnpico", cmor_units="1",                          &
-         cmor_standard_name="nitrogen_limitation_of_picophytoplankton", &
+         cmor_standard_name="nitrogen_growth_limitation_of_picophytoplankton", &
          cmor_long_name="Nitrogen limitation of Picophytoplankton")
 
     vardesc_temp = vardesc("limnmisc_raw","Nitrogen Limitation of Other Phytoplankton",'h','L','s','1','f')
     cobalt%id_limnmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limnmisc", cmor_units="1",                          &
-         cmor_standard_name="nitrogen_limitation_of_miscellaneous_phytoplankton", &
+         cmor_standard_name="nitrogen_growth_limitation_of_miscellaneous_phytoplankton", &
          cmor_long_name="Nitrogen Limitation of Other Phytoplankton")
 
     vardesc_temp = vardesc("limirrdiat_raw","Irradiance limitation of Diatoms",'h','L','s','1','f')
     cobalt%id_limirrdiat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrdiat", cmor_units="1",                          &
-         cmor_standard_name="irradiance_limitation_of_diatoms", &
+         cmor_standard_name="growth_limitation_of_diatoms_due_to_solar_irradiance", &
          cmor_long_name="Irradiance limitation of Diatoms")
 
     vardesc_temp = vardesc("limirrdiaz_raw","Irradiance limitation of Diazotrophs",'h','L','s','1','f')
     cobalt%id_limirrdiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrdiaz", cmor_units="1",                          &
-         cmor_standard_name="irradiance_limitation_of_diazotrophs", &
+         cmor_standard_name="growth_limitation_of_diazotrophs_due_to_solar_irradiance", &
          cmor_long_name="Irradiance limitation of Diazotrophs")
 
     vardesc_temp = vardesc("limirrpico_raw","Irradiance limitation of Picophytoplankton",'h','L','s','1','f')
     cobalt%id_limirrpico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrpico", cmor_units="1",                          &
-         cmor_standard_name="irradiance_limitation_of_picophytoplankton", &
+         cmor_standard_name="growth_limitation_of_picophytoplankton_due_to_solar_irradiance", &
          cmor_long_name="Irradiance limitation of Picophytoplankton")
 
     vardesc_temp = vardesc("limirrmisc_raw","Irradiance Limitation of Other Phytoplankton",'h','L','s','1','f')
     cobalt%id_limirrmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrmisc", cmor_units="1",                          &
-         cmor_standard_name="irradiance_limitation_of_miscellaneous_phytoplankton", &
+         cmor_standard_name="growth_limitation_of_miscellaneous_phytoplankton_due_to_solar_irradiance", &
          cmor_long_name="Irradiance Limitation of Other Phytoplankton")
 
     vardesc_temp = vardesc("limfediat_raw","Iron limitation of Diatoms",'h','L','s','1','f')
     cobalt%id_limfediat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfediat", cmor_units="1",                          &
-         cmor_standard_name="iron_limitation_of_diatoms", &
+         cmor_standard_name="iron_growth_limitation_of_diatoms", &
          cmor_long_name="Iron limitation of Diatoms")
 
     vardesc_temp = vardesc("limfediaz_raw","Iron limitation of Diazotrophs",'h','L','s','1','f')
     cobalt%id_limfediaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfediaz", cmor_units="1",                          &
-         cmor_standard_name="iron_limitation_of_diazotrophs", &
+         cmor_standard_name="iron_growth_limitation_of_diazotrophs", &
          cmor_long_name="Iron limitation of Diazotrophs")
 
     vardesc_temp = vardesc("limfepico_raw","Iron limitation of Picophytoplankton",'h','L','s','1','f')
     cobalt%id_limfepico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfepico", cmor_units="1",                          &
-         cmor_standard_name="iron_limitation_of_picophytoplankton", &
+         cmor_standard_name="iron_growth_limitation_of_picophytoplankton", &
          cmor_long_name="Iron limitation of Picophytoplankton")
 
     vardesc_temp = vardesc("limfemisc_raw","Iron limitation of Other Phytoplankton",'h','L','s','1','f')
     cobalt%id_limfemisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfemisc", cmor_units="1",                          &
-         cmor_standard_name="iron_limitation_of_miscellaneous_phytoplankto", &
+         cmor_standard_name="iron_growth_limitation_of_miscellaneous_phytoplankto", &
          cmor_long_name="Iron limitation of Other Phytoplankton")
 
 !------------------------------------------------------------------------------------------------------------------
 ! 2-D fields
 ! sfc tracers
 
-    vardesc_temp = vardesc("sfc_dissic_raw","Total Dissolved Inorganic Carbon at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_dissic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("dissicos_raw","Surface Dissolved Inorganic Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_dissicos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_dissic", cmor_units="mol m-3",                          &
+         cmor_field_name="dissicos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water",  &
-         cmor_long_name="Dissolved Inorganic Carbon Concentration at surface")
+         cmor_long_name="Surface Dissolved Inorganic Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_dissicnat_raw","Total Natural Dissolved Inorganic Carbon at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_dissicnat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("dissicnatos_raw","Surface Natural Dissolved Inorganic Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_dissicnatos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_dissicnat", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water_natural_component",  &
-         cmor_long_name="Natural Dissolved Inorganic Carbon Concentration at surface")
+         cmor_field_name="dissicnatos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_natural_analogue_in_sea_water",  &
+         cmor_long_name="Surface Natural Dissolved Inorganic Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_dissicabio_raw","Total Abiotic Dissolved Inorganic Carbon at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_dissicabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("dissicabioos_raw","Surface Abiotic Dissolved Inorganic Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_dissicabioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_dissicabio", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_in_sea_water_abiotic_component",  &
-         cmor_long_name="Abiotic Dissolved Inorganic Carbon Concentration at surface")
+         cmor_field_name="dissicabioos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon_abiotic_analogue_in_sea_water",  &
+         cmor_long_name="Surface Abiotic Dissolved Inorganic Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_dissi14cabio_raw","Total Natural Dissolved Inorganic Carbon at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_dissi14cabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("dissi14cabioos_raw","Surface Abiotic Dissolved Inorganic 14Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_dissi14cabioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_dissi14cabio", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_dissolved_inorganic_14carbon_in_sea_water_abiotic_component", &
-         cmor_long_name="Abiotic Dissolved Inorganic 14Carbon Concentration at surface")
+         cmor_field_name="dissi14cabioos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_carbon14_in_sea_water", &
+         cmor_long_name="Surface Abiotic Dissolved Inorganic 14Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_dissoc_raw","Total Dissolved Organic Carbon at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_dissoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("dissocos_raw","Surface Dissolved Organic Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_dissocos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_dissoc", cmor_units="mol m-3",                          &
+         cmor_field_name="dissocos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_dissolved_organic_carbon_in_sea_water",  &
-         cmor_long_name="Dissolved Organic Carbon Concentration at surface")
+         cmor_long_name="Surface Dissolved Organic Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_phyc_raw","Phytoplankton Carbon Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phyc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+! also in Oday
+    vardesc_temp = vardesc("phycos_raw","Sea Surface Phytoplankton Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_phycos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phyc", cmor_units="mol m-3",                          &
+         cmor_field_name="phycos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Phytoplankton Carbon Concentration at surface")
+         cmor_long_name="Sea Surface Phytoplankton Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_zooc_raw","Zooplankton Carbon Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_zooc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("zoocos_raw","Surface Zooplankton Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_zoocos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_zooc", cmor_units="mol m-3",                          &
+         cmor_field_name="zoocos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_zooplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Zooplankton Carbon Concentration at surface")
+         cmor_long_name="Surface Zooplankton Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_bacc_raw","Bacterial Carbon Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_bacc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("baccos_raw","Surface Bacterial Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_baccos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_bacc", cmor_units="mol m-3",                          &
+         cmor_field_name="baccos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_bacteria_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Bacterial Carbon Concentration at surface")
+         cmor_long_name="Surface Bacterial Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_detoc_raw","Detrital Organic Carbon Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_detoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("detocos_raw","Surface Detrital Organic Carbon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_detocos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_detoc", cmor_units="mol m-3",                          &
+         cmor_field_name="detocos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_organic_detritus_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Detrital Organic Carbon Concentration at surface")
+         cmor_long_name="Surface Detrital Organic Carbon Concentration")
 
-    vardesc_temp = vardesc("sfc_calc_raw","Calcite Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("calcos_raw","Surface Calcite Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_calcos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_calc", cmor_units="mol m-3",                          &
+         cmor_field_name="calcos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_calcite_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Calcite Concentration at surface")
+         cmor_long_name="Surface Calcite Concentration")
 
-    vardesc_temp = vardesc("sfc_arag_raw","Aragonite Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("aragos_raw","Surface Aragonite Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_aragos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_arag", cmor_units="mol m-3",                          &
+         cmor_field_name="aragos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_aragonite_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Aragonite Concentration at surface")
+         cmor_long_name="Surface Aragonite Concentration")
 
-    vardesc_temp = vardesc("sfc_phydiat_raw","Mole Concentration of Diatoms at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phydiat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phydiatos_raw","Surface Mole Concentration of Diatoms expressed as Carbon in Sea Water",'h','1','s','mol m-3','f')
+    cobalt%id_phydiatos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phydiat", cmor_units="mol m-3",                          &
+         cmor_field_name="phydiatos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_diatoms_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Mole Concentration of Diatoms expressed as Carbon in Sea Water at surface")
+         cmor_long_name="Surface Mole Concentration of Diatoms expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("sfc_phydiaz_raw","Mole Concentration of Diazotrophs at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phydiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phydiazos_raw","Surface Mole Concentration of Diazotrophs expressed as Carbon in Sea Water",'h','1','s','mol m-3','f')
+    cobalt%id_phydiazos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phydiaz", cmor_units="mol m-3",                          &
+         cmor_field_name="phydiazos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_diazotrophs_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Mole Concentration of Diazotrophs expressed as Carbon in Sea Water at surface")
+         cmor_long_name="Surface Mole Concentration of Diazotrophs expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("sfc_phypico_raw","Mole Concentration of Picophytoplankton at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phypico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phypicoos_raw","Surface Mole Concentration of Picophytoplankton expressed as Carbon in Sea Water",'h','1','s','mol m-3','f')
+    cobalt%id_phypicoos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phypico", cmor_units="mol m-3",                          &
+         cmor_field_name="phypicoos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_picophytoplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Mole Concentration of Picophytoplankton expressed as Carbon in Sea Water at surface")
+         cmor_long_name="Surface Mole Concentration of Picophytoplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("sfc_phymisc_raw","Mole Concentration of Miscellaneous Phytoplankton at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phymisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phymiscos_raw","Surface Mole Concentration of Miscellaneous Phytoplankton expressed as Carbon in Sea Water",'h','1','s','mol m-3','f')
+    cobalt%id_phymiscos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phymisc", cmor_units="mol m-3",                          &
+         cmor_field_name="phymiscos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_miscellaneous_phytoplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Mole Concentration of Miscellaneous Phytoplankton expressed as Carbon in Sea Water at surface")
+         cmor_long_name="Surface Mole Concentration of Miscellaneous Phytoplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("sfc_zoomicro_raw","Mole Concentration of Microzooplankton at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_zoomicro = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("zmicroos_raw","Surface Mole Concentration of Microzooplankton expressed as Carbon in Sea Water",'h','1','s','mol m-3','f')
+    cobalt%id_zmicroos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_zoomicro", cmor_units="mol m-3",                          &
+         cmor_field_name="zmicroos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_microzooplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Mole Concentration of Microzooplankton expressed as Carbon in Sea Water at surface")
+         cmor_long_name="Surface Mole Concentration of Microzooplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("sfc_zoomeso_raw","Mole Concentration of Mesozooplankton at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_zoomeso = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("zmesoos_raw","Surface Mole Concentration of Mesozooplankton expressed as Carbon in Sea Water",'h','1','s','mol m-3','f')
+    cobalt%id_zmesoos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_zoomeso", cmor_units="mol m-3",                          &
+         cmor_field_name="zmesoos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_mesozooplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Mole Concentration of Mesozooplankton expressed as Carbon in Sea Water at surface")
+         cmor_long_name="Surface Mole Concentration of Mesozooplankton expressed as Carbon in Sea Water")
 
-    vardesc_temp = vardesc("sfc_talk_raw","Total Alkalinity at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_talk = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("talkos_raw","Surface Total Alkalinity",'h','1','s','mol m-3','f')
+    cobalt%id_talkos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_talk", cmor_units="mol m-3",                          &
-         cmor_standard_name="seawater_alkalinity_expressed_as_mole_equivalent", &
-         cmor_long_name="Total Alkalinity at surface")
+         cmor_field_name="talkos", cmor_units="mol m-3",                          &
+         cmor_standard_name="sea_water_alkalinity_expressed_as_mole_equivalent", &
+         cmor_long_name="Surface Total Alkalinity")
 
-    vardesc_temp = vardesc("sfc_talknat_raw","Natural Total Alkalinity at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_talknat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("talknatos_raw","Surface Natural Total Alkalinity",'h','1','s','mol m-3','f')
+    cobalt%id_talknatos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_talknat", cmor_units="mol m-3",                          &
-         cmor_standard_name="seawater_alkalinity_expressed_as_mole_equivalent_natural_component", &
-         cmor_long_name="Natural Total Alkalinity at surface")
+         cmor_field_name="talknatos", cmor_units="mol m-3",                          &
+         cmor_standard_name="sea_water_alkalinity_natural_analogue_expressed_as_mole_equivalent", &
+         cmor_long_name="Surface Natural Total Alkalinity")
 
-    vardesc_temp = vardesc("sfc_ph_raw","pH at surface",'h','1','s','1','f')
-    cobalt%id_sfc_ph = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phos_raw","Surface pH",'h','1','s','1','f')
+    cobalt%id_phos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_ph", cmor_units="1",                          &
-         cmor_standard_name="seawater_ph_reported_on_total_scale", &
-         cmor_long_name="pH at surface")
+         cmor_field_name="phos", cmor_units="1",                          &
+         cmor_standard_name="sea_water_ph_reported_on_total_scale", &
+         cmor_long_name="Surface pH")
 
-! PENDING: not in spreadsheet
-    vardesc_temp = vardesc("sfc_phnat_raw","Natural pH at surface",'h','1','s','1','f')
-    cobalt%id_sfc_phnat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phnatos_raw","Surface Natural pH",'h','1','s','1','f')
+    cobalt%id_phnatos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phnat", cmor_units="1",                          &
-         cmor_standard_name="seawater_ph_reported_on_total_scale_natural_component", &
-         cmor_long_name="Natural pH at surface")
+         cmor_field_name="phnatos", cmor_units="1",                          &
+         cmor_standard_name="sea_water_ph_natural_analogue_reported_on_total_scale", &
+         cmor_long_name="Surface Natural pH")
 
-! PENDING: not in spreadsheet
-    vardesc_temp = vardesc("sfc_phabio_raw","Abiotic pH at surface",'h','1','s','1','f')
-    cobalt%id_sfc_phabio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phabioos_raw","Surface Abiotic pH",'h','1','s','1','f')
+    cobalt%id_phabioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phabio", cmor_units="1",                          &
-         cmor_standard_name="seawater_ph_reported_on_total_scale_abiotic_component", &
-         cmor_long_name="Abiotic pH at surface")
+         cmor_field_name="phabioos", cmor_units="1",                          &
+         cmor_standard_name="sea_water_ph_abiotic_analogue_reported_on_total_scale", &
+         cmor_long_name="Surface Abiotic pH")
 
-!! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("sfc_o2_raw","Dissolved Oxygen Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_o2_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+!! jgj 2017/08/04 removed _cmip in cmor_field_name - update diag table
+    vardesc_temp = vardesc("o2os_raw","Surface Dissolved Oxygen Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_o2os = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_o2_cmip", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water", &
-         cmor_long_name="Dissolved Oxygen Concentration at surface")
+         cmor_field_name="o2os", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_molecular_oxygen_in_sea_water", &
+         cmor_long_name="Surface Dissolved Oxygen Concentration")
 
-    vardesc_temp = vardesc("sfc_o2sat_raw","Dissolved Oxygen Concentration at Saturation at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_o2sat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+! CHECK2 - need 3-D field
+    vardesc_temp = vardesc("o2satos_raw","Surface Dissolved Oxygen Concentration at Saturation",'h','1','s','mol m-3','f')
+    cobalt%id_o2satos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_o2sat", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_molecular_oxygen_in_sea_water_at_saturation", &
-         cmor_long_name="Dissolved Oxygen Concentration at Saturation at surface")
+         cmor_field_name="o2satos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_molecular_oxygen_in_sea_water_at_saturation", &
+         cmor_long_name="Surface Dissolved Oxygen Concentration at Saturation")
 
-!! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("sfc_no3_raw","Dissolved Nitrate Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_no3_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+!! jgj 2017/08/04 removed _cmip in cmor_field_name - update diag table
+    vardesc_temp = vardesc("no3os_raw","Surface Dissolved Nitrate Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_no3os = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_no3_cmip", cmor_units="mol m-3",                          &
+         cmor_field_name="no3os", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_nitrate_in_sea_water", &
-         cmor_long_name="Dissolved Nitrate Concentration at surface")
+         cmor_long_name="Surface Dissolved Nitrate Concentration")
 
-!! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("sfc_nh4_raw","Dissolved Ammonium Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_nh4_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("nh4os_raw","Surface Dissolved Ammonium Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_nh4os = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_nh4_cmip", cmor_units="mol m-3",                          &
+         cmor_field_name="nh4os", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_ammonium_in_sea_water", &
-         cmor_long_name="Dissolved Ammonium Concentration at surface")
+         cmor_long_name="Surface Dissolved Ammonium Concentration")
 
-!! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("sfc_po4_raw","Dissolved Phosphate Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_po4_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+! 2017/08/04 Not in Data Request Spreadsheet - but should it be  Phosphate or Phosphorus in long_name and standard name?
+    vardesc_temp = vardesc("po4os_raw","Surface Dissolved Phosphate Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_po4os = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_po4_cmip", cmor_units="mol m-3",                          &
+         cmor_field_name="po4os", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phosphate_in_sea_water", &
-         cmor_long_name="Dissolved Phosphate Concentration at surface")
+         cmor_long_name="Surface Dissolved Phosphate Concentration")
 
-    vardesc_temp = vardesc("sfc_dfe_raw","Dissolved Iron Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_dfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("dfeos_raw","Surface Dissolved Iron Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_dfeos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_dfe", cmor_units="mol m-3",                          &
+         cmor_field_name="dfeos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_dissolved_iron_in_sea_water", &
-         cmor_long_name="Dissolved Iron Concentration at surface")
+         cmor_long_name="Surface Dissolved Iron Concentration")
 
-    vardesc_temp = vardesc("sfc_si_raw","Dissolved Silicate Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_si = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("sios_raw","Surface Total Dissolved Inorganic Silicon Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_sios = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_si", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_silicate_in_sea_water", &
-         cmor_long_name="Dissolved Silicate Concentration at surface")
+         cmor_field_name="sios", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_dissolved_inorganic_silicon_in_sea_water", &
+         cmor_long_name="Surface Total Dissolved Inorganic Silicon Concentration")
 
-!! same name in model and CMOR, but different units - use _cmip for now
-    vardesc_temp = vardesc("sfc_chl_raw","Total Chlorophyll Mass Concentration at surface",'h','1','s','kg m-3','f')
-    cobalt%id_sfc_chl_cmip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+!! jgj 2017/08/04 removed _cmip in cmor_field_name - update diag table
+! chlos is also also in Oday
+    vardesc_temp = vardesc("chlos_raw","Sea Surface Total Chlorophyll Mass Concentration",'h','1','s','kg m-3','f')
+    cobalt%id_chlos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_chl_cmip", cmor_units="kg m-3",                          &
+         cmor_field_name="chlos", cmor_units="kg m-3",                          &
          cmor_standard_name="mass_concentration_of_phytoplankton_expressed_as_chlorophyll_in_sea_water", &
-         cmor_long_name="Total Chlorophyll Mass Concentration at surface")
+         cmor_long_name="Sea Surface Total Chlorophyll Mass Concentration")
 
-    vardesc_temp = vardesc("sfc_chldiat_raw","Diatom Chlorophyll Mass Concentration at surface",'h','1','s','kg m-3','f')
-    cobalt%id_sfc_chldiat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("chldiatos_raw","Surface Mass Concentration of Diatoms expressed as Chlorophyll in sea water",'h','1','s','kg m-3','f')
+    cobalt%id_chldiatos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_chldiat", cmor_units="kg m-3",                          &
+         cmor_field_name="chldiatos", cmor_units="kg m-3",                          &
          cmor_standard_name="mass_concentration_of_diatoms_expressed_as_chlorophyll_in_sea_water", &
-         cmor_long_name="Diatom Chlorophyll Mass Concentration at surface")
+         cmor_long_name="Surface Mass Concentration of Diatoms expressed as Chlorophyll in sea water")
 
-    vardesc_temp = vardesc("sfc_chldiaz_raw","Diazotrophs Chlorophyll Mass Concentration at surface",'h','1','s','kg m-3','f')
-    cobalt%id_sfc_chldiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("chldiazos_raw","Surface Mass Concentration of Diazotrophs expressed as Chlorophyll in sea water",'h','1','s','kg m-3','f')
+    cobalt%id_chldiazos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_chldiaz", cmor_units="kg m-3",                          &
+         cmor_field_name="chldiazos", cmor_units="kg m-3",                          &
          cmor_standard_name="mass_concentration_of_diazotrophs_expressed_as_chlorophyll_in_sea_water", &
-         cmor_long_name="Mass Concentration of Diazotrophs expressed as Chlorophyll in Sea Water at surface")
+         cmor_long_name="Surface Mass Concentration of Diazotrophs expressed as Chlorophyll in sea water")
 
-    vardesc_temp = vardesc("sfc_chlpico_raw","Picophytoplankton Chlorophyll Mass Concentration at surface",'h','1','s','kg m-3','f')
-    cobalt%id_sfc_chlpico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("chlpicoos_raw","Surface Mass Concentration of Picophytoplankton expressed as Chlorophyll in sea water",'h','1','s','kg m-3','f')
+    cobalt%id_chlpicoos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_chlpico", cmor_units="kg m-3",                          &
+         cmor_field_name="chlpicoos", cmor_units="kg m-3",                          &
          cmor_standard_name="mass_concentration_of_picophytoplankton_expressed_as_chlorophyll_in_sea_water", &
-         cmor_long_name="Mass Concentration of Picophytoplankton expressed as Chlorophyll in Sea Water at surface")
+         cmor_long_name="Surface Mass Concentration of Picophytoplankton expressed as Chlorophyll in sea water")
 
-    vardesc_temp = vardesc("sfc_chlmisc_raw","Other Phytoplankton Chlorophyll Mass Concentration at surface",'h','1','s','kg m-3','f')
-    cobalt%id_sfc_chlmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("chlmiscos_raw","Surface Mass Concentration of Other Phytoplankton expressed as Chlorophyll in sea water",'h','1','s','kg m-3','f')
+    cobalt%id_chlmiscos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_chlmisc", cmor_units="kg m-3",                          &
+         cmor_field_name="chlmiscos", cmor_units="kg m-3",                          &
          cmor_standard_name="mass_concentration_of_miscellaneous_phytoplankton_expressed_as_chlorophyll_in_sea_water", &
-         cmor_long_name="Other Phytoplankton Chlorophyll Mass Concentration at surface")
+         cmor_long_name="Surface Mass Concentration of Other Phytoplankton expressed as Chlorophyll in sea water")
 
-    vardesc_temp = vardesc("sfc_pon_raw","Particulate Organic Nitrogen Concentration at surface",'h','1','s','mol N m-3','f')
-    cobalt%id_sfc_pon = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("ponos_raw","Surface Mole Concentration of Particulate Organic Matter expressed as Nitrogen in sea water",'h','1','s','mol N m-3','f')
+    cobalt%id_ponos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_pon", cmor_units="mol m-3",                          &
+         cmor_field_name="ponos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_particulate_organic_matter_expressed_as_nitrogen_in_sea_water", &
-         cmor_long_name="Particulate Organic Nitrogen Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Particulate Organic Matter expressed as Nitrogen in sea water")
 
-    vardesc_temp = vardesc("sfc_pop_raw","Particulate Organic Phosphorus Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_pop = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("popos_raw","Surface Mole Concentration of Particulate Organic Matter expressed as Phosphorus in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_popos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_pop", cmor_units="mol m-3",                          &
+         cmor_field_name="popos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_particulate_organic_matter_expressed_as_phosphorus_in_sea_water", &
-         cmor_long_name="Particulate Organic Phosphorus Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Particulate Organic Matter expressed as Phosphorus in sea water")
 
-    vardesc_temp = vardesc("sfc_bfe_raw","Particulate Biogenic Iron Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_bfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("bfeos_raw","Surface Mole Concentration of Particulate Organic Matter expressed as Iron in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_bfeos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_bfe", cmor_units="mol m-3",                          &
+         cmor_field_name="bfeos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_particulate_organic_matter_expressed_as_iron_in_sea_water", &
-         cmor_long_name="Particulate Biogenic Iron Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Particulate Organic Matter expressed as Iron in sea water")
 
-    vardesc_temp = vardesc("sfc_bsi_raw","Particulate Biogenic Silica Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_bsi = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("bsios_raw","Surface Mole Concentration of Particulate Organic Matter expressed as Silicon in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_bsios = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_bsi", cmor_units="mol m-3",                          &
+         cmor_field_name="bsios", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_particulate_organic_matter_expressed_as_silicon_in_sea_water", &
-         cmor_long_name="Particulate Biogenic Silica Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Particulate Organic Matter expressed as Silicon in sea water")
 
-    vardesc_temp = vardesc("sfc_phyn_raw","Phytoplankton Nitrogen Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phyn = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phynos_raw","Surface Mole Concentration of Phytoplankton Nitrogen in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_phynos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phyn", cmor_units="mol m-3",                          &
+         cmor_field_name="phynos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_nitrogen_in_sea_water", &
-         cmor_long_name="Phytoplankton Nitrogen Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Phytoplankton Nitrogen in sea water")
 
-    vardesc_temp = vardesc("sfc_phyp_raw","Phytoplankton Phosphorus Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phyp = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("phypos_raw","Surface Mole Concentration of Total Phytoplankton expressed as Phosphorus in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_phypos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phyp", cmor_units="mol m-3",                          &
+         cmor_field_name="phypos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_phosphorus_in_sea_water", &
-         cmor_long_name="Phytoplankton Phosphorus Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Total Phytoplankton expressed as Phosphorus in sea water")
 
-    vardesc_temp = vardesc("sfc_phyfe_raw","Phytoplankton Iron Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_phyfe = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+! CHECK2
+! 2017/08/04 jgj: Long name is incorrect in DreqPY spreadsheet - listed as Surface Mass Concentration of Diazotrophs expressed as Chlorophyll in sea water 
+    vardesc_temp = vardesc("phyfeos_raw","Surface Mole Concentration of Total Phytoplankton expressed as Iron in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_phyfeos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_phyfe", cmor_units="mol m-3",                          &
+         cmor_field_name="phyfeos", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_iron_in_sea_water", &
-         cmor_long_name="Phytoplankton Iron Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Total Phytoplankton expressed as Iron in sea water")
 
-    vardesc_temp = vardesc("sfc_physi_raw","Phytoplankton Silica Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_physi = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("physios_raw","Surface Mole Concentration of Total Phytoplankton expressed as Silicon in sea water",'h','1','s','mol m-3','f')
+    cobalt%id_physios = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_physi", cmor_units="mol m-3",                          &
+         cmor_field_name="physios", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_phytoplankton_expressed_as_silicon_in_sea_water", &
-         cmor_long_name="Phytoplankton Silica Concentration at surface")
+         cmor_long_name="Surface Mole Concentration of Total Phytoplankton expressed as Silicon in sea water")
 
 ! Per JPD, use Omon long_name and standard_name
-    vardesc_temp = vardesc("sfc_co3_raw","Carbonate Ion Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_co3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("co3os_raw","Surface Carbonate Ion Concentration",'h','1','s','mol m-3','f')
+    cobalt%id_co3os = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_co3", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater", &
-         cmor_long_name="Mole Concentration of Carbonate ion in Seawater at surface")
+         cmor_field_name="co3os", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_in_sea_water", &
+         cmor_long_name="Mole Concentration of Carbonate ion in sea_water")
 
 ! PENDING: not in spreadsheet
-    vardesc_temp = vardesc("sfc_co3nat_raw","Natural Carbonate Ion Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_co3nat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("co3natos_raw","Surface Natural Mole Concentration of Carbonate ion in sea_water",'h','1','s','mol m-3','f')
+    cobalt%id_co3natos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_co3nat", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater_natural_component", &
-         cmor_long_name="Natural Mole Concentration of Carbonate ion in Seawater at surface")
+         cmor_field_name="co3natos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_natural_analogue_in_sea_water", &
+         cmor_long_name="Surface Natural Mole Concentration of Carbonate ion in sea_water")
 
 ! PENDING: not in spreadsheet
-    vardesc_temp = vardesc("sfc_co3abio_raw","Abiotic Carbonate Ion Concentration at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_co3abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("co3abioos_raw","Surface Abiotic Mole Concentration of Carbonate ion in sea_water",'h','1','s','mol m-3','f')
+    cobalt%id_co3abioos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_co3abio", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_in_seawater_abiotic_component", &
-         cmor_long_name="Abiotic Mole Concentration of Carbonate ion in Seawater at surface")
+         cmor_field_name="co3abioos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_abiotic_analogue_in_sea_water", &
+         cmor_long_name="Surface Abiotic Mole Concentration of Carbonate ion in sea_water")
 
 ! Per JPD, use Omon long_name and standard_name
-    vardesc_temp = vardesc("sfc_co3satcalc_raw","Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_co3satcalc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("co3satcalcos_raw","Surface Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Calcite",'h','1','s','mol m-3','f')
+    cobalt%id_co3satcalcos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_co3satcalc", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_for_seawater_in equilibrium_with_pure_calcite", &
-         cmor_long_name="Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Calcite at surface")
+         cmor_field_name="co3satcalcos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_for_sea_water_in equilibrium_with_pure_calcite", &
+         cmor_long_name="Surface Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Calcite")
 
 ! Per JPD, use Omon long_name and standard_name
-    vardesc_temp = vardesc("sfc_co3satarag_raw","Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Aragonite at surface",'h','1','s','mol m-3','f')
-    cobalt%id_sfc_co3satarag = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("co3sataragos_raw","Surface Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Aragonite",'h','1','s','mol m-3','f')
+    cobalt%id_co3sataragos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="sfc_co3satarag", cmor_units="mol m-3",                          &
-         cmor_standard_name="mole_concentration_of_carbonate_ion_for_seawater_in equilibrium_with_pure_aragonite", &
-         cmor_long_name="Mole Concentration of Carbonate ion for Seawater in equilibrium with pure Aragonite at surface")
+         cmor_field_name="co3sataragos", cmor_units="mol m-3",                          &
+         cmor_standard_name="mole_concentration_of_carbonate_ion_for_sea_water_in equilibrium_with_pure_aragonite", &
+         cmor_long_name="Surface Mole Concentration of Carbonate ion for sea_water in equilibrium with pure Aragonite")
 
 !------------------------------------------------------------------------------------------------------------------
 ! 2-D fields (from Omon)
@@ -4421,43 +4412,43 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_intpp = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intpp", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="net_primary_mole_productivity_of_carbon_by_phytoplankton", &
+         cmor_standard_name="net_primary_mole_productivity_of_biomass_expressed_as_carbon_by_phytoplankton", &
          cmor_long_name="Primary Organic Carbon Production by All Types of Phytoplankton")
 
-    vardesc_temp = vardesc("intpnitrate_raw","Primary Organic Carbon Production by Phytoplankton Based on Nitrate Uptake Alone",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_intpnitrate = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("intppnitrate_raw","Primary Organic Carbon Production by Phytoplankton Based on Nitrate Uptake Alone",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_intppnitrate = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="intpnitrate", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="net_primary_mole_productivity_of_carbon_due_to_nitrate_utilization", &
+         cmor_field_name="intppnitrate", cmor_units="mol m-2 s-1",                          &
+         cmor_standard_name="net_primary_mole_productivity_of_biomass_expressed_as_carbon_due_to_nitrate_utilization", &
          cmor_long_name="Primary Organic Carbon Production by Phytoplankton Based on Nitrate Uptake Alone")
 
-    vardesc_temp = vardesc("intppdiat_raw","Primary Organic Carbon Production by Diatoms",'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("intppdiat_raw","Net Primary Organic Carbon Production by Diatoms",'h','1','s','mol m-2 s-1','f')
     cobalt%id_intppdiat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intppdiat", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="net_primary_mole_productivity_of_carbon_by_diatoms", &
-         cmor_long_name="Primary Organic Carbon Production by Diatoms")
+         cmor_standard_name="net_primary_mole_productivity_of_biomass_expressed_as_carbon_by_diatoms", &
+         cmor_long_name="Net Primary Organic Carbon Production by Diatoms")
 
     vardesc_temp = vardesc("intppdiaz_raw","Net Primary Mole Productivity of Carbon by Diazotrophs",'h','1','s','mol m-2 s-1','f')
     cobalt%id_intppdiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intppdiaz", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="net_primary_mole_productivity_of_carbon_by_diazotrophs", &
+         cmor_standard_name="net_primary_mole_productivity_of_biomass_expressed_as_carbon_by_diazotrophs", &
          cmor_long_name="Net Primary Mole Productivity of Carbon by Diazotrophs")
 
     vardesc_temp = vardesc("intpppico_raw","Net Primary Mole Productivity of Carbon by Picophytoplankton",'h','1','s','mol m-2 s-1','f')
     cobalt%id_intpppico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intpppico", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="net_primary_mole_productivity_of_carbon_by_picophytoplankton", &
+         cmor_standard_name="net_primary_mole_productivity_of_biomass_expressed_as_carbon_by_picophytoplankton", &
          cmor_long_name="Net Primary Mole Productivity of Carbon by Picophytoplankton")
 
-    vardesc_temp = vardesc("intppmisc_raw","Primary Organic Carbon Production by Other Phytoplankton",'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("intppmisc_raw","Net Primary Organic Carbon Production by Other Phytoplankton",'h','1','s','mol m-2 s-1','f')
     cobalt%id_intppmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intppmisc", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="net_primary_mole_productivity_of_carbon_by_miscellaneous_phytoplankton", &
-         cmor_long_name="Primary Organic Carbon Production by Other Phytoplankton")
+         cmor_standard_name="net_primary_mole_productivity_of_biomass_expressed_as_carbon_by_miscellaneous_phytoplankton", &
+         cmor_long_name="Net Primary Organic Carbon Production by Other Phytoplankton")
 
     vardesc_temp = vardesc("intpbn_raw","Nitrogen Production",'h','1','s','mol m-2 s-1','f')
     cobalt%id_intpbn = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
@@ -4480,11 +4471,13 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_ocean_mole_content_of_iron_due_to_biological_production", &
          cmor_long_name="Iron Production")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silica in long_name: should long_name be Silicon to match standard name and other Si terms?
     vardesc_temp = vardesc("intpbsi_raw","Silica Production",'h','1','s','mol m-2 s-1','f')
     cobalt%id_intpbsi = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intpbsi", cmor_units="mol m-2 s-1",                          &
-         cmor_standard_name="tendency_of_ocean_mole_content_of_silica_due_to_biological_production", &
+         cmor_standard_name="tendency_of_ocean_mole_content_of_silicon_due_to_biological_production", &
          cmor_long_name="Silica Production")
 
     vardesc_temp = vardesc("intpcalcite_raw","Calcite Production",'h','1','s','mol m-2 s-1','f')
@@ -4502,67 +4495,72 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_long_name="Aragonite Production")
 
 ! CHECK: these should be AT 100m 
-    vardesc_temp = vardesc("expc100_raw","Downward Flux of Particle Organic Carbon",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_expc100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("epc100_raw","Downward Flux of Particle Organic Carbon",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_epc100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="expc100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="epc100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_particulate_organic_matter_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Downward Flux of Particle Organic Carbon")
 
-    vardesc_temp = vardesc("expn100_raw","Downward Flux of Particulate Nitrogen",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_expn100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("epn100_raw","Downward Flux of Particulate Nitrogen",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_epn100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="expn100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="epn100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_particulate_nitrogen_in_sea_water", &
          cmor_long_name="Downward Flux of Particulate Nitrogen")
 
-    vardesc_temp = vardesc("expp100_raw","Downward Flux of Particulate Phosphorus",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_expp100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("epp100_raw","Downward Flux of Particulate Phosphorus",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_epp100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="expp100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="epp100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_particulate_phosphorus_in_sea_water", &
          cmor_long_name="Downward Flux of Particulate Phosphorus")
 
-    vardesc_temp = vardesc("expfe100_raw","Downward Flux of Particulate Iron",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_expfe100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("epfe100_raw","Downward Flux of Particulate Iron",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_epfe100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="expfe100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="epfe100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_particulate_iron_in_sea_water", &
          cmor_long_name="Downward Flux of Particulate Iron")
 
-    vardesc_temp = vardesc("expsi100_raw","Downward Flux of Particulate Silica",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_expsi100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silica in long_name: should long_name be Silicon to match standard name and other Si terms?
+    vardesc_temp = vardesc("epsi100_raw","Downward Flux of Particulate Silica",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_epsi100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="expsi100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="epsi100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_particulate_silicon_in_sea_water", &
-         cmor_long_name="Downward Flux of Particulate Silicate")
+         cmor_long_name="Downward Flux of Particulate Silica")
 
-    vardesc_temp = vardesc("expcalc100_raw","Downward Flux of Calcite",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_expcalc100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("epcalc100_raw","Downward Flux of Calcite",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_epcalc100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="expcalc100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="epcalc100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_calcite_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Downward Flux of Calcite")
 
-    vardesc_temp = vardesc("exparag100_raw","Downward Flux of Aragonite",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_exparag100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("eparag100_raw","Downward Flux of Aragonite",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_eparag100 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="exparag100", cmor_units="mol m-2 s-1",                          &
+         cmor_field_name="eparag100", cmor_units="mol m-2 s-1",                          &
          cmor_standard_name="sinking_mole_flux_of_aragonite_expressed_as_carbon_in_sea_water", &
          cmor_long_name="Downward Flux of Aragonite")
 
 ! vertically integrated
-    vardesc_temp = vardesc("intdissic_raw","Dissolved Inorganic Carbon Content",'h','1','s','kg m-2','f')
-    cobalt%id_intdissic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+! CAS: note that these are intdic, intdoc and intpoc in spreadsheet, change?
+! 2017/08/04 was supposed to change spreadsheet to match dissic, dissoc (check OCMIP paper for names used there)
+! 2017/08/04 - updated to intdic, intdoc instead of intdissic, intdissoc
+    vardesc_temp = vardesc("intdic_raw","Dissolved Inorganic Carbon Content",'h','1','s','kg m-2','f')
+    cobalt%id_intdic = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="intdissic", cmor_units="kg m-2",                          &
+         cmor_field_name="intdic", cmor_units="kg m-2",                          &
          cmor_standard_name="ocean_mass_content_of_dissolved_inorganic_carbon", &
          cmor_long_name="Dissolved Inorganic Carbon Content")
 
-    vardesc_temp = vardesc("intdissoc_raw","Dissolved Organic Carbon Content",'h','1','s','kg m-2','f')
-    cobalt%id_intdissoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    vardesc_temp = vardesc("intdoc_raw","Dissolved Organic Carbon Content",'h','1','s','kg m-2','f')
+    cobalt%id_intdoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="intdissoc", cmor_units="kg m-2",                          &
+         cmor_field_name="intdoc", cmor_units="kg m-2",                          &
          cmor_standard_name="ocean_mass_content_of_dissolved_organic_carbon", &
          cmor_long_name="Dissolved Organic Carbon Content")
 
@@ -4570,7 +4568,7 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_intpoc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="intpoc", cmor_units="kg m-2",                          &
-         cmor_standard_name="ocean_mass_content_of_particulate_organic_carbon", &
+         cmor_standard_name="ocean_mass_content_of_particulate_organic_carbon_expressed_as_carbon", &
          cmor_long_name="Particulate Organic Carbon Content")
 
     vardesc_temp = vardesc("spco2_raw","Surface Aqueous Partial Pressure of CO2",'h','1','s','Pa','f')
@@ -4580,20 +4578,18 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="surface_partial_pressure_of_carbon_dioxide_in_sea_water", &
          cmor_long_name="Surface Aqueous Partial Pressure of CO2")
 
-! CHECK: not in spreadsheet
     vardesc_temp = vardesc("spco2nat_raw","Natural Surface Aqueous Partial Pressure of CO2",'h','1','s','Pa','f')
     cobalt%id_spco2nat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="spco2nat", cmor_units="Pa",                          &
-         cmor_standard_name="surface_partial_pressure_of_carbon_dioxide_in_sea_water_natural_component", &
+         cmor_standard_name="surface_partial_pressure_of_carbon_dioxide_natural_analogue_in_sea_water", &
          cmor_long_name="Natural Surface Aqueous Partial Pressure of CO2")
 
-! CHECK: not in spreadsheet
     vardesc_temp = vardesc("spco2abio_raw","Abiotic Surface Aqueous Partial Pressure of CO2",'h','1','s','Pa','f')
     cobalt%id_spco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="spco2abio", cmor_units="Pa",                          &
-         cmor_standard_name="surface_partial_pressure_of_carbon_dioxide_in_sea_water_abiotic_component", &
+         cmor_standard_name="surface_partial_pressure_of_carbon_dioxide_abiotic_analogue_in_sea_water", &
          cmor_long_name="Abiotic Surface Aqueous Partial Pressure of CO2")
 
     vardesc_temp = vardesc("dpco2_raw","Delta PCO2",'h','1','s','Pa','f')
@@ -4603,20 +4599,18 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="surface_carbon_dioxide_partial_pressure_difference_between_sea_water_and_air", &
          cmor_long_name="Delta PCO2")
 
-! CHECK: not in spreadsheet
     vardesc_temp = vardesc("dpco2nat_raw","Natural Delta PCO2",'h','1','s','Pa','f')
     cobalt%id_dpco2nat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dpco2nat", cmor_units="Pa",                          &
-         cmor_standard_name="surface_carbon_dioxide_partial_pressure_difference_between_sea_water_and_air_natural_component", &
+         cmor_standard_name="surface_carbon_dioxide_natural_analogue_partial_pressure_difference_between_sea_water_and_air", &
          cmor_long_name="Natural Delta PCO2")
 
-! CHECK: not in spreadsheet
     vardesc_temp = vardesc("dpco2abio_raw","Abiotic Delta PCO2",'h','1','s','Pa','f')
     cobalt%id_dpco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="dpco2abio", cmor_units="Pa",                          &
-         cmor_standard_name="surface_carbon_dioxide_partial_pressure_difference_between_sea_water_and_air_abiotic_component", &
+         cmor_standard_name="surface_carbon_dioxide_abiotic_analogue_partial_pressure_difference_between_sea_water_and_air", &
          cmor_long_name="Abiotic Delta PCO2")
 
     vardesc_temp = vardesc("dpo2_raw","Delta PO2",'h','1','s','Pa','f')
@@ -4626,6 +4620,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="surface_molecular_oxygen_partial_pressure_difference_between_sea_water_and_air", &
          cmor_long_name="Delta PO2")
 
+! CHECK2
+! 2017/08/04 jgj: CMOR requires positive down, area:areacello
     vardesc_temp = vardesc("fgco2_raw","Surface Downward CO2 Flux",'h','1','s','kg m-2 s-1','f')
     cobalt%id_fgco2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -4633,27 +4629,35 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="surface_downward_mass_flux_of_carbon_dioxide_expressed_as_carbon", &
          cmor_long_name="Surface Downward CO2 Flux")
 
+! CHECK2
+! 2017/08/04 jgj: CMOR requires positive down, area:areacello
     vardesc_temp = vardesc("fgco2nat_raw","Surface Downward natural CO2 Flux",'h','1','s','kg m-2 s-1','f')
     cobalt%id_fgco2nat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="fgco2nat", cmor_units="kg m-2 s-1",                          &
-         cmor_standard_name="surface_downward_mass_flux_of_natural_carbon_dioxide_expressed_as_carbon", &
+         cmor_standard_name="surface_downward_mass_flux_of_carbon_dioxide_natural_analogue_expressed_as_carbon", &
          cmor_long_name="Surface Downward natural CO2 Flux")
 
+! CHECK2
+! 2017/08/04 jgj: CMOR requires positive down, area:areacello
     vardesc_temp = vardesc("fgco2abio_raw","Surface Downward abiotic CO2 Flux",'h','1','s','kg m-2 s-1','f')
     cobalt%id_fgco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="fgco2abio", cmor_units="kg m-2 s-1",                          &
-         cmor_standard_name="surface_downward_mass_flux_of_abiotic_carbon_dioxide_expressed_as_carbon", &
+         cmor_standard_name="surface_downward_mass_flux_of_carbon_dioxide_abiotic_analogue_expressed_as_carbon", &
          cmor_long_name="Surface Downward abiotic CO2 Flux")
 
+! CHECK2
+! 2017/08/04 jgj: CMOR requires positive down, area:areacello
     vardesc_temp = vardesc("fg14co2abio_raw","Surface Downward abiotic 14CO2 Flux",'h','1','s','kg m-2 s-1','f')
     cobalt%id_fg14co2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="fg14co2abio", cmor_units="kg m-2 s-1",                          &
-         cmor_standard_name="surface_downward_mass_flux_of_abiotic_14_carbon_dioxide_expressed_as_carbon", &
+         cmor_standard_name="surface_downward_mass_flux_of_carbon14_dioxide_abiotic_analogue_expressed_as_carbon", &
          cmor_long_name="Surface Downward abiotic 14CO2 Flux")
 
+! CHECK2
+! 2017/08/04 jgj: CMOR requires positive down, area:areacello
     vardesc_temp = vardesc("fgo2_raw","Surface Downward O2 Flux",'h','1','s','mol m-2 s-1','f')
     cobalt%id_fgo2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -4766,6 +4770,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_nitrogen", &
          cmor_long_name="Rate of Change of Net Dissolved Inorganic Nitrogen")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Phosphate in long_name: should long_name be Phosphorus to match standard name?
     vardesc_temp = vardesc("fddtdip_raw","Rate of Change of Net Dissolved Inorganic Phosphate",'h','1','s','mol m-2 s-1','f')
     cobalt%id_fddtdip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -4780,6 +4786,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_iron", &
          cmor_long_name="Rate of Change of Net Dissolved Inorganic Iron")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silicate in long_name: should long_name be Silicon (or Silica) to match standard name and other Si terms?
     vardesc_temp = vardesc("fddtdisi_raw","Rate of Change of Net Dissolved Inorganic Silicate",'h','1','s','mol m-2 s-1','f')
     cobalt%id_fddtdisi = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -4808,6 +4816,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_nitrogen_due_to_biological_processes", &
          cmor_long_name="Rate of Change of Dissolved Inorganic Nitrogen due to Biological Activity")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Phosphate in long_name: should long_name be Phosphorus to match standard name?
     vardesc_temp = vardesc("fbddtdip_raw","Rate of Change of Dissolved Inorganic Phosphate due to Biological Activity",'h','1','s','mol m-2 s-1','f')
     cobalt%id_fbddtdip = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -4822,6 +4832,8 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_standard_name="tendency_of_ocean_mole_content_of_dissolved_inorganic_iron_due_to_biological_processes", &
          cmor_long_name="Rate of Change of Dissolved Inorganic Iron due to Biological Activity")
 
+! CHECK2
+! 2017/08/04 Data Request Spreadsheet has Silicate in long_name: should long_name be Silicon (or Silica) to match standard name and other Si terms?
     vardesc_temp = vardesc("fbddtdisi_raw","Rate of Change of Dissolved Inorganic Silicate due to Biological Activity",'h','1','s','mol m-2 s-1','f')
     cobalt%id_fbddtdisi = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
@@ -4837,24 +4849,11 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_long_name="Rate of Change of Biological Alkalinity due to Biological Activity")
 
 !------------------------------------------------------------------------------------------------------------------
-! 2-D fields (from day)  
+! 2-D fields (from Oday)  
 ! CHECK: saved on model grid
 
-! calculated the same as sfc_chl
-    vardesc_temp = vardesc("chlos_raw","Sea Surface Total Chlorophyll Mass Concentration",'h','1','s','kg m-3','f')
-    cobalt%id_chlos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="chlos", cmor_units="kg m-3",                          &
-         cmor_standard_name="surface_mass_concentration_of_phytoplankton_expressed_as_chlorophyll_in_sea_water", &
-         cmor_long_name="Sea Surface Total Chlorophyll Mass Concentration")
+! previously defined above
 
-! calculated the same as sfc_phyc
-    vardesc_temp = vardesc("phycos_raw","Sea Surface Phytoplankton Carbon Concentration",'h','1','s','mol m-3','f')
-    cobalt%id_phycos = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
-         cmor_field_name="phycos", cmor_units="mol m-3",                          &
-         cmor_standard_name="surface_mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water", &
-         cmor_long_name="Sea Surface Phytoplankton Carbon Concentration")
 
 !==============================================================================================================
 
@@ -4979,6 +4978,8 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('alpha_Sm', phyto(SMALL)%alpha,2.0e-5*2.77e18/6.022e17)  ! g C g Chl-1 m2 W-1 s-1
     call g_tracer_add_param('kappa_eppley', cobalt%kappa_eppley, 0.063)                    ! deg C-1
     call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.50/sperd)                ! s-1
+    ! Uncomment for "no mass change" check
+    ! call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.01/sperd)                ! s-1
     call g_tracer_add_param('P_C_max_Lg', phyto(LARGE)%P_C_max, 1.25/sperd)                ! s-1
     call g_tracer_add_param('P_C_max_Sm', phyto(SMALL)%P_C_max, 1.125/sperd)                 ! s-1
     call g_tracer_add_param('thetamax_Di', phyto(DIAZO)%thetamax, 0.03)                    ! g Chl g C-1
@@ -5214,17 +5215,16 @@ write (stdlogunit, generic_COBALT_nml)
     !----------------------------------------------------------------------
     !
     call g_tracer_add_param('felig_bkg', cobalt%felig_bkg, 1.0e-9)                           ! mol Fe kg-1
-    call g_tracer_add_param('felig_2_don', cobalt%felig_2_don, 0.0e-3 / 40.0 * 106.0 / 16.0) ! mol Fe mol N-1
+    call g_tracer_add_param('felig_2_don', cobalt%felig_2_don, 0.0)                       ! mol Fe mol N-1
     call g_tracer_add_param('fe_2_n_sed', cobalt%fe_2_n_sed, 100.0e-5 * 106 / 16)            ! mol Fe mol N-1
+    call g_tracer_add_param('ffe_sed_max', cobalt%ffe_sed_max, 170.0/1.0e6/sperd)            ! mol Fe m-2 s-1 
     call g_tracer_add_param('fe_coast', cobalt%fe_coast,1.0e-11 )                            ! mol Fe m kg-1 s-1
     call g_tracer_add_param('alpha_fescav',cobalt%alpha_fescav, 15.0/spery)                  ! sec-1 
-    call g_tracer_add_param('beta_fescav',cobalt%beta_fescav, 0.0/spery)		     ! mol N-1 sec-1  
     call g_tracer_add_param('remin_eff_fedet',cobalt%remin_eff_fedet, 0.1)                   ! unitless 
-    call g_tracer_add_param('ki_fescav',cobalt%ki_fescav, 1.0 )                              ! watts m-2
     call g_tracer_add_param('io_fescav',cobalt%io_fescav, 10.0 )                             ! watts m-2
     call g_tracer_add_param('gamma_fescav',cobalt%gamma_fescav, 1.0 )                        ! watts m-2
     call g_tracer_add_param('kfe_eq_lig_ll',cobalt%kfe_eq_lig_ll, 1.0e12)                    ! mol lig-1 kg
-    call g_tracer_add_param('kfe_eq_lig_hl',cobalt%kfe_eq_lig_hl, 1e8)                       ! mol lig-1 kg
+    call g_tracer_add_param('kfe_eq_lig_hl',cobalt%kfe_eq_lig_hl, 1.0e8)                     ! mol lig-1 kg
 
     ! Radiocarbon
     call g_tracer_add_param('half_life_14c', cobalt%half_life_14c, 5730.0 )                  ! s
@@ -5233,8 +5233,10 @@ write (stdlogunit, generic_COBALT_nml)
     ! Remineralization
     !-------------------------------------------------------------------------
     !
-    call g_tracer_add_param('k_o2', cobalt%k_o2, 20.0e-6)                                    ! mol O2 kg-1
-    call g_tracer_add_param('o2_min', cobalt%o2_min, 1.0 * 1.0e-06)                          ! mol O2 kg-1
+    call g_tracer_add_param('k_o2', cobalt%k_o2, 8.0e-6)                                     ! mol O2 kg-1
+    call g_tracer_add_param('o2_min', cobalt%o2_min, 0.8e-6 )                                ! mol O2 kg-1
+    call g_tracer_add_param('kappa_remin', cobalt%kappa_remin, 0.063 )                       ! deg C-1
+    call g_tracer_add_param('remin_ramp_scale', cobalt%remin_ramp_scale, 50.0 )              ! m
     call g_tracer_add_param('rpcaco3', cobalt%rpcaco3, 0.070/12.0*16.0/106.0*100.0)          ! mol N mol Ca-1
     call g_tracer_add_param('rplith',  cobalt%rplith,  0.065/12.0*16.0/106.0)                ! mol N g lith-1
     call g_tracer_add_param('rpsio2',  cobalt%rpsio2,  0.026/12.0*16.0/106.0*60.0)           ! mol N mol Si-1
@@ -5380,6 +5382,8 @@ write (stdlogunit, generic_COBALT_nml)
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMCO2,                                      &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
+         ! Uncomment for "no mass change" check
+         ! flux_gas_param = (/ 0.0, 0.0 /),                            &
          flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
@@ -5432,33 +5436,6 @@ write (stdlogunit, generic_COBALT_nml)
          longname   = 'Small Phytoplankton Iron', &
          units      = 'mol/kg',     &
          prog       = .true.        )
-
-    if (do_fan_dunne_fe) then  !{
-      !
-      ! Initialize additional tracers for Fan and Dunne (2011) Iron formulation
-      !
-      !       Colloidal Fe (assumed to be all unavailable to phytoplankton)
-      !
-      call g_tracer_add(tracer_list,package_name,&
-         name       = 'fec',            &
-         longname   = 'Colloidal Iron', & 
-         units      = 'mol/kg',         &
-         prog       = .true.,           &
-         flux_param = (/ 55.847e-03 /), &
-         flux_bottom= .false.            )
-      !
-      !       H2O2 (Hydrogen Peroxide)
-      !
-      call g_tracer_add(tracer_list,package_name,&
-         name       = 'h2o2',           &
-         longname   = 'Hydrogen Peroxide', &
-         units      = 'mol/kg',         &
-         flux_runoff= .true.,           &
-         flux_wetdep= .true.,           &
-         flux_drydep= .true.,           &
-         flux_param = (/ 34.0147e-03 /),&
-         prog       = .true.            ) 
-    endif !}
     !
     !       LDON (Labile dissolved organic nitrogen)
     !
@@ -5813,6 +5790,14 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'mol m-2 s-1',            &
          prog       = .false.                   )
     !
+    !      fedet_btf (Fe flux to sediments)
+    !      (only used in "no mass change" check)
+    call g_tracer_add(tracer_list,package_name, &
+         name       = 'fedet_btf',              &
+         longname   = 'Fe flux to Sediments',   &
+         units      = 'mol m-2 s-1',            &
+         prog       = .false.                   )
+    !
     !       htotal (H+ ion concentration)
     !
     call g_tracer_add(tracer_list,package_name,&
@@ -5848,24 +5833,6 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'sec-1',         &
          prog       = .false.              )
 
-    if (do_fan_dunne_fe) then  !{
-       !
-       !       Fe2 (Iron (II))
-       !
-       call g_tracer_add(tracer_list,package_name,&
-          name       = 'fe2',       &
-          longname   = 'Iron(II)', &
-          units      = 'mol/kg',        &
-          prog       = .false.          )
-       !
-       !       Fe3 (Iron (III))
-       !
-       call g_tracer_add(tracer_list,package_name,&
-          name       = 'fe3',       &
-          longname   = 'Iron(III)', &
-          units      = 'mol/kg',        &
-          prog       = .false.          )
-    endif !}
 
   end subroutine user_add_tracers
 
@@ -5974,6 +5941,9 @@ write (stdlogunit, generic_COBALT_nml)
     !
     call g_tracer_get_values(tracer_list,'fedet','btm_reservoir',cobalt%ffedet_btm,isd,jsd)
     cobalt%ffedet_btm = cobalt%ffedet_btm/dt
+    ! uncomment for "no mass change check"
+    !call g_tracer_get_pointer(tracer_list,'fedet_btf','field',temp_field)
+    !temp_field(:,:,1) = cobalt%ffedet_btm(:,:)
     call g_tracer_set_values(tracer_list,'fedet','btm_reservoir',0.0)
     if (cobalt%id_ffedet_btm .gt. 0)           &
          used = g_send_data(cobalt%id_ffedet_btm, cobalt%ffedet_btm, &
@@ -6111,6 +6081,7 @@ write (stdlogunit, generic_COBALT_nml)
     real :: drho_dzt
     real, dimension(:), Allocatable   :: tmp_irr_band
     real, dimension(:,:), Allocatable :: rho_dzt_100, rho_dzt_200
+    real, dimension(:,:,:), Allocatable :: z_remin_ramp
     real,dimension(1:NUM_ZOO,1:NUM_PREY) :: ipa_matrix,pa_matrix,ingest_matrix
     real,dimension(1:NUM_PREY) :: hp_ipa_vec,hp_pa_vec,hp_ingest_vec
     real,dimension(1:NUM_PREY) :: prey_vec,prey_p2n_vec,prey_fe2n_vec,prey_si2n_vec
@@ -6123,6 +6094,15 @@ write (stdlogunit, generic_COBALT_nml)
     real :: kfe_ads, kfe_r_lig_bact, irr_scaled, O2minus
     real :: kfe_oxid, kfe_f_red, kfe_flig_red, kfe_fcol_red, kfe_fdet_red
     real :: ads_fecol, a_quad, b_quad, c_quad
+
+    real, dimension(:,:,:), Allocatable :: pre_totn, net_srcn, post_totn
+    real, dimension(:,:,:), Allocatable :: pre_totp, post_totp
+    real, dimension(:,:,:), Allocatable :: pre_totsi, post_totsi
+    real, dimension(:,:,:), Allocatable :: pre_totfe, net_srcfe, post_totfe
+    real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
+    real :: imbal
+    integer :: stdoutunit, imbal_flag, outunit
+     
 
 
     r_dt = 1.0 / dt
@@ -6140,7 +6120,7 @@ write (stdlogunit, generic_COBALT_nml)
 
     !---------------------------------------------------------------------
     !Calculate co3_ion
-    !Also calculate co2 fluxes csurf and alpha for the next round of exchnage
+    !Also calculate co2 fluxes csurf and alpha for the next round of exchange
     !---------------------------------------------------------------------
    
     cobalt%zt = 0.0
@@ -6261,10 +6241,18 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_values(tracer_list,'sldop'   ,'field',cobalt%f_sldop   ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sidet'  ,'field',cobalt%f_sidet    ,isd,jsd,ntau=tau,positive=.true.)
     call g_tracer_get_values(tracer_list,'sio4'   ,'field',cobalt%f_sio4     ,isd,jsd,ntau=tau,positive=.true.)
-    if (do_fan_dunne_fe) then  !{
-       call g_tracer_get_values(tracer_list,'fec'    ,'field',cobalt%f_fec      ,isd,jsd,ntau=tau,positive=.true.)
-       call g_tracer_get_values(tracer_list,'h2o2'   ,'field',cobalt%f_h2o2     ,isd,jsd,ntau=tau,positive=.true.)
-    endif !}
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after tracer_get_values/before phytoplankton fields'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
     !
     ! phytoplankton fields
     !
@@ -6295,20 +6283,38 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1,positive=.true.)
     call g_tracer_get_values(tracer_list,'cadet_arag_btf','field',cobalt%f_cadet_arag_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'cadet_calc_btf','field',cobalt%f_cadet_calc_btf,isd,jsd,ntau=1)
-    if (do_fan_dunne_fe) then  !{
-       call g_tracer_get_values(tracer_list,'fe2','field',cobalt%f_fe2  ,isd,jsd,ntau=1,positive=.true.)
-       call g_tracer_get_values(tracer_list,'fe3','field',cobalt%f_fe3  ,isd,jsd,ntau=1,positive=.true.)
-    endif !}
     call g_tracer_get_values(tracer_list,'lithdet_btf','field',cobalt%f_lithdet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'ndet_btf','field',cobalt%f_ndet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'pdet_btf','field',cobalt%f_pdet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'sidet_btf','field',cobalt%f_sidet_btf,isd,jsd,ntau=1)
+    ! uncomment for "no mass change" test
+    !call g_tracer_get_values(tracer_list,'fedet_btf','field',cobalt%f_fedet_btf,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'irr_mem','field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
 
     ! minimum concentration below which predation/basal respiration stops
     refuge_conc = 1.0e-9
 
-
+    ! zero out cumulative COBALT-wide production diagnostics
+    do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec
+       cobalt%jprod_fed(i,j,k) = 0.0
+       cobalt%jprod_fedet(i,j,k) = 0.0
+       cobalt%jprod_ndet(i,j,k) = 0.0
+       cobalt%jprod_pdet(i,j,k) = 0.0
+       cobalt%jprod_sldon(i,j,k) = 0.0
+       cobalt%jprod_ldon(i,j,k) = 0.0
+       cobalt%jprod_srdon(i,j,k) = 0.0
+       cobalt%jprod_sldop(i,j,k) = 0.0
+       cobalt%jprod_ldop(i,j,k) = 0.0
+       cobalt%jprod_srdop(i,j,k) = 0.0
+       cobalt%jprod_sidet(i,j,k) = 0.0
+       cobalt%jprod_sio4(i,j,k) = 0.0
+       cobalt%jprod_po4(i,j,k) = 0.0
+       cobalt%jprod_nh4(i,j,k) = 0.0
+       cobalt%jno3denit_wc(i,j,k) = 0.0
+! added jgj - do we need it every timestep
+       cobalt%jremin_ndet(i,j,k) = 0.0
+       cobalt%jo2resp_wc(i,j,k) = 0.0
+    enddo;  enddo ;  enddo !} i,j,k
 !
 !-----------------------------------------------------------------------------------
 ! 1: Phytoplankton growth and nutrient uptake calculations
@@ -6418,7 +6424,6 @@ write (stdlogunit, generic_COBALT_nml)
     ! Phytoplankton growth rate calculation based on Geider et al. (1997)
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       cobalt%gross_prim_prod(i,j,k) = 0.0
        cobalt%f_chl(i,j,k) = 0.0
 
        do n = 1, NUM_PHYTO   !{
@@ -6438,14 +6443,8 @@ write (stdlogunit, generic_COBALT_nml)
 
           phyto(n)%mu_mix(i,j,k) = phyto(n)%mu(i,j,k)
 
-          cobalt%gross_prim_prod(i,j,k) = cobalt%gross_prim_prod(i,j,k) + P_C_m*phyto(n)%irrlim(i,j,k)* &
-                                          phyto(n)%f_n(i,j,k)
-          ! Negative growth assumed to go to cell death rather than respiration (see manual) 
-          cobalt%net_prim_prod(i,j,k) = max(phyto(n)%mu(i,j,k),0.0)*phyto(n)%f_n(i,j,k)
        enddo !} n
 
-       cobalt%gross_prim_prod(i,j,k) = cobalt%gross_prim_prod(i,j,k)*cobalt%c_2_n*spery
-       cobalt%net_prim_prod(i,j,k) = cobalt%net_prim_prod(i,j,k)*cobalt%c_2_n*spery
     enddo;  enddo ; enddo !} i,j,k
 
     do j = jsc, jec ; do i = isc, iec ; do n = 1,NUM_PHYTO !{
@@ -6465,7 +6464,20 @@ write (stdlogunit, generic_COBALT_nml)
              phyto(n)%f_mu_mem(i,j,k))*min(1.0,cobalt%gamma_mu_mem*dt)*grid_tmask(i,j,k)
     enddo; enddo ; enddo; enddo !} i,j,k,n
 
-
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 1.2'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'f_chl chksum = ',mpp_chksum(cobalt%f_chl(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_pdet_btf chksum = ',mpp_chksum(cobalt%f_pdet_btf(isc:iec,jsc:jec,:))
+    endif
+!
     !
     !-----------------------------------------------------------------------
     ! 1.3: Nutrient uptake calculations 
@@ -6475,26 +6487,26 @@ write (stdlogunit, generic_COBALT_nml)
     !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        n = DIAZO
-       !juptake_di_tot2nterm=max(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)* &
-       !  (1.0/(cobalt%f_no3(i,j,k)+cobalt%f_nh4(i,j,k)+cobalt%k_n_inhib_Di)))
        phyto(n)%juptake_n2(i,j,k) =  max(0.0,(1.0 - phyto(LARGE)%no3lim(i,j,k) - phyto(LARGE)%nh4lim(i,j,k))* &
           phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))
        phyto(n)%juptake_nh4(i,j,k) = max(0.0,phyto(LARGE)%nh4lim(i,j,k)* phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))
        phyto(n)%juptake_no3(i,j,k) = max(0.0,phyto(LARGE)%no3lim(i,j,k)* phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)) 
-       ! If growth is negative, net remineralization of organic material
-       phyto(n)%juptake_nh4(i,j,k) = phyto(n)%juptake_nh4(i,j,k) + &
-                                     min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))
-       phyto(n)%jprod_n(i,j,k) = phyto(n)%juptake_nh4(i,j,k) + phyto(n)%juptake_no3(i,j,k) + &
-          phyto(n)%juptake_n2(i,j,k)
+       ! uncomment for "no mass change" test (next 2 lines)
+       ! phyto(n)%juptake_nh4(i,j,k) = phyto(n)%juptake_nh4(i,j,k) + phyto(n)%juptake_n2(i,j,k)
+       ! phyto(n)%juptake_n2(i,j,k) = 0.0
+
+       ! If growth is negative, results in net respiration and production of nh4, aerobic loss in all cases
+       cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) - min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))
+       cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) - min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))*cobalt%o2_2_nh4
+       phyto(n)%jprod_n(i,j,k) = phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)
        do n = 2, NUM_PHYTO !{
           phyto(n)%juptake_no3(i,j,k) = max( 0.0, phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*   & 
              phyto(n)%no3lim(i,j,k)/(phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k)+epsln) )
           phyto(n)%juptake_nh4(i,j,k) = max( 0.0, phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*   & 
              phyto(n)%nh4lim(i,j,k)/(phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k)+epsln) )
-          ! If growth is negative, net remineralization of organic material
-          phyto(n)%juptake_nh4(i,j,k) = phyto(n)%juptake_nh4(i,j,k) + &
-                                        min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))
-          phyto(n)%jprod_n(i,j,k) = phyto(n)%juptake_nh4(i,j,k) + phyto(n)%juptake_no3(i,j,k)
+          cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) - min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))
+          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) - min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))*cobalt%o2_2_nh4
+          phyto(n)%jprod_n(i,j,k) = phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)
        enddo !} n
     enddo;  enddo ; enddo !} i,j,k
     !
@@ -6504,9 +6516,13 @@ write (stdlogunit, generic_COBALT_nml)
        n=DIAZO
        phyto(n)%juptake_po4(i,j,k) = (phyto(n)%juptake_n2(i,j,k)+phyto(n)%juptake_nh4(i,j,k) + &
           phyto(n)%juptake_no3(i,j,k))*phyto(n)%p_2_n_static
+       cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) - &
+          min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))*phyto(n)%p_2_n_static
        do n = 2, NUM_PHYTO
           phyto(n)%juptake_po4(i,j,k) = (phyto(n)%juptake_no3(i,j,k)+   &
                   phyto(n)%juptake_nh4(i,j,k)) * phyto(n)%p_2_n_static
+          cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) - &
+                  min(0.0,phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k))*phyto(n)%p_2_n_static
        enddo !} n
     enddo; enddo ; enddo !} i,j,k
     !
@@ -6538,6 +6554,19 @@ write (stdlogunit, generic_COBALT_nml)
        phyto(LARGE)%q_si_2_n(i,j,k) = cobalt%f_silg(i,j,k)/(phyto(LARGE)%f_n(i,j,k)+epsln)
 
     enddo; enddo ; enddo !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 1.3'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3denit_wc chksum = ',mpp_chksum(cobalt%jno3denit_wc(isc:iec,jsc:jec,:))
+    endif
+!
     call mpp_clock_end(id_clock_phyto_growth)
 !
 !-----------------------------------------------------------------------
@@ -6550,29 +6579,67 @@ write (stdlogunit, generic_COBALT_nml)
     !
 
     call mpp_clock_begin(id_clock_bacteria_growth)
-    vmax_bact = (1/bact(1)%gge_max)*(bact(1)%mu_max + bact(1)%bresp)
+    vmax_bact = (1.0/bact(1)%gge_max)*(bact(1)%mu_max + bact(1)%bresp)
     do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec   !{
        bact(1)%temp_lim(i,j,k) = exp(bact(1)%ktemp*Temp(i,j,k))
        bact_ldon_lim = cobalt%f_ldon(i,j,k)/(bact(1)%k_ldon + cobalt%f_ldon(i,j,k))
+       bact_uptake_ratio = ( cobalt%f_ldop(i,j,k)/max(cobalt%f_ldon(i,j,k),epsln) )
+
+       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
        bact(1)%juptake_ldon(i,j,k) = vmax_bact*bact(1)%temp_lim(i,j,k)*bact_ldon_lim* &
           bact(1)%f_n(i,j,k)
-       bact_uptake_ratio = ( cobalt%f_ldop(i,j,k)/max(cobalt%f_ldon(i,j,k),epsln) )
        bact(1)%juptake_ldop(i,j,k) = bact(1)%juptake_ldon(i,j,k)*bact_uptake_ratio
           bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldon(i,j,k) - &
              bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                &
              bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
        bact(1)%jprod_n(i,j,k) = min(bact(1)%jprod_n(i,j,k), &
                                     bact(1)%juptake_ldop(i,j,k)/bact(1)%q_p_2_n)
-       !if (bact_uptake_ratio.lt.bact(1)%q_p_2_n) then
-       !   bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldop(i,j,k)*16.0 - &
-       !      bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                     &
-       !      bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
-       !else
-       !   bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldon(i,j,k) - &
-       !      bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *                &
-       !      bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
-       !endif
+          ! aerobic remineralization results in the production of nh4 which is eventually
+          ! subtracted from o2
+          bact(1)%jprod_nh4(i,j,k) = bact(1)%juptake_ldon(i,j,k) - max(bact(1)%jprod_n(i,j,k),0.0)
+          cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + bact(1)%jprod_nh4(i,j,k)
+          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + bact(1)%jprod_nh4(i,j,k)*cobalt%o2_2_nh4
+       !
+       ! Sub-oxic conditions
+       ! 
+        else
+          bact(1)%juptake_ldon(i,j,k) = vmax_bact*cobalt%o2_min/(cobalt%k_o2 + cobalt%o2_min)* &
+              bact(1)%temp_lim(i,j,k)*bact_ldon_lim*bact(1)%f_n(i,j,k)
+          bact(1)%juptake_ldop(i,j,k) = bact(1)%juptake_ldon(i,j,k)*bact_uptake_ratio
+          bact(1)%jprod_n(i,j,k) = bact(1)%gge_max*bact(1)%juptake_ldon(i,j,k) - &
+             bact(1)%f_n(i,j,k)/(refuge_conc + bact(1)%f_n(i,j,k)) *             &
+             bact(1)%temp_lim(i,j,k)*bact(1)%bresp*bact(1)%f_n(i,j,k)
+          bact(1)%jprod_n(i,j,k) = min(bact(1)%jprod_n(i,j,k), &
+                                    bact(1)%juptake_ldop(i,j,k)/bact(1)%q_p_2_n)
+          ! anaerobic remineralization occurs via denitrification, no production of ammonia
+          ! (and thus no subtraction from o2) but you lose no3
+          cobalt%jno3denit_wc(i,j,k) = cobalt%jno3denit_wc(i,j,k) + &
+            (bact(1)%juptake_ldon(i,j,k)-max(bact(1)%jprod_n(i,j,k),0.0))*cobalt%n_2_n_denit
+          ! uncomment for "no mass change" test
+          ! cobalt%jno3denit_wc(i,j,k) = 0.0
+          ! using TOPAZ stoichiometry
+          bact(1)%jprod_nh4(i,j,k) = bact(1)%juptake_ldon(i,j,k) - max(bact(1)%jprod_n(i,j,k),0.0)
+          cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + bact(1)%jprod_nh4(i,j,k)
+       endif  !}
+
+       ! produce phosphate at the same rate regardless of whether aerobic/anaerobic
+       bact(1)%jprod_po4(i,j,k) = bact(1)%juptake_ldop(i,j,k) - max(bact(1)%jprod_n(i,j,k)*bact(1)%q_p_2_n,0.0)
+       cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + bact(1)%jprod_po4(i,j,k)
+
     enddo; enddo ; enddo !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 2'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3denit_wc chksum = ',mpp_chksum(cobalt%jno3denit_wc(isc:iec,jsc:jec,:))
+    endif
+!
     call mpp_clock_end(id_clock_bacteria_growth)
 !
 !-----------------------------------------------------------------------
@@ -6676,6 +6743,20 @@ write (stdlogunit, generic_COBALT_nml)
        ! 3.1.1: Calculate zooplankton ingestion fluxes
        !
 
+       ! Calculate the temperature and oxygen limitations, no ingestion
+       ! in low o2 environments
+       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
+          do m = 1,3  !{
+            zoo(m)%temp_lim(i,j,k) = exp(zoo(m)%ktemp*Temp(i,j,k))
+          enddo  !}  m
+          cobalt%hp_temp_lim(i,j,k) = exp(cobalt%ktemp_hp*Temp(i,j,k))
+       else
+          do m = 1,3  !{
+            zoo(m)%temp_lim(i,j,k) = 0.0
+          enddo  !}  m
+          cobalt%hp_temp_lim(i,j,k) = 0.0
+       endif
+
        ! Prey vectors for ingestion and loss calculations 
        ! (note: ordering of phytoplankton must be consistent with
        !  DIAZO, LARGE, SMALL ordering inherited from TOPAZ)
@@ -6708,7 +6789,6 @@ write (stdlogunit, generic_COBALT_nml)
        !
 
        m = 1 
-       zoo(m)%temp_lim(i,j,k) = exp(zoo(m)%ktemp*Temp(i,j,k)) 
        sw_fac_denom = (ipa_matrix(m,3)*prey_vec(3))**zoo(m)%nswitch + &
                       (ipa_matrix(m,4)*prey_vec(4))**zoo(m)%nswitch
        pa_matrix(m,3) = ipa_matrix(m,3)* &
@@ -6733,7 +6813,6 @@ write (stdlogunit, generic_COBALT_nml)
        !
 
        m = 2 
-       zoo(m)%temp_lim(i,j,k) = exp(zoo(m)%ktemp*Temp(i,j,k))
        sw_fac_denom = (ipa_matrix(m,1)*prey_vec(1))**zoo(m)%nswitch + &
                       (ipa_matrix(m,2)*prey_vec(2))**zoo(m)%nswitch + &
                       (ipa_matrix(m,5)*prey_vec(5))**zoo(m)%nswitch
@@ -6769,7 +6848,6 @@ write (stdlogunit, generic_COBALT_nml)
        !
 
        m = 3
-       zoo(m)%temp_lim(i,j,k) = exp(zoo(m)%ktemp*Temp(i,j,k))
        sw_fac_denom = (ipa_matrix(m,1)*prey_vec(1))**zoo(m)%nswitch + &
                       (ipa_matrix(m,2)*prey_vec(2))**zoo(m)%nswitch + &
                       (ipa_matrix(m,6)*prey_vec(6))**zoo(m)%nswitch
@@ -6848,25 +6926,11 @@ write (stdlogunit, generic_COBALT_nml)
        enddo !} n
 
        !
-       ! losses of detritus to zooplankton (no detrivory in default settings) 
-       !
-       !cobalt%det_jzloss_n(i,j,k) = 0.0
-       !
-       !do m = 1,NUM_ZOO !{
-       !   cobalt%det_jzloss_n(i,j,k) = cobalt%det_jzloss_n(i,j,k)+ingest_matrix(m,NUM_PHYTO+NUM_ZOO+2)
-       !enddo !} m
-       !
-       !cobalt%det_jzloss_p(i,j,k) = cobalt%det_jzloss_n(i,j,k)*prey_p2n_vec(NUM_PHYTO+NUM_ZOO+2)
-       !cobalt%det_jzloss_fe(i,j,k) = cobalt%det_jzloss_n(i,j,k)*prey_fe2n_vec(NUM_PHYTO+NUM_ZOO+2)
-       !cobalt%det_jzloss_si(i,j,k) = cobalt%det_jzloss_si(i,j,k)*prey_si2n_vec(NUM_PHYTO+NUM_ZOO+2)
-
-       !
        ! 3.1.2 Calculate ingestion by higher predators
        !
 
        ! The higher-predator ingestion calculations mirror those used for zooplankton
        !
-       cobalt%hp_temp_lim(i,j,k) = exp(cobalt%ktemp_hp*Temp(i,j,k))
        sw_fac_denom = (hp_ipa_vec(6)*prey_vec(6))**cobalt%nswitch_hp + &
                       (hp_ipa_vec(7)*prey_vec(7))**cobalt%nswitch_hp
        hp_pa_vec(6) = hp_ipa_vec(6)* &
@@ -6886,44 +6950,13 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%hp_jingest_p(i,j,k) = hp_ingest_vec(6)*prey_p2n_vec(6) + &
                                     hp_ingest_vec(7)*prey_p2n_vec(7)
        !
-       ! No iron and sio2 ingestion by higher predators with default settings
-       !
-       !cobalt%hp_jingest_fe(i,j,k) = hp_ingest_vec(6)*prey_fe2n_vec(6) + &
-       !                              hp_ingest_vec(7)*prey_fe2n_vec(7)
-       !cobalt%hp_jingest_sio2(i,j,k) = hp_ingest_vec(6)*prey_si2n_vec(6) + &
-       !                                hp_ingest_vec(7)*prey_si2n_vec(7)
-
-       !
        ! Calculate losses to higher predators
        !
 
-       ! losses of phytoplankton to higher predators (none with default settings)
-       !
-       !do n = 1,NUM_PHYTO !{
-       !   phyto(n)%jhploss_n(i,j,k) = hp_ingest_vec(n)
-       !   phyto(n)%jhploss_p(i,j,k) = phyto(n)%jhploss_n(i,j,k)*prey_p2n_vec(n)
-       !   phyto(n)%jhploss_fe(i,j,k) = phyto(n)%jhploss_n(i,j,k)*prey_fe2n_vec(n)
-       !   phyto(n)%jhploss_sio2(i,j,k) = phyto(n)%jhploss_n(i,j,k)*prey_si2n_vec(n)
-       !enddo !} n
-       !
-       ! losses of bacteria to higher predators (none with default settings)
-       !
-       !   bact(1)%jhploss_n(i,j,k) = hp_ingest_vec(4)
-       !   bact(1)%jhploss_p(i,j,k) = bact(1)%jhploss_n(i,j,k)*prey_p2n_vec(4)
-       !
-       ! losses of zooplankton to higher predators
-       !
        do n = 1,NUM_ZOO !{
          zoo(n)%jhploss_n(i,j,k) = hp_ingest_vec(NUM_PHYTO+1+n)
          zoo(n)%jhploss_p(i,j,k) = zoo(n)%jhploss_n(i,j,k)*prey_p2n_vec(NUM_PHYTO+1+n)
        enddo !} n
-       !
-       ! losses of detritus to higher predators (none with default settings)
-       !
-       !cobalt%det_jhploss_n(i,j,k) = hp_ingest_vec(NUM_PHYTO+NUM_ZOO+2)
-       !cobalt%det_jhploss_p(i,j,k) = cobalt%det_jhploss_n(i,j,k)*prey_p2n_vec(NUM_PHYTO+NUM_ZOO+2)
-       !cobalt%det_jhploss_fe(i,j,k) = cobalt%det_jhploss_n(i,j,k)*prey_fe2n_vec(NUM_PHYTO+NUM_ZOO+2)
-       !cobalt%det_jhploss_si(i,j,k) = cobalt%det_jhploss_si(i,j,k)*prey_si2n_vec(NUM_PHYTO+NUM_ZOO+2)
 
     enddo; enddo; enddo  !} i,j,k
     call mpp_clock_end(id_clock_zooplankton_calculations)
@@ -6975,8 +7008,6 @@ write (stdlogunit, generic_COBALT_nml)
           phyto(n)%jexuloss_p(i,j,k) = phyto(n)%exu*max(phyto(n)%juptake_po4(i,j,k),0.0)
           phyto(n)%jexuloss_fe(i,j,k) = phyto(n)%exu*max(phyto(n)%juptake_fe(i,j,k),0.0)
        enddo
-       ! Adjust silica uptake by large phytoplankton downward to maintain constant Si:N stoichimetry
-       ! phyto(LARGE)%juptake_sio4(i,j,k) = (1-phyto(LARGE)%exu)*phyto(LARGE)%juptake_sio4(i,j,k)
 
     enddo; enddo; enddo  !} i,j,k
     call mpp_clock_end(id_clock_other_losses)
@@ -6991,24 +7022,6 @@ write (stdlogunit, generic_COBALT_nml)
        !
        ! 3.3.1: Calculate the production of detritus and dissolved organic material
        !
-
-       ! initialize some cumulative COBALT-wide production diagnostics
-       cobalt%jprod_fec(i,j,k) = 0.0
-       cobalt%jprod_fed(i,j,k) = 0.0
-       cobalt%jprod_fedet(i,j,k) = 0.0
-       cobalt%jprod_ndet(i,j,k) = 0.0
-       cobalt%jprod_pdet(i,j,k) = 0.0
-       cobalt%jprod_sldon(i,j,k) = 0.0
-       cobalt%jprod_ldon(i,j,k) = 0.0
-       cobalt%jprod_srdon(i,j,k) = 0.0
-       cobalt%jprod_sldop(i,j,k) = 0.0
-       cobalt%jprod_ldop(i,j,k) = 0.0
-       cobalt%jprod_srdop(i,j,k) = 0.0
-       cobalt%jprod_sidet(i,j,k) = 0.0
-       cobalt%jprod_sio4(i,j,k) = 0.0
-       cobalt%jprod_po4(i,j,k) = 0.0
-       cobalt%jprod_nh4(i,j,k) = 0.0
-
        !
        ! Production of detritus and dissolved organic material from zooplankton egestion 
        !   
@@ -7067,21 +7080,6 @@ write (stdlogunit, generic_COBALT_nml)
        enddo !} m
 
        !
-       ! Sources due to phytoplankton mortality from adverse growth conditions (metabolic costs higher than
-       ! photosynthetic capacity).  These conditions are assumed to lead to a source of detritus in large
-       ! phytoplankton and diazotrophs. 
-       !
-       !n = DIAZO 
-       !cobalt%jprod_ndet(i,j,k) = cobalt%jprod_ndet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k),0.0)  
-       !cobalt%jprod_pdet(i,j,k) = cobalt%jprod_pdet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_p_2_n(i,j,k),0.0)
-       !cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_fe_2_n(i,j,k),0.0)
-       !n = LARGE 
-       !cobalt%jprod_ndet(i,j,k) = cobalt%jprod_ndet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k),0.0)
-       !cobalt%jprod_pdet(i,j,k) = cobalt%jprod_pdet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_p_2_n(i,j,k),0.0)
-       !cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_fe_2_n(i,j,k),0.0)
-       !cobalt%jprod_sidet(i,j,k) = cobalt%jprod_sidet(i,j,k) - min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_si_2_n(i,j,k),0.0)
-
-       !
        ! Sources from viral lysis of phytoplankton (0 in default formulation) and exudation
        !
 
@@ -7099,23 +7097,6 @@ write (stdlogunit, generic_COBALT_nml)
            cobalt%jprod_sio4(i,j,k) = cobalt%jprod_sio4(i,j,k) + phyto(m)%jvirloss_sio2(i,j,k)
        enddo !} m
 
-       !
-       ! Sources of dissolved organic material from small phytoplankton mortality (metabolic costs higher than photosynthetic
-       ! capacity).  These conditions are assumed to lead to a lysis-like redistribution of small phyto organic matter.
-       !
-
-       !n = SMALL
-       !cobalt%jprod_ldon(i,j,k) = cobalt%jprod_ldon(i,j,k) - cobalt%lysis_phi_ldon*min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k),0.0)
-       !cobalt%jprod_sldon(i,j,k) = cobalt%jprod_sldon(i,j,k) - cobalt%lysis_phi_sldon*min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k),0.0)
-       !cobalt%jprod_srdon(i,j,k) = cobalt%jprod_srdon(i,j,k) - cobalt%lysis_phi_srdon*min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k),0.0)
-       !cobalt%jprod_ldop(i,j,k) = cobalt%jprod_ldop(i,j,k) - &
-       !                           cobalt%lysis_phi_ldop*min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_p_2_n(i,j,k),0.0)
-       !cobalt%jprod_sldop(i,j,k) = cobalt%jprod_sldop(i,j,k) - &
-       !                           cobalt%lysis_phi_sldop*min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_p_2_n(i,j,k),0.0)
-       !cobalt%jprod_srdop(i,j,k) = cobalt%jprod_srdop(i,j,k) - &
-       !                           cobalt%lysis_phi_srdop*min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_p_2_n(i,j,k),0.0)
-       !cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) - &
-       !                          min(phyto(n)%mu(i,j,k)*phyto(n)%f_n(i,j,k)*phyto(n)%q_fe_2_n(i,j,k),0.0)
 
        !
        ! Sources of dissolved organic material from viral lysis due to bacteria 
@@ -7146,42 +7127,18 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%jprod_srdop(i,j,k) = cobalt%jprod_srdop(i,j,k) - cobalt%lysis_phi_srdop* &
                                   min(bact(1)%jprod_n(i,j,k)*bact(1)%q_p_2_n,0.0)
        !
-       ! 3.3.2: Calculate the remineralization of organic material by free-living bacteria
-       !
-
-       bact(1)%jprod_nh4(i,j,k) = bact(1)%juptake_ldon(i,j,k) - max(bact(1)%jprod_n(i,j,k),0.0)
-       bact(1)%jprod_po4(i,j,k) = bact(1)%juptake_ldop(i,j,k) - &
-                                  max(bact(1)%jprod_n(i,j,k)*bact(1)%q_p_2_n,0.0)
-       cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + bact(1)%jprod_nh4(i,j,k)
-       cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + bact(1)%jprod_po4(i,j,k)
-
-       !
        ! 3.3.3: Zooplankton production and excretion calculations
        !
 
        do m = 1,NUM_ZOO
+          ! recalculate here so that losses are not shut off in low o2 water
+          zoo(m)%temp_lim(i,j,k) = exp(zoo(m)%ktemp*Temp(i,j,k)) 
           assim_eff = 1.0-zoo(m)%phi_det-zoo(m)%phi_ldon-zoo(m)%phi_sldon-zoo(m)%phi_srdon
           zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_n(i,j,k) - &
                                      zoo(m)%f_n(i,j,k)/(refuge_conc + zoo(m)%f_n(i,j,k))* &
                                      zoo(m)%temp_lim(i,j,k)*zoo(m)%bresp*zoo(m)%f_n(i,j,k)
           zoo(m)%jprod_n(i,j,k) = min(zoo(m)%jprod_n(i,j,k), &
                                       assim_eff*zoo(m)%jingest_p(i,j,k)/zoo(m)%q_p_2_n)
-
-       !   *OLD PRODUCTION CALCULATION*
-       !   ingest_p2n = zoo(m)%jingest_p(i,j,k)/(zoo(m)%jingest_n(i,j,k)+epsln)
-       !
-       !   if (ingest_p2n .lt. zoo(m)%q_p_2_n) then
-       !      zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_p(i,j,k)*(1.0/zoo(m)%q_p_2_n)
-       !   else
-       !      zoo(m)%jprod_n(i,j,k) = zoo(m)%gge_max*zoo(m)%jingest_n(i,j,k)
-          !endif
-          !
-       !   ! adjust production terms for basal respiration costs
-       !   !if (zoo(m)%f_n(i,j,k).gt.refuge_conc) then
-       !     zoo(m)%jprod_n(i,j,k) = zoo(m)%jprod_n(i,j,k) - &
-       !                              zoo(m)%f_n(i,j,k)/(refuge_conc + zoo(m)%f_n(i,j,k))* &
-       !                              zoo(m)%temp_lim(i,j,k)*zoo(m)%bresp*zoo(m)%f_n(i,j,k)
-       !   !endif
 
           !
           ! Ingested material that does not go to zooplankton production, detrital production
@@ -7216,6 +7173,7 @@ write (stdlogunit, generic_COBALT_nml)
           ! cumulative production of inorganic nutrients 
           cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + zoo(m)%jprod_nh4(i,j,k)
           cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + zoo(m)%jprod_po4(i,j,k)
+          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + zoo(m)%jprod_nh4(i,j,k)*cobalt%o2_2_nh4
 
           !
           ! Any ingested iron that is not allocated to detritus is routed back to the
@@ -7239,12 +7197,24 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%jprod_sio4(i,j,k) = cobalt%jprod_sio4(i,j,k) + (1.0-cobalt%hp_phi_det)*cobalt%hp_jingest_sio2(i,j,k)
        cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + cobalt%hp_phi_nh4*cobalt%hp_jingest_n(i,j,k)
        cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + cobalt%hp_phi_po4*cobalt%hp_jingest_p(i,j,k)
+       cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%hp_phi_nh4*cobalt%hp_jingest_n(i,j,k)*cobalt%o2_2_nh4
 
     enddo; enddo ; enddo !} i,j,k
     call mpp_clock_end(id_clock_production_loop)
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 3'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
 
     call mpp_clock_begin(id_clock_ballast_loops)
-
+!
 !
 !------------------------------------------------------------------------------------
 ! 4: Production of calcium carbonate (Calcite and Aragonite) and lithogenic material
@@ -7305,8 +7275,26 @@ write (stdlogunit, generic_COBALT_nml)
                                     cobalt%phi_lith + cobalt%k_lith ) * cobalt%f_lith(i,j,k)
     enddo; enddo ; enddo !} i,j,k
 
-
-
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 4.3'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3denit_wc chksum = ',mpp_chksum(cobalt%jno3denit_wc(isc:iec,jsc:jec,:))
+      write(outunit,*) 'jremin_ndet chksum = ',mpp_chksum(cobalt%jremin_ndet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_ndet chksum = ',mpp_chksum(cobalt%f_ndet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_cadet_calc chksum = ',mpp_chksum(cobalt%f_cadet_calc(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_cadet_arag chksum = ',mpp_chksum(cobalt%f_cadet_arag(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_lithdet chksum = ',mpp_chksum(cobalt%f_lithdet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_sidet chksum = ',mpp_chksum(cobalt%f_sidet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'expkreminT chksum = ',mpp_chksum(cobalt%expkreminT(isc:iec,jsc:jec,:))
+    endif
+!
 !
 !---------------------------------------------------------------------------------------------------------
 ! 5: Detrital dissolution and remineralization calculation
@@ -7331,16 +7319,52 @@ write (stdlogunit, generic_COBALT_nml)
     !      and mineral protection 
     !
 
+    ! Calculate the depth for scaling of remineralization near the surface
+    allocate(z_remin_ramp(isd:ied,jsd:jed,1:nk)); z_remin_ramp = 0.0
+    z_remin_ramp(:,:,1) = dzt(:,:,1)
+    do k = 2,nk !{
+      z_remin_ramp(:,:,k) = z_remin_ramp(:,:,k-1) + dzt(:,:,k)
+    enddo !}k 
+
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Calculate the depth for scaling of remineralization near the surface'
+      write(outunit,*) 'f_no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' f_o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'p_dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3denit_wc chksum = ',mpp_chksum(cobalt%jno3denit_wc(isc:iec,jsc:jec,:))
+      write(outunit,*) 'jremin_ndet chksum = ',mpp_chksum(cobalt%jremin_ndet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_ndet chksum = ',mpp_chksum(cobalt%f_ndet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_cadet_calc chksum = ',mpp_chksum(cobalt%f_cadet_calc(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_cadet_arag chksum = ',mpp_chksum(cobalt%f_cadet_arag(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_lithdet chksum = ',mpp_chksum(cobalt%f_lithdet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_sidet chksum = ',mpp_chksum(cobalt%f_sidet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'expkreminT chksum = ',mpp_chksum(cobalt%expkreminT(isc:iec,jsc:jec,:))
+      write(outunit,*) 'z_remin_ramp data domain chksum = ',mpp_chksum(z_remin_ramp(isd:ied,jsd:jed,:))
+      write(outunit,*) 'z_remin_ramp compute domain chksum = ',mpp_chksum(z_remin_ramp(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dzt data domain chksum = ',mpp_chksum(dzt(isd:ied,jsd:jed,:))
+      write(outunit,*) 'dzt compute domain chksum = ',mpp_chksum(dzt(isc:iec,jsc:jec,:))
+      write(outunit,*) 'temp chksum = ',mpp_chksum(temp(isc:iec,jsc:jec,:))
+    endif
+!
+!
+!---------------------------------------------------------------------------------------------------------
+
     do k=1,nk ; do j=jsc,jec ; do i=isc,iec  !{
-       cobalt%jno3denit_wc(i,j,k) = 0.0
+       cobalt%expkreminT(i,j,k) = exp(cobalt%kappa_remin * Temp(i,j,k))
+       !cobalt%jno3denit_wc(i,j,k) = 0.0
        !
        !   Under oxic conditions
        !
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
-          cobalt%jremin_ndet(i,j,k) = cobalt%gamma_ndet * cobalt%f_o2(i,j,k) / & 
+          cobalt%jremin_ndet(i,j,k) = cobalt%gamma_ndet * cobalt%expkreminT(i,j,k) * &
+               z_remin_ramp(i,j,k)/(z_remin_ramp(i,j,k) + cobalt%remin_ramp_scale) * cobalt%f_o2(i,j,k) / & 
                ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )*max( 0.0, cobalt%f_ndet(i,j,k) - &
                cobalt%rpcaco3*(cobalt%f_cadet_arag(i,j,k) + cobalt%f_cadet_calc(i,j,k)) - & 
                cobalt%rplith*cobalt%f_lithdet(i,j,k) - cobalt%rpsio2*cobalt%f_sidet(i,j,k) )
+          cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + cobalt%jremin_ndet(i,j,k)
+          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jremin_ndet(i,j,k)*cobalt%o2_2_nh4
        !
        ! Under sub-oxic conditions
        !
@@ -7351,16 +7375,49 @@ write (stdlogunit, generic_COBALT_nml)
                max(0.0, cobalt%f_ndet(i,j,k) - &
                cobalt%rpcaco3*(cobalt%f_cadet_arag(i,j,k) + cobalt%f_cadet_calc(i,j,k)) - &
                cobalt%rplith*cobalt%f_lithdet(i,j,k) - cobalt%rpsio2*cobalt%f_sidet(i,j,k) )
-          cobalt%jno3denit_wc(i,j,k) = cobalt%jremin_ndet(i,j,k) * cobalt%n_2_n_denit
+          cobalt%jno3denit_wc(i,j,k) = cobalt%jno3denit_wc(i,j,k) + cobalt%jremin_ndet(i,j,k) * cobalt%n_2_n_denit
+          ! uncomment for "no mass change" test
+          ! cobalt%jno3denit_wc(i,j,k) = 0.0
+          ! using TOPAZ stoichiometry, denitrification produces ammonia.
+          cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + cobalt%jremin_ndet(i,j,k)
        endif !}
        !
        ! P and Fe assumed to be protected similarly to N
        !
        cobalt%jremin_pdet(i,j,k) = cobalt%jremin_ndet(i,j,k)/(cobalt%f_ndet(i,j,k) + epsln)* &
          cobalt%f_pdet(i,j,k)
+       cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + cobalt%jremin_pdet(i,j,k)
        cobalt%jremin_fedet(i,j,k) = cobalt%jremin_ndet(i,j,k) / (cobalt%f_ndet(i,j,k) + epsln) * &
          cobalt%remin_eff_fedet*cobalt%f_fedet(i,j,k)
+       cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) + cobalt%jremin_fedet(i,j,k) 
     enddo; enddo; enddo  !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 5.2'
+      write(outunit,*) 'f_no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' f_o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'p_dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3denit_wc chksum = ',mpp_chksum(cobalt%jno3denit_wc(isc:iec,jsc:jec,:))
+      write(outunit,*) 'jremin_ndet chksum = ',mpp_chksum(cobalt%jremin_ndet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_ndet chksum = ',mpp_chksum(cobalt%f_ndet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_cadet_calc chksum = ',mpp_chksum(cobalt%f_cadet_calc(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_cadet_arag chksum = ',mpp_chksum(cobalt%f_cadet_arag(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_lithdet chksum = ',mpp_chksum(cobalt%f_lithdet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'f_sidet chksum = ',mpp_chksum(cobalt%f_sidet(isc:iec,jsc:jec,:))
+      write(outunit,*) 'expkreminT chksum = ',mpp_chksum(cobalt%expkreminT(isc:iec,jsc:jec,:))
+      write(outunit,*) 'z_remin_ramp data domain chksum = ',mpp_chksum(z_remin_ramp(isd:ied,jsd:jed,:))
+      write(outunit,*) 'z_remin_ramp compute domain chksum = ',mpp_chksum(z_remin_ramp(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dzt data domain chksum = ',mpp_chksum(dzt(isd:ied,jsd:jed,:))
+      write(outunit,*) 'dzt compute domain chksum = ',mpp_chksum(dzt(isc:iec,jsc:jec,:))
+      write(outunit,*) 'temp chksum = ',mpp_chksum(temp(isc:iec,jsc:jec,:))
+    endif
+
+    deallocate(z_remin_ramp)
+!
 !
 !--------------------------------------------------------------------------------------------
 ! 6: Miscellaneous sources and sinks: Nitrification, Iron Scavenging, Coastal Iron inputs
@@ -7375,6 +7432,7 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
             phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
             (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k)))
+         cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nh4
        else
          cobalt%jnitrif(i,j,k) = 0.0
        endif !}
@@ -7382,80 +7440,13 @@ write (stdlogunit, generic_COBALT_nml)
        !
        ! Solve for free iron
        !
-    if (do_fan_dunne_fe) then  !{
-       ! If do_fan_dunne_fed, then calculate dissolved iron based on light, temperature, and ligands from redox and photochemistry.
        !
-       !Fan, Song-Miao, and John P Dunne, 2011: Models of iron speciation and concentration in the stratified epipelagic ocean.
-       ! Geophysical Research Letters, 38, L15611, DOI:10.1029/2011GL048219.
-       !
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       !
-       ! Coastal iron inputs (proxy for sediment inputs for areas with poorly resolved shelves)
-       !
-          cobalt%jfe_coast(i,j,k) = cobalt%fe_coast * mask_coast(i,j) * grid_tmask(i,j,k) / &
-            sqrt(grid_dat(i,j))
-
-          Ltotal = cobalt%felig_bkg + cobalt%felig_2_don * (cobalt%f_sldon(i,j,k) + cobalt%f_srdon(i,j,k))
-          kfe_oxid_night = (10.0 * cobalt%f_o2(i,j,k) + cobalt%f_h2o2(i,j,k) * 7.2e4)
-          kfe_des = 0.0
-          kfe_f_lig = 2.0e6
-          kfe_r_lig = 1.0e-6
-          kfe_f_col = 2.0e6
-          kfe_r_col = 2.0e-5
-          kfe_ads = 1.5e-5 * cobalt%f_ndet(i,j,k) * 1000.0 * 106.0 / 16.0 * 12.0 * 1.87
-          kfe_r_lig_bact = 3.0e-6
-          irr_scaled = 0.02 * cobalt%irr_inst(i,j,k)
-          !
-          ! Hydrogen Peroxide production as a function of photochemistry and oxygen assuming a res time of 12 days
-          ! Yuan and Schiller (EST, 2004) and steady state surface concentration of 100 nM with a diurnal cycle 
-          ! and deep concentration of 2 nM Yuan and Schiller (EST, 2004)
-          !
-          cobalt%jprod_h2o2(i,j,k) = irr_scaled * 1.0e-7 * 2.0 / (12.0 * 86400) + (cobalt%o2_2_nh4 * &
-                                     cobalt%jprod_nh4(i,j,k) + cobalt%o2_2_nitrif*cobalt%jnitrif(i,j,k))     
-          O2minus=cobalt%jprod_h2o2(i,j,k) * 43.5                             ! assuming a res time of 43.5 seconds
-                                                                              ! Rose et al., EST, 2008
-          kfe_oxid = kfe_oxid_night+irr_scaled*O2minus*1.0e7
-          kfe_f_red = irr_scaled * (1.5e-5+O2minus*1.5e8)
-          kfe_flig_red = irr_scaled * (1.0e-3+O2minus*1.5e5)
-          kfe_fcol_red = irr_scaled * 1.5e-5
-          kfe_fdet_red = irr_scaled * 2.3e-8
-
-          ads_fecol = kfe_ads * cobalt%f_ndet(i,j,k);
-          a_quad = kfe_f_lig * (1+(kfe_f_red-kfe_flig_red-kfe_r_lig_bact) / max(epsln, kfe_oxid + &
-                   kfe_flig_red + kfe_r_lig_bact))
-          b_quad = kfe_f_lig * (Ltotal - cobalt%f_fed(i,j,k)) + kfe_r_lig + kfe_flig_red + kfe_r_lig_bact +      &
-                   (kfe_r_lig+kfe_flig_red+kfe_r_lig_bact) * (kfe_f_red-kfe_flig_red-kfe_r_lig_bact) /           &
-                   (kfe_oxid + kfe_flig_red+kfe_r_lig_bact)+kfe_f_lig * ((kfe_flig_red + kfe_r_lig_bact) *       &
-                   cobalt%f_fed(i,j,k) + (kfe_des + kfe_fdet_red) * cobalt%f_fedet(i,j,k) + kfe_r_col *          &
-                   cobalt%f_fec(i,j,k)) / max(epsln, kfe_oxid + kfe_flig_red + kfe_r_lig_bact)
-          c_quad = (kfe_r_lig + kfe_flig_red + kfe_r_lig_bact) * (((kfe_flig_red + kfe_r_lig_bact) *             &
-                   cobalt%f_fed(i,j,k) + (kfe_des + kfe_fdet_red) * cobalt%f_fedet(i,j,k) +kfe_r_col *           &
-                   cobalt%f_fec(i,j,k)) / max(epsln, kfe_oxid + kfe_flig_red + kfe_r_lig_bact) -                 &
-                   cobalt%f_fed(i,j,k))
-          cobalt%f_fe3(i,j,k) = (-b_quad + sqrt(b_quad * b_quad-4.0 * a_quad * c_quad)) / max(epsln, 2.0 * a_quad)
-          cobalt%f_fe2(i,j,k) = cobalt%f_fed(i,j,k)-cobalt%f_fe3(i,j,k) * (1 + 1.0/((kfe_r_lig + kfe_flig_red +  &
-                   kfe_r_lig_bact) / kfe_f_lig + cobalt%f_fe3(i,j,k)) * Ltotal)
-          cobalt%jfe_ads(i,j,k) = ads_fecol * cobalt%f_fec(i,j,k)
-          cobalt%jprod_fec(i,j,k) = kfe_f_col * (cobalt%f_fec(i,j,k) +1e-14) * cobalt%f_fe3(i,j,k)
-          cobalt%jfec(i,j,k) = cobalt%jprod_fec(i,j,k) - (kfe_fcol_red+kfe_r_col) * cobalt%f_fec(i,j,k) - &
-                               cobalt%jfe_ads(i,j,k)
-          cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) + cobalt%jremin_fedet(i,j,k) + &
-                                 (kfe_des+kfe_fdet_red) * cobalt%f_fedet(i,j,k) +   &
-                                 (kfe_r_col +kfe_fcol_red) * cobalt%f_fec(i,j,k) +  &
-                                 cobalt%jfe_coast(i,j,k)  
-
-       enddo; enddo; enddo  !} i,j,k
-    else
-       !
-       ! Otherwise use simple ligand exchange solubility calculation
+       ! use simple ligand exchange solubility calculation
        ! 2016/06/13 jgj: use epsln instead of 1e-12
        !
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       !cobalt%kfe_eq_lig(i,j,k) = 10**( log10(cobalt%kfe_eq_lig_ll) - &
-       !     ( cobalt%irr_inst(i,j,k)/(cobalt%ki_fescav+cobalt%irr_inst(i,j,k)) ) * &
-       !     (log10(cobalt%kfe_eq_lig_ll) - log10(cobalt%kfe_eq_lig_hl)) )
-       cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10**( log10(cobalt%kfe_eq_lig_hl) + &
-            max(0.0,cobalt%gamma_fescav*log10(cobalt%io_fescav/max(epsln,cobalt%irr_inst(i,j,k)))) ) ) 
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       cobalt%kfe_eq_lig(i,j,k) = min(cobalt%kfe_eq_lig_ll, 10.0**( log10(cobalt%kfe_eq_lig_hl) + &
+          max(0.0,cobalt%gamma_fescav*log10(cobalt%io_fescav/max(epsln,cobalt%irr_inst(i,j,k)))) ) ) 
 
        feprime = 1.0 + cobalt%kfe_eq_lig(i,j,k) * (cobalt%felig_bkg + cobalt%felig_2_don * &
             (cobalt%f_sldon(i,j,k) + cobalt%f_srdon(i,j,k)) - cobalt%f_fed(i,j,k))
@@ -7465,18 +7456,34 @@ write (stdlogunit, generic_COBALT_nml)
        !
        ! Iron adsorption to detrital particles
        !
-       cobalt%jfe_ads(i,j,k) = min(r_dt,cobalt%alpha_fescav*feprime)
+       cobalt%jfe_ads(i,j,k) = cobalt%alpha_fescav*feprime
        if (cobalt%f_fed(i,j,k).gt.1.0e-9) then !{
-          cobalt%jfe_ads(i,j,k) = min(r_dt,5.0*cobalt%alpha_fescav*cobalt%f_fed(i,j,k))
+           cobalt%jfe_ads(i,j,k) = 5.0*cobalt%alpha_fescav*cobalt%f_fed(i,j,k)
        endif !}
+         ! uncomment if running "no mass change" test
+         !cobalt%jfe_ads(i,j,k) = 0.0
+
        !
        ! Coastal iron inputs (proxy for sediment inputs for areas with poorly resolved shelves)
        !
        cobalt%jfe_coast(i,j,k) = cobalt%fe_coast * mask_coast(i,j) * grid_tmask(i,j,k) / &
             sqrt(grid_dat(i,j))
+         ! uncomment if running "no mass change" test
+         !cobalt%jfe_coast(i,j,k) = 0.0
     enddo; enddo; enddo  !} i,j,k
-    endif !}
 
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 6'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
 !
 !-------------------------------------------------------------------------------------------------
 ! 7: Sedimentary fluxes/transformations
@@ -7492,6 +7499,8 @@ write (stdlogunit, generic_COBALT_nml)
              ! fpoc_bottom in mmoles C m-2 day-1 for burial relationship
              fpoc_btm = (cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*sperd*1000.0)
              cobalt%frac_burial(i,j) = (0.013 + 0.53*fpoc_btm**2.0)/((7.0+fpoc_btm)**2.0)
+             ! uncomment for "no mass change" test
+             !cobalt%frac_burial(i,j) = 0.0
              cobalt%fndet_burial(i,j) = cobalt%frac_burial(i,j)*cobalt%f_ndet_btf(i,j,1)
              cobalt%fpdet_burial(i,j) = cobalt%frac_burial(i,j)*cobalt%f_pdet_btf(i,j,1)
              ! fpoc_bottom in micromoles C cm-2 day-1 for denitrification relationship, cap at 43
@@ -7501,6 +7510,8 @@ write (stdlogunit, generic_COBALT_nml)
                   min((cobalt%f_ndet_btf(i,j,1)-cobalt%fndet_burial(i,j))*cobalt%n_2_n_denit, & 
                   10.0**(-0.9543+0.7662*log_fpoc_btm - 0.235*log_fpoc_btm**2.0)/(cobalt%c_2_n*sperd*100.0)* &
                   cobalt%n_2_n_denit*cobalt%f_no3(i,j,k)/(cobalt%k_no3_denit + cobalt%f_no3(i,j,k))))
+             ! uncomment "no mass change" test 
+             !cobalt%fno3denit_sed(i,j) = 0.0             
              if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
                 cobalt%fnoxic_sed(i,j) = max(0.0, min(cobalt%f_o2(i,j,k)*cobalt%Rho_0*r_dt*(1.0/cobalt%o2_2_nh4), &
                                          cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j) - &
@@ -7520,8 +7531,11 @@ write (stdlogunit, generic_COBALT_nml)
              cobalt%fnoxic_sed(i,j) = 0.0
           endif !}
 
-          ! iron from sediment 
-          cobalt%ffe_sed(i,j) = cobalt%fe_2_n_sed * cobalt%f_ndet_btf(i,j,1)
+          ! iron from sediment (Elrod) 
+          !cobalt%ffe_sed(i,j) = cobalt%fe_2_n_sed * cobalt%f_ndet_btf(i,j,1)
+          ! iron from sediment (Dale)
+          cobalt%ffe_sed(i,j) = cobalt%ffe_sed_max * tanh( (cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*sperd*1.0e3)/ &
+                                max(cobalt%f_o2(i,j,k)*1.0e6,epsln) ) 
 
           !
           ! Calcium carbonate flux and burial
@@ -7538,6 +7552,10 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%f_cased(i,j,1) = cobalt%f_cased(i,j,1) + (cobalt%f_cadet_calc_btf(i,j,1) -            &
              cobalt%fcased_redis(i,j) - cobalt%fcased_burial(i,j)) / cobalt%z_sed * dt *               &
              grid_tmask(i,j,k)
+          ! uncomment for "no mass change" test (next 3 lines)
+          !cobalt%fcased_redis(i,j) = cobalt%f_cadet_calc_btf(i,j,1)
+          !cobalt%fcased_burial(i,j) = 0.0
+          !cobalt%f_cased(i,j,1) = cobalt%f_cased(i,j,1)
           !
           ! Bottom flux boundaries passed to the vertical mixing routine 
           !
@@ -7545,7 +7563,12 @@ write (stdlogunit, generic_COBALT_nml)
              (cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) + cobalt%alk_2_n_denit * cobalt%fno3denit_sed(i,j)
           cobalt%b_dic(i,j) =  - cobalt%fcased_redis(i,j) - cobalt%f_cadet_arag_btf(i,j,1) -            &
              (cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) * cobalt%c_2_n
+          ! uncomment for "no mass change" test (next 2 lines)
+          !cobalt%b_dic(i,j) =  - cobalt%f_cadet_calc_btf(i,j,1)  - cobalt%f_cadet_arag_btf(i,j,1) -            &
+          !   (cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) * cobalt%c_2_n 
           cobalt%b_fed(i,j) = - cobalt%ffe_sed(i,j)
+          ! uncomment for "no mass change" test (next line)
+          !cobalt%b_fed(i,j) = - cobalt%f_fedet_btf(i,j,1)
           cobalt%b_nh4(i,j) = - cobalt%f_ndet_btf(i,j,1) + cobalt%fndet_burial(i,j)
           cobalt%b_no3(i,j) = cobalt%fno3denit_sed(i,j)
           cobalt%b_o2(i,j)  = cobalt%o2_2_nh4 * (cobalt%fnoxic_sed(i,j) + cobalt%fnfeso4red_sed(i,j))
@@ -7569,9 +7592,21 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_set_values(tracer_list,'o2',   'btf', cobalt%b_o2  ,isd,jsd)
     call g_tracer_set_values(tracer_list,'po4',  'btf', cobalt%b_po4 ,isd,jsd)
     call g_tracer_set_values(tracer_list,'sio4', 'btf', cobalt%b_sio4,isd,jsd)
-
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 7'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'no3 pointer chksum = ',mpp_chksum(cobalt%p_no3(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'nh4 pointer chksum = ',mpp_chksum(cobalt%p_nh4(isc:iec,jsc:jec,:,tau))
+    endif
+!
     call mpp_clock_begin(id_clock_source_sink_loop1)
-
 !
 !-----------------------------------------------------------------------
 ! 8: Source/sink calculations 
@@ -7616,20 +7651,74 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_pointer(tracer_list,'nmdz'   ,'field',cobalt%p_nmdz   )
     call g_tracer_get_pointer(tracer_list,'nlgz'   ,'field',cobalt%p_nlgz   )
 
-    if (do_fan_dunne_fe) then  !{
-       call g_tracer_get_pointer(tracer_list,'fec'    ,'field',cobalt%p_fec    )
-       call g_tracer_get_pointer(tracer_list,'h2o2'   ,'field',cobalt%p_h2o2   )
-    endif !}
     if (do_14c) then
        call g_tracer_get_pointer(tracer_list,'di14c','field',cobalt%p_di14c)
        call g_tracer_get_pointer(tracer_list,'do14c','field',cobalt%p_do14c)
     endif 
+
+    ! CAS calculate total N and P before source/sink
+    allocate(pre_totn(isc:iec,jsc:jec,1:nk))
+    allocate(pre_totc(isc:iec,jsc:jec,1:nk))
+    allocate(net_srcn(isc:iec,jsc:jec,1:nk))
+    allocate(pre_totp(isc:iec,jsc:jec,1:nk))
+    allocate(pre_totfe(isc:iec,jsc:jec,1:nk))
+    allocate(net_srcfe(isc:iec,jsc:jec,1:nk))
+    allocate(pre_totsi(isc:iec,jsc:jec,1:nk))
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+         pre_totn(i,j,k) = (cobalt%p_no3(i,j,k,tau) + cobalt%p_nh4(i,j,k,tau) + & 
+                    cobalt%p_ndi(i,j,k,tau) + cobalt%p_nlg(i,j,k,tau) + &
+                    cobalt%p_nsm(i,j,k,tau) + cobalt%p_nbact(i,j,k,tau) + &
+                    cobalt%p_ldon(i,j,k,tau) + cobalt%p_sldon(i,j,k,tau) + &
+                    cobalt%p_srdon(i,j,k,tau) +  cobalt%p_ndet(i,j,k,tau) + &
+                    cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
+                    cobalt%p_nlgz(i,j,k,tau))*grid_tmask(i,j,k)
+         net_srcn(i,j,k) = (phyto(DIAZO)%juptake_n2(i,j,k) - cobalt%jno3denit_wc(i,j,k))* &
+                    dt*grid_tmask(i,j,k)
+         pre_totc(i,j,k) = (cobalt%p_dic(i,j,k,tau) + &
+                    cobalt%p_cadet_arag(i,j,k,tau) + cobalt%p_cadet_calc(i,j,k,tau) + &
+                    cobalt%c_2_n*(cobalt%p_ndi(i,j,k,tau) + cobalt%p_nlg(i,j,k,tau) + &
+                    cobalt%p_nsm(i,j,k,tau) + cobalt%p_nbact(i,j,k,tau) + &
+                    cobalt%p_ldon(i,j,k,tau) + cobalt%p_sldon(i,j,k,tau) + &
+                    cobalt%p_srdon(i,j,k,tau) +  cobalt%p_ndet(i,j,k,tau) + &
+                    cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
+                    cobalt%p_nlgz(i,j,k,tau)))*grid_tmask(i,j,k)
+         pre_totp(i,j,k) = (cobalt%p_po4(i,j,k,tau) + cobalt%p_ndi(i,j,k,tau)*phyto(1)%p_2_n_static + &
+                    cobalt%p_nlg(i,j,k,tau)*phyto(2)%p_2_n_static + &
+                    cobalt%p_nsm(i,j,k,tau)*phyto(3)%p_2_n_static + &
+                    cobalt%p_ldop(i,j,k,tau) + cobalt%p_sldop(i,j,k,tau) + &
+                    cobalt%p_srdop(i,j,k,tau) +  cobalt%p_pdet(i,j,k,tau) + &
+                    cobalt%p_nsmz(i,j,k,tau)*zoo(1)%q_p_2_n + &
+                    cobalt%p_nmdz(i,j,k,tau)*zoo(2)%q_p_2_n + &
+                    cobalt%p_nlgz(i,j,k,tau)*zoo(3)%q_p_2_n + &
+                    bact(1)%q_p_2_n*cobalt%p_nbact(i,j,k,tau))*grid_tmask(i,j,k)
+         pre_totfe(i,j,k) = (cobalt%p_fed(i,j,k,tau) + cobalt%p_fedi(i,j,k,tau) + &
+                    cobalt%p_felg(i,j,k,tau) + cobalt%p_fesm(i,j,k,tau) + & 
+                    cobalt%p_fedet(i,j,k,tau))*grid_tmask(i,j,k)
+         net_srcfe(i,j,k) = cobalt%jfe_coast(i,j,k)*dt*grid_tmask(i,j,k)
+         pre_totsi(i,j,k) = (cobalt%p_sio4(i,j,k,tau) + cobalt%p_silg(i,j,k,tau) + &
+                    cobalt%p_sidet(i,j,k,tau))*grid_tmask(i,j,k)
+    enddo; enddo ; enddo  !} i,j,k
+ 
 
 
     if (cobalt%id_no3_in_source .gt. 0)                &
          used = g_send_data(cobalt%id_no3_in_source,         cobalt%f_no3,          &
          model_time, rmask = grid_tmask,& 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.1'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'no3 pointer chksum = ',mpp_chksum(cobalt%p_no3(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'nh4 pointer chksum = ',mpp_chksum(cobalt%p_nh4(isc:iec,jsc:jec,:,tau))
+    endif
+!
 
     call mpp_clock_end(id_clock_source_sink_loop1)
     !
@@ -7666,6 +7755,18 @@ write (stdlogunit, generic_COBALT_nml)
                             phyto(SMALL)%jexuloss_n(i,j,k)                                         
        cobalt%p_nsm(i,j,k,tau) = cobalt%p_nsm(i,j,k,tau) + cobalt%jnsm(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 loop2'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
     call mpp_clock_end(id_clock_source_sink_loop2)
     !
     !     Phytoplankton Silicon and Iron
@@ -7710,6 +7811,18 @@ write (stdlogunit, generic_COBALT_nml)
                               bact(1)%jvirloss_n(i,j,k) - bact(1)%jhploss_n(i,j,k)  
        cobalt%p_nbact(i,j,k,tau) = cobalt%p_nbact(i,j,k,tau) + cobalt%jnbact(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 loop3'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
     call mpp_clock_end(id_clock_source_sink_loop3)
     !
     !    Zooplankton 
@@ -7735,6 +7848,22 @@ write (stdlogunit, generic_COBALT_nml)
                              zoo(3)%jhploss_n(i,j,k)
        cobalt%p_nlgz(i,j,k,tau) = cobalt%p_nlgz(i,j,k,tau) + cobalt%jnlgz(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 loop4'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'no3 pointer chksum = ',mpp_chksum(cobalt%p_no3(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'nh4 pointer chksum = ',mpp_chksum(cobalt%p_nh4(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3 chksum = ',mpp_chksum(cobalt%jno3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'jnh4 chksum = ',mpp_chksum(cobalt%jnh4(isc:iec,jsc:jec,:))
+    endif
+!
     call mpp_clock_end(id_clock_source_sink_loop4)
     !
     !     NO3
@@ -7753,7 +7882,6 @@ write (stdlogunit, generic_COBALT_nml)
        !
        ! NH4
        !
-       cobalt%jprod_nh4(i,j,k) = cobalt%jprod_nh4(i,j,k) + cobalt%jremin_ndet(i,j,k)
        cobalt%jnh4(i,j,k) = cobalt%jprod_nh4(i,j,k) - phyto(DIAZO)%juptake_nh4(i,j,k) - &
                             phyto(LARGE)%juptake_nh4(i,j,k) - phyto(SMALL)%juptake_nh4(i,j,k) - &
                             cobalt%jnitrif(i,j,k)
@@ -7761,7 +7889,6 @@ write (stdlogunit, generic_COBALT_nml)
        !
        ! PO4
        !
-       cobalt%jprod_po4(i,j,k) = cobalt%jprod_po4(i,j,k) + cobalt%jremin_pdet(i,j,k) 
        cobalt%jpo4(i,j,k) = cobalt%jprod_po4(i,j,k) - phyto(DIAZO)%juptake_po4(i,j,k) - &
                             phyto(LARGE)%juptake_po4(i,j,k) - phyto(SMALL)%juptake_po4(i,j,k)
        cobalt%p_po4(i,j,k,tau) = cobalt%p_po4(i,j,k,tau) + cobalt%jpo4(i,j,k) * dt * grid_tmask(i,j,k)
@@ -7773,43 +7900,34 @@ write (stdlogunit, generic_COBALT_nml)
     enddo; enddo ; enddo  !} i,j,k
 
     ! 2016/06/13 JGJ: keep original Fed calculation
-    if (do_fan_dunne_fe) then  !{
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-          !
-          ! Fed
-          cobalt%jfed(i,j,k) = cobalt%jprod_fed(i,j,k) - phyto(DIAZO)%juptake_fe(i,j,k) - &
-                               phyto(LARGE)%juptake_fe(i,j,k) -  phyto(SMALL)%juptake_fe(i,j,k) - &
-                               cobalt%jprod_fec(i,j,k)
-          cobalt%p_fed(i,j,k,tau) = cobalt%p_fed(i,j,k,tau) + cobalt%jfed(i,j,k) * dt * grid_tmask(i,j,k)
-       enddo; enddo; enddo  !} i,j,k
-    else
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
           !
           ! Fed
           ! use original code to compute jprod_fed, jfed and p_fed
           !
-          cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) + &
-                                    cobalt%jremin_fedet(i,j,k) + cobalt%jfe_coast(i,j,k)  
-          cobalt%jfed(i,j,k) = cobalt%jprod_fed(i,j,k) - phyto(DIAZO)%juptake_fe(i,j,k) - &
-                               phyto(LARGE)%juptake_fe(i,j,k) -  phyto(SMALL)%juptake_fe(i,j,k) - &
-                               cobalt%jfe_ads(i,j,k)
-          cobalt%p_fed(i,j,k,tau) = cobalt%p_fed(i,j,k,tau) + cobalt%jfed(i,j,k) * dt * grid_tmask(i,j,k)
-       enddo; enddo; enddo  !} i,j,k
-    endif !}
+       cobalt%jprod_fed(i,j,k) = cobalt%jprod_fed(i,j,k) + cobalt%jfe_coast(i,j,k) 
+       cobalt%jfed(i,j,k) = cobalt%jprod_fed(i,j,k) - phyto(DIAZO)%juptake_fe(i,j,k) - &
+                            phyto(LARGE)%juptake_fe(i,j,k) -  phyto(SMALL)%juptake_fe(i,j,k) - &
+                            cobalt%jfe_ads(i,j,k)
+       cobalt%p_fed(i,j,k,tau) = cobalt%p_fed(i,j,k,tau) + cobalt%jfed(i,j,k) * dt * grid_tmask(i,j,k)
+    enddo; enddo; enddo  !} i,j,k
 
-    if (do_fan_dunne_fe) then  !{
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-          !
-          ! Fec
-          !
-          cobalt%p_fec(i,j,k,tau) = cobalt%p_fec(i,j,k,tau) + cobalt%jfec(i,j,k) * dt * grid_tmask(i,j,k)
-          !
-          ! H2O2
-          !
-          cobalt%jh2o2(i,j,k) = cobalt%jprod_h2o2(i,j,k) - 1. / (12.0 * 86400) * cobalt%f_h2o2(i,j,k)
-          cobalt%p_h2o2(i,j,k,tau) = cobalt%p_h2o2(i,j,k,tau) + cobalt%jh2o2(i,j,k) * dt * grid_tmask(i,j,k)
-       enddo; enddo ; enddo  !} i,j,k
-    endif !}
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 loop5'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'no3 pointer chksum = ',mpp_chksum(cobalt%p_no3(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'nh4 pointer chksum = ',mpp_chksum(cobalt%p_nh4(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'jno3 chksum = ',mpp_chksum(cobalt%jno3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'jnh4 chksum = ',mpp_chksum(cobalt%jnh4(isc:iec,jsc:jec,:))
+    endif
+!
 
     call mpp_clock_end(id_clock_source_sink_loop5)
     !
@@ -7841,7 +7959,6 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%jndet(i,j,k) = cobalt%jprod_ndet(i,j,k) - cobalt%jremin_ndet(i,j,k) - &
                              cobalt%det_jzloss_n(i,j,k) - cobalt%det_jhploss_n(i,j,k)
        cobalt%p_ndet(i,j,k,tau) = cobalt%p_ndet(i,j,k,tau) + cobalt%jndet(i,j,k)*dt*grid_tmask(i,j,k)
-       !cobalt%p_ndet(i,j,k,tau) = max(cobalt%p_ndet(i,j,k,tau),0.0)
        !
        ! Pdet
        !
@@ -7856,32 +7973,31 @@ write (stdlogunit, generic_COBALT_nml)
                               cobalt%det_jhploss_si(i,j,k)
        cobalt%p_sidet(i,j,k,tau) = cobalt%p_sidet(i,j,k,tau) + cobalt%jsidet(i,j,k)*dt*grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 loop6'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
 
     ! 2016/06/13 JGJ: keep original jfedet calculation
-    if (do_fan_dunne_fe) then  !{
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-          !
-          ! Fedet
-          !
-          cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) + cobalt%jfe_ads(i,j,k)
-          cobalt%jfedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - (kfe_des+kfe_fdet_red) * cobalt%p_fedet(i,j,k,tau) - &
-                                 cobalt%jremin_fedet(i,j,k) - cobalt%det_jzloss_fe(i,j,k) - & 
-                                 cobalt%det_jhploss_fe(i,j,k)
-          cobalt%p_fedet(i,j,k,tau) = cobalt%p_fedet(i,j,k,tau) + cobalt%jfedet(i,j,k)*dt*grid_tmask(i,j,k) 
-       enddo; enddo; enddo  !} i,j,k
-    else
-       do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
           !
           ! Fedet
           ! use original code to compute fedet
           !
-          cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) + cobalt%jfe_ads(i,j,k)
-          cobalt%jfedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - &
-                                 cobalt%jremin_fedet(i,j,k) - cobalt%det_jzloss_fe(i,j,k) - & 
-                                 cobalt%det_jhploss_fe(i,j,k)
-          cobalt%p_fedet(i,j,k,tau) = cobalt%p_fedet(i,j,k,tau) + cobalt%jfedet(i,j,k)*dt*grid_tmask(i,j,k) 
-       enddo; enddo; enddo  !} i,j,k
-    endif !}
+       cobalt%jprod_fedet(i,j,k) = cobalt%jprod_fedet(i,j,k) + cobalt%jfe_ads(i,j,k)
+       cobalt%jfedet(i,j,k) = cobalt%jprod_fedet(i,j,k) - &
+                              cobalt%jremin_fedet(i,j,k) - cobalt%det_jzloss_fe(i,j,k) - & 
+                              cobalt%det_jhploss_fe(i,j,k)
+       cobalt%p_fedet(i,j,k,tau) = cobalt%p_fedet(i,j,k,tau) + cobalt%jfedet(i,j,k)*dt*grid_tmask(i,j,k) 
+    enddo; enddo; enddo  !} i,j,k
     !
     !     Dissolved Organic Matter
     !
@@ -7932,6 +8048,18 @@ write (stdlogunit, generic_COBALT_nml)
     !
     !     O2
     !
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 Before O2'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
     do k = 1, nk ; do j =jsc, jec ; do i = isc, iec  !{
        cobalt%jo2(i,j,k) = (cobalt%o2_2_no3 * (phyto(DIAZO)%juptake_no3(i,j,k) +   &
             phyto(LARGE)%juptake_no3(i,j,k) + phyto(SMALL)%juptake_no3(i,j,k)) + & 
@@ -7939,15 +8067,22 @@ write (stdlogunit, generic_COBALT_nml)
             (phyto(DIAZO)%juptake_nh4(i,j,k) + phyto(LARGE)%juptake_nh4(i,j,k) +      &
             phyto(SMALL)%juptake_nh4(i,j,k) + &  
             phyto(DIAZO)%juptake_n2(i,j,k))) * grid_tmask(i,j,k)
-       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
-          cobalt%jo2(i,j,k) = cobalt%jo2(i,j,k) - cobalt%o2_2_nh4*cobalt%jprod_nh4(i,j,k) &
-                              - cobalt%o2_2_nitrif*cobalt%jnitrif(i,j,k) 
-       else
-          cobalt%jno3denit_wc(i,j,k) = cobalt%jno3denit_wc(i,j,k) + cobalt%jprod_nh4(i,j,k) * cobalt%n_2_n_denit
-
-       endif  !}
+       cobalt%jo2(i,j,k) = cobalt%jo2(i,j,k) - cobalt%jo2resp_wc(i,j,k)
        cobalt%p_o2(i,j,k,tau) = cobalt%p_o2(i,j,k,tau) + cobalt%jo2(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo  !} i,j,k
+    !
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 After O2'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'alk chksum = ',mpp_chksum(cobalt%p_alk(isc:iec,jsc:jec,:,tau))
+    endif
+!
     !
     !     The Carbon system
     !
@@ -7972,6 +8107,19 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%jprod_cadet_arag(i,j,k) - cobalt%jprod_cadet_calc(i,j,k))
        cobalt%p_dic(i,j,k,tau) = cobalt%p_dic(i,j,k,tau) + cobalt%jdic(i,j,k) * dt * grid_tmask(i,j,k)
     enddo; enddo ; enddo !} i,j,k
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Section 8/4.2 after alkalinity and dic'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+      write(outunit,*) 'alk chksum = ',mpp_chksum(cobalt%p_alk(isc:iec,jsc:jec,:,tau))
+    endif
+!
        
     if (do_14c) then                                        !<<RADIOCARBON
 
@@ -8064,14 +8212,94 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_set_values(tracer_list,'cased',  'field',cobalt%f_cased    ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'chl',    'field',cobalt%f_chl      ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1)
-    if (do_fan_dunne_fe) then  !{
-       call g_tracer_set_values(tracer_list,'fe2','field',cobalt%f_fe2  ,isd,jsd,ntau=1)
-       call g_tracer_set_values(tracer_list,'fe3','field',cobalt%f_fe3  ,isd,jsd,ntau=1)
-    endif !}
     call g_tracer_set_values(tracer_list,'irr_mem' ,'field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_ndi' ,'field',phyto(DIAZO)%f_mu_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_nlg' ,'field',phyto(LARGE)%f_mu_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_nsm' ,'field',phyto(SMALL)%f_mu_mem ,isd,jsd,ntau=1)
+
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after Lithogenic aluminosilicate particulates'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
+    ! CAS calculate totals after source/sinks have been applied
+    imbal_flag = 0;
+    stdoutunit = stdout();
+    allocate(post_totn(isc:iec,jsc:jec,1:nk))
+    allocate(post_totc(isc:iec,jsc:jec,1:nk))
+    allocate(post_totp(isc:iec,jsc:jec,1:nk))
+    allocate(post_totsi(isc:iec,jsc:jec,1:nk))
+    allocate(post_totfe(isc:iec,jsc:jec,1:nk))
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+         post_totn(i,j,k) = (cobalt%p_no3(i,j,k,tau) + cobalt%p_nh4(i,j,k,tau) + &
+                    cobalt%p_ndi(i,j,k,tau) + cobalt%p_nlg(i,j,k,tau) + &
+                    cobalt%p_nsm(i,j,k,tau) + cobalt%p_nbact(i,j,k,tau) + &
+                    cobalt%p_ldon(i,j,k,tau) + cobalt%p_sldon(i,j,k,tau) + &
+                    cobalt%p_srdon(i,j,k,tau) +  cobalt%p_ndet(i,j,k,tau) + &
+                    cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
+                    cobalt%p_nlgz(i,j,k,tau))*grid_tmask(i,j,k)
+         imbal = (post_totn(i,j,k) - pre_totn(i,j,k) - net_srcn(i,j,k))*86400.0/dt*1.03e6
+         if (abs(imbal).gt.1.0e-10) then
+           call mpp_error(FATAL,&
+           '==>biological source/sink imbalance (generic_COBALT_update_from_source): Nitrogen')
+         endif
+
+         post_totc(i,j,k) = (cobalt%p_dic(i,j,k,tau) + &
+                    cobalt%p_cadet_arag(i,j,k,tau) + cobalt%p_cadet_calc(i,j,k,tau) + &
+                    cobalt%c_2_n*(cobalt%p_ndi(i,j,k,tau) + cobalt%p_nlg(i,j,k,tau) + &
+                    cobalt%p_nsm(i,j,k,tau) + cobalt%p_nbact(i,j,k,tau) + &
+                    cobalt%p_ldon(i,j,k,tau) + cobalt%p_sldon(i,j,k,tau) + &
+                    cobalt%p_srdon(i,j,k,tau) +  cobalt%p_ndet(i,j,k,tau) + &
+                    cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
+                    cobalt%p_nlgz(i,j,k,tau)))*grid_tmask(i,j,k)
+        imbal = (post_totc(i,j,k) - pre_totc(i,j,k))*86400.0/dt*1.03e6
+         if (abs(imbal).gt.1.0e-10) then
+           call mpp_error(FATAL,&
+           '==>biological source/sink imbalance (generic_COBALT_update_from_source): Carbon')
+         endif
+
+         post_totp(i,j,k) = (cobalt%p_po4(i,j,k,tau) + cobalt%p_ndi(i,j,k,tau)*phyto(1)%p_2_n_static + &
+                    cobalt%p_nlg(i,j,k,tau)*phyto(2)%p_2_n_static + &
+                    cobalt%p_nsm(i,j,k,tau)*phyto(3)%p_2_n_static + &
+                    cobalt%p_ldop(i,j,k,tau) + cobalt%p_sldop(i,j,k,tau) + &
+                    cobalt%p_srdop(i,j,k,tau) +  cobalt%p_pdet(i,j,k,tau) + &
+                    cobalt%p_nsmz(i,j,k,tau)*zoo(1)%q_p_2_n + &
+                    cobalt%p_nmdz(i,j,k,tau)*zoo(2)%q_p_2_n + &
+                    cobalt%p_nlgz(i,j,k,tau)*zoo(3)%q_p_2_n + &
+                    bact(1)%q_p_2_n*cobalt%p_nbact(i,j,k,tau))*grid_tmask(i,j,k)
+         imbal = (post_totp(i,j,k) - pre_totp(i,j,k))*86400.0/dt*1.03e6
+         if (abs(imbal).gt.1.0e-10) then
+           call mpp_error(FATAL,&
+           '==>biological source/sink imbalance (generic_COBALT_update_from_source): Phosphorus')
+         endif
+
+         post_totfe(i,j,k) = (cobalt%p_fed(i,j,k,tau) + cobalt%p_fedi(i,j,k,tau) + &
+                    cobalt%p_felg(i,j,k,tau) + cobalt%p_fesm(i,j,k,tau) + &
+                    cobalt%p_fedet(i,j,k,tau))*grid_tmask(i,j,k)
+         imbal = (post_totfe(i,j,k) - pre_totfe(i,j,k) - net_srcfe(i,j,k))*86400.0/dt*1.03e6
+         if (abs(imbal).gt.1.0e-10) then
+           call mpp_error(FATAL,&
+           '==>biological source/sink imbalance (generic_COBALT_update_from_source): Iron')
+         endif
+
+         post_totsi(i,j,k) = (cobalt%p_sio4(i,j,k,tau) + cobalt%p_silg(i,j,k,tau) + &
+                    cobalt%p_sidet(i,j,k,tau))*grid_tmask(i,j,k)
+         imbal = (post_totsi(i,j,k) - pre_totsi(i,j,k))*86400.0/dt*1.03e6
+         if (abs(imbal).gt.1.0e-10) then
+           call mpp_error(FATAL,&
+           '==>biological source/sink imbalance (generic_COBALT_update_from_source): Silica')
+         endif
+    enddo; enddo ; enddo  !} i,j,k
+ 
+
+    !
     !
     !-----------------------------------------------------------------------
     !       Save variables for diagnostics
@@ -8161,13 +8389,20 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK:
     !add background of 42 uM (as in other parts of cobalt)- may need to change to 3.8e-5 per JPD
+! CAS: added DIC integrator
+    cobalt%tot_layer_int_dic(:,:,:) = cobalt%p_dic(:,:,:,tau)*rho_dzt(:,:,:)
+
+! CAS: spreadsheet indicates no background, should we remove it?
     cobalt%tot_layer_int_doc(:,:,:) = cobalt%doc_background +  cobalt%c_2_n * (cobalt%p_ldon(:,:,:,tau) + cobalt%p_sldon(:,:,:,tau) +  &
          cobalt%p_srdon(:,:,:,tau)) * rho_dzt(:,:,:)
 
 ! PENDING: get pon  and convert to carbon units ?
 ! CHECK: Omon has this as: pon=(ndi+nlgp+nsmp+ndet+nhet)*1035
 ! and Oyr has            : pon=(ndi+nlgp+nsmp+ndet+nbact+nsmz+nmdz+nlgz)*1035
-!   cobalt%tot_layer_int_poc(:,:,:) =  ???
+! CAS: The Oyr option is the right one for cobalt.  I've coded it in below.
+   cobalt%tot_layer_int_poc(:,:,:) = (cobalt%p_ndi(:,:,:,tau) + cobalt%p_nlg(:,:,:,tau) + cobalt%p_nsm(:,:,:,tau) + &
+         cobalt%p_nbact(:,:,:,tau) + cobalt%p_ndet(:,:,:,tau) + cobalt%p_nsmz(:,:,:,tau) + cobalt%p_nmdz(:,:,:,tau) + &
+         cobalt%p_nlgz(:,:,:,tau))*cobalt%c_2_n*rho_dzt(:,:,:)
 
 
     !
@@ -8178,24 +8413,43 @@ write (stdlogunit, generic_COBALT_nml)
     do j = jsc, jec ; do i = isc, iec !{
        cobalt%wc_vert_int_c(i,j) = 0.0
        cobalt%wc_vert_int_dic(i,j) = 0.0
+       cobalt%wc_vert_int_doc(i,j) = 0.0
+       cobalt%wc_vert_int_poc(i,j) = 0.0
        cobalt%wc_vert_int_jfe_coast(i,j) = 0.0
        cobalt%wc_vert_int_jno3denit(i,j) = 0.0
        cobalt%wc_vert_int_nfix(i,j) = 0.0
     enddo; enddo !} i,j
     do j = jsc, jec ; do i = isc, iec ; do k = 1, nk  !{
        cobalt%wc_vert_int_c(i,j) = cobalt%wc_vert_int_c(i,j) + cobalt%tot_layer_int_c(i,j,k)
-       cobalt%wc_vert_int_dic(i,j) = cobalt%wc_vert_int_dic(i,j) + cobalt%p_dic(i,j,k,tau) *       &
-          rho_dzt(i,j,k) * grid_tmask(i,j,k)
+       cobalt%wc_vert_int_dic(i,j) = cobalt%wc_vert_int_dic(i,j) + cobalt%tot_layer_int_dic(i,j,k) * &
+          grid_tmask(i,j,k)
+       cobalt%wc_vert_int_doc(i,j) = cobalt%wc_vert_int_doc(i,j) + cobalt%tot_layer_int_doc(i,j,k) * &
+          grid_tmask(i,j,k)
+       cobalt%wc_vert_int_poc(i,j) = cobalt%wc_vert_int_poc(i,j) + cobalt%tot_layer_int_poc(i,j,k) * &
+          grid_tmask(i,j,k)
        cobalt%wc_vert_int_jfe_coast(i,j) = cobalt%wc_vert_int_jfe_coast(i,j) +                     &
           cobalt%jfe_coast(i,j,k) * rho_dzt(i,j,k) * grid_tmask(i,j,k)
        cobalt%wc_vert_int_jno3denit(i,j) = cobalt%wc_vert_int_jno3denit(i,j) +                     &
           cobalt%jno3denit_wc(i,j,k) * rho_dzt(i,j,k) * grid_tmask(i,j,k)
 ! CHECK:  Copied from TOPAZ - jprod_n2 = juptake_n2
+! CAS: Looks good
        cobalt%wc_vert_int_nfix(i,j) = cobalt%wc_vert_int_nfix(i,j) + phyto(DIAZO)%juptake_n2(i,j,k) *  &
           rho_dzt(i,j,k) * grid_tmask(i,j,k)
     enddo; enddo; enddo  !} i,j,k
 
 ! CHECK: all terms
+    !
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after water column vertical integrals'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
     !
     !---------------------------------------------------------------------
     ! Add external bottom fluxes to specific rates  
@@ -8214,6 +8468,11 @@ write (stdlogunit, generic_COBALT_nml)
 ! jsio4_plus_btm=(jsio4+f_sidet_btf)/rho_dzt
 !
     do j = jsc, jec ; do i = isc, iec ; do k = 1, nk  !{
+       ! CAS added calcite and aragonite redisolution terms 
+       cobalt%jdiss_cadet_calc_plus_btm(i,j,k)  = cobalt%jdiss_cadet_calc(i,j,k)
+       cobalt%jdiss_cadet_arag_plus_btm(i,j,k)  = cobalt%jdiss_cadet_arag(i,j,k)
+       ! CAS added a jprod_nh4_plus_btm for remoc CMIP variable
+       cobalt%jprod_nh4_plus_btm(i,j,k) = cobalt%jprod_nh4(i,j,k)
        cobalt%jalk_plus_btm(i,j,k)  = cobalt%jalk(i,j,k) 
        cobalt%jdic_plus_btm(i,j,k)  = cobalt%jdic(i,j,k) 
        cobalt%jfed_plus_btm(i,j,k)  = cobalt%jfed(i,j,k) 
@@ -8228,6 +8487,17 @@ write (stdlogunit, generic_COBALT_nml)
     do j = jsc, jec ; do i = isc, iec  !{
        k = grid_kmt(i,j)
        if (k .gt. 0) then !{
+
+          ! CAS added calcite and aragonite redissolution terms
+          cobalt%jdiss_cadet_calc_plus_btm(i,j,k)  = cobalt%jdiss_cadet_calc(i,j,k) +  &
+             cobalt%fcased_redis(i,j) / rho_dzt(i,j,k)
+          cobalt%jdiss_cadet_arag_plus_btm(i,j,k)  = cobalt%jdiss_cadet_arag(i,j,k) +  &
+             cobalt%f_cadet_arag_btf(i,j,1) / rho_dzt(i,j,k)
+
+          ! CAS added for remoc calculation
+          cobalt%jprod_nh4_plus_btm(i,j,k)  = cobalt%jprod_nh4(i,j,k) + (cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) / rho_dzt(i,j,k)
+
+
           cobalt%jalk_plus_btm(i,j,k)  = cobalt%jalk(i,j,k) +                       &
             (2.0 * (cobalt%fcased_redis(i,j) + cobalt%f_cadet_arag_btf(i,j,1)) +    &
              cobalt%f_ndet_btf(i,j,1) + cobalt%alk_2_n_denit * cobalt%fno3denit_sed(i,j)) / rho_dzt(i,j,k)
@@ -8236,34 +8506,41 @@ write (stdlogunit, generic_COBALT_nml)
             (cobalt%fcased_redis(i,j) + cobalt%f_cadet_arag_btf(i,j,1) +            &
             ((cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) * cobalt%c_2_n)) / rho_dzt(i,j,k)
 
+! CAS is ffe_sed a biogenic source or is it similar to coast/atmosphere source?
           cobalt%jfed_plus_btm(i,j,k)  = cobalt%jfed(i,j,k) + cobalt%ffe_sed(i,j) / rho_dzt(i,j,k)
 ! updated
-          cobalt%jnh4_plus_btm(i,j,k)  = (cobalt%jnh4(i,j,k) + cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) / rho_dzt(i,j,k)     
+! CAS: fixed parentheses (commented out old for comparison, think rho_dzt should only divide bottom fluxes)
+          cobalt%jnh4_plus_btm(i,j,k)  = cobalt%jnh4(i,j,k) + (cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) / rho_dzt(i,j,k)     
+!          cobalt%jnh4_plus_btm(i,j,k)  = (cobalt%jnh4(i,j,k) + cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) / rho_dzt(i,j,k)
 
 ! NOTE: should fno3denit_sed be SUBTRACTED ?
-          cobalt%jno3_plus_btm(i,j,k)  = cobalt%jno3(i,j,k) + cobalt%fno3denit_sed(i,j) / rho_dzt(i,j,k)
+! CAS: yes, I think so, I've made the change
+          cobalt%jno3_plus_btm(i,j,k)  = cobalt%jno3(i,j,k) - cobalt%fno3denit_sed(i,j) / rho_dzt(i,j,k)
 
           cobalt%jo2_plus_btm(i,j,k)   = cobalt%jo2(i,j,k) +                        &
             (cobalt%o2_2_nh4 * (cobalt%fnoxic_sed(i,j) + cobalt%fnfeso4red_sed(i,j))) / rho_dzt(i,j,k)
 
 ! updated
-          cobalt%jpo4_plus_btm(i,j,k)  = (cobalt%jpo4(i,j,k) + cobalt%f_pdet_btf(i,j,1) - cobalt%fpdet_burial(i,j)) / rho_dzt(i,j,k)     
+! CAS: fixed parentheses to not include jpo4 as in jnh4 example above
+          cobalt%jpo4_plus_btm(i,j,k)  = cobalt%jpo4(i,j,k) + (cobalt%f_pdet_btf(i,j,1) - cobalt%fpdet_burial(i,j)) / rho_dzt(i,j,k)     
 
           cobalt%jsio4_plus_btm(i,j,k) = cobalt%jsio4(i,j,k) + cobalt%f_sidet_btf(i,j,1) / rho_dzt(i,j,k)   
 
           cobalt%jdin_plus_btm(i,j,k)  = cobalt%jno3_plus_btm(i,j,k) + cobalt%jnh4_plus_btm(i,j,k) 
+          
        endif !}
     enddo; enddo  !} i, j
 
 !
 ! CHECK: Remineralization of Organic Carbon, remoc=(jprod_nh4*c_2_n/dht) for k=1,kbot-1 + (jprod_nh4+f_ndet_btf-fndet_burial)*c_2_n/dht for k=kbot
+! CAS: will code this up when I address denitrification issue
     do j = jsc, jec ; do i = isc, iec  !{
        kbot = grid_kmt(i,j)
        if (kbot .gt. 0) then !{
        do k = 1, kbot-1  !{
           cobalt%remoc(i,j,k) = cobalt%jprod_nh4(i,j,k) * cobalt%c_2_n / dzt(i,j,k)
        enddo  !} k
-       cobalt%remoc(i,j,kbot) = (cobalt%jprod_nh4(i,j,kbot) + cobalt%f_ndet_btf(i,j,1) + cobalt%fndet_burial(i,j)) * cobalt%c_2_n / dzt(i,j,kbot)
+       cobalt%remoc(i,j,kbot) = (cobalt%jprod_nh4(i,j,kbot) + cobalt%f_ndet_btf(i,j,1) - cobalt%fndet_burial(i,j)) * cobalt%c_2_n / dzt(i,j,kbot)
        endif !}
     enddo; enddo  !} i, j
 
@@ -8302,15 +8579,19 @@ write (stdlogunit, generic_COBALT_nml)
           phyto(n)%jexuloss_n_100(i,j) = phyto(n)%jexuloss_n(i,j,1) * rho_dzt(i,j,1)
           phyto(n)%f_n_100(i,j) = phyto(n)%f_n(i,j,1) * rho_dzt(i,j,1)
 ! CHECK: added juptake_fe_100 
+! CAS: looks good to me 
           phyto(n)%juptake_fe_100(i,j) = phyto(n)%juptake_fe(i,j,1) * rho_dzt(i,j,1)
+! CAS: added juptake_po4_100
+          phyto(n)%juptake_po4_100(i,j) = phyto(n)%juptake_po4(i,j,1) * rho_dzt(i,j,1)
        enddo   !} n
        phyto(DIAZO)%jprod_n_n2_100(i,j) = phyto(DIAZO)%juptake_n2(i,j,1) * rho_dzt(i,j,1)
        phyto(SMALL)%jvirloss_n_100(i,j) = phyto(SMALL)%jvirloss_n(i,j,1) * rho_dzt(i,j,1)
        phyto(SMALL)%jaggloss_n_100(i,j) = phyto(SMALL)%jaggloss_n(i,j,1) * rho_dzt(i,j,1)
        phyto(LARGE)%jaggloss_n_100(i,j) = phyto(LARGE)%jaggloss_n(i,j,1) * rho_dzt(i,j,1)
+! CAS: added diagnotistic for depth integrated diatom production
+       cobalt%jprod_diat_100(i,j) = phyto(LARGE)%jprod_n(i,j,1)*phyto(LARGE)%silim(i,j,1)*rho_dzt(i,j,1)
 ! CHECK: added juptake_sio4_100 (large only)
        phyto(LARGE)%juptake_sio4_100(i,j) = phyto(LARGE)%juptake_sio4(i,j,1) * rho_dzt(i,j,1)
-
        do n = 1, NUM_ZOO  !{
           zoo(n)%jprod_n_100(i,j) = zoo(n)%jprod_n(i,j,1) * rho_dzt(i,j,1)
           zoo(n)%jingest_n_100(i,j) = zoo(n)%jingest_n(i,j,1) * rho_dzt(i,j,1)
@@ -8397,6 +8678,8 @@ write (stdlogunit, generic_COBALT_nml)
                 phyto(n)%f_n_100(i,j) = phyto(n)%f_n_100(i,j) + phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k) 
 ! CHECK: added juptake_fe_100 
                 phyto(n)%juptake_fe_100(i,j) = phyto(n)%juptake_fe_100(i,j) + phyto(n)%juptake_fe(i,j,k)*rho_dzt(i,j,k) 
+! CAS: added juptake_po4_100
+                phyto(n)%juptake_po4_100(i,j) = phyto(n)%juptake_po4_100(i,j) + phyto(n)%juptake_po4(i,j,k)*rho_dzt(i,j,k)
              enddo !} n
              phyto(DIAZO)%jprod_n_n2_100(i,j) = phyto(DIAZO)%jprod_n_n2_100(i,j) + &
                  phyto(DIAZO)%juptake_n2(i,j,k)*rho_dzt(i,j,k)
@@ -8406,6 +8689,9 @@ write (stdlogunit, generic_COBALT_nml)
                  phyto(SMALL)%jaggloss_n(i,j,k)*rho_dzt(i,j,k)
              phyto(LARGE)%jaggloss_n_100(i,j) = phyto(LARGE)%jaggloss_n_100(i,j) + &
                  phyto(LARGE)%jaggloss_n(i,j,k)*rho_dzt(i,j,k)
+! CAS: added diagnotistic for depth integrated diatom production
+             cobalt%jprod_diat_100(i,j) = cobalt%jprod_diat_100(i,j) + & 
+               phyto(LARGE)%jprod_n(i,j,k)*phyto(LARGE)%silim(i,j,k)*rho_dzt(i,j,k)
 ! CHECK: added juptake_sio4_100 (large only)
              phyto(LARGE)%juptake_sio4_100(i,j) = phyto(LARGE)%juptake_sio4_100(i,j) + &
                  phyto(LARGE)%juptake_sio4(i,j,k)*rho_dzt(i,j,k)
@@ -8503,6 +8789,8 @@ write (stdlogunit, generic_COBALT_nml)
               phyto(n)%f_n_100(i,j) = phyto(n)%f_n_100(i,j) + phyto(n)%f_n(i,j,k_100)*drho_dzt
 ! CHECK: added juptake_fe_100 
               phyto(n)%juptake_fe_100(i,j) = phyto(n)%juptake_fe_100(i,j) + phyto(n)%juptake_fe(i,j,k_100)*drho_dzt
+! CAS: added juptake_po4_100
+              phyto(n)%juptake_po4_100(i,j) = phyto(n)%juptake_po4_100(i,j) + phyto(n)%juptake_po4(i,j,k_100)*drho_dzt
            enddo !} n
            phyto(DIAZO)%jprod_n_n2_100(i,j) = phyto(DIAZO)%jprod_n_n2_100(i,j) + &
                phyto(DIAZO)%juptake_n2(i,j,k_100)*drho_dzt
@@ -8512,6 +8800,9 @@ write (stdlogunit, generic_COBALT_nml)
                phyto(SMALL)%jaggloss_n(i,j,k_100)*drho_dzt
            phyto(LARGE)%jaggloss_n_100(i,j) = phyto(LARGE)%jaggloss_n_100(i,j) + &
                phyto(LARGE)%jaggloss_n(i,j,k_100)*drho_dzt
+! CAS: added diagnotistic for depth integrated diatom production
+           cobalt%jprod_diat_100(i,j) = cobalt%jprod_diat_100(i,j) + &
+               phyto(LARGE)%jprod_n(i,j,k_100)*phyto(LARGE)%silim(i,j,k_100)*drho_dzt
 ! CHECK: added juptake_sio4_100 (large only)
            phyto(LARGE)%juptake_sio4_100(i,j) = phyto(LARGE)%juptake_sio4_100(i,j) + &
                phyto(LARGE)%juptake_sio4(i,j,k_100)*drho_dzt
@@ -8631,42 +8922,37 @@ write (stdlogunit, generic_COBALT_nml)
        endif
     enddo ; enddo  !} i,j
 
-    call g_tracer_get_pointer(tracer_list,'alk','runoff_tracer_flux',cobalt%runoff_flux_alk)
-    call g_tracer_get_pointer(tracer_list,'dic','runoff_tracer_flux',cobalt%runoff_flux_dic)
+    call g_tracer_get_values(tracer_list,'alk','runoff_tracer_flux',cobalt%runoff_flux_alk,isd,jsd)
+    call g_tracer_get_values(tracer_list,'dic','runoff_tracer_flux',cobalt%runoff_flux_dic,isd,jsd)
     if (do_14c) then  !{
-      call g_tracer_get_pointer(tracer_list,'di14c','runoff_tracer_flux',cobalt%runoff_flux_di14c)
+      call g_tracer_get_values(tracer_list,'di14c','runoff_tracer_flux',cobalt%runoff_flux_di14c,isd,jsd)
     endif  !}
-    call g_tracer_get_pointer(tracer_list,'fed','runoff_tracer_flux',cobalt%runoff_flux_fed)
-    call g_tracer_get_pointer(tracer_list,'fed','drydep',cobalt%dry_fed)
-    call g_tracer_get_pointer(tracer_list,'fed','wetdep',cobalt%wet_fed)
-    if (do_fan_dunne_fe) then  !{
-       call g_tracer_get_pointer(tracer_list,'h2o2','runoff_tracer_flux',cobalt%runoff_flux_h2o2)
-       call g_tracer_get_pointer(tracer_list,'h2o2','drydep',cobalt%dry_h2o2)
-       call g_tracer_get_pointer(tracer_list,'h2o2','wetdep',cobalt%wet_h2o2)
-    endif !}
-    call g_tracer_get_pointer(tracer_list,'lith','runoff_tracer_flux',cobalt%runoff_flux_lith)
-    call g_tracer_get_pointer(tracer_list,'lith','drydep',cobalt%dry_lith)
-    call g_tracer_get_pointer(tracer_list,'lith','wetdep',cobalt%wet_lith)
-    call g_tracer_get_pointer(tracer_list,'no3','runoff_tracer_flux',cobalt%runoff_flux_no3)
-    call g_tracer_get_pointer(tracer_list,'no3','drydep',cobalt%dry_no3)
-    call g_tracer_get_pointer(tracer_list,'no3','wetdep',cobalt%wet_no3)
-    call g_tracer_get_pointer(tracer_list,'nh4','drydep',cobalt%dry_nh4)
-    call g_tracer_get_pointer(tracer_list,'nh4','wetdep',cobalt%wet_nh4)
-    call g_tracer_get_pointer(tracer_list,'po4','drydep',cobalt%dry_po4)
-    call g_tracer_get_pointer(tracer_list,'po4','wetdep',cobalt%wet_po4)
-    call g_tracer_get_pointer(tracer_list,'ldon','runoff_tracer_flux',cobalt%runoff_flux_ldon)
-    call g_tracer_get_pointer(tracer_list,'sldon','runoff_tracer_flux',cobalt%runoff_flux_sldon)
-    call g_tracer_get_pointer(tracer_list,'srdon','runoff_tracer_flux',cobalt%runoff_flux_srdon)
-    call g_tracer_get_pointer(tracer_list,'ndet','runoff_tracer_flux',cobalt%runoff_flux_ndet)
-    call g_tracer_get_pointer(tracer_list,'po4','runoff_tracer_flux',cobalt%runoff_flux_po4)
-    call g_tracer_get_pointer(tracer_list,'ldop','runoff_tracer_flux',cobalt%runoff_flux_ldop)
-    call g_tracer_get_pointer(tracer_list,'sldop','runoff_tracer_flux',cobalt%runoff_flux_sldop)
-    call g_tracer_get_pointer(tracer_list,'srdop','runoff_tracer_flux',cobalt%runoff_flux_srdop)
+    call g_tracer_get_values(tracer_list,'fed','runoff_tracer_flux',cobalt%runoff_flux_fed,isd,jsd)
+    call g_tracer_get_values(tracer_list,'fed','drydep',cobalt%dry_fed,isd,jsd)
+    call g_tracer_get_values(tracer_list,'fed','wetdep',cobalt%wet_fed,isd,jsd)
+    call g_tracer_get_values(tracer_list,'lith','runoff_tracer_flux',cobalt%runoff_flux_lith,isd,jsd)
+    call g_tracer_get_values(tracer_list,'lith','drydep',cobalt%dry_lith,isd,jsd)
+    call g_tracer_get_values(tracer_list,'lith','wetdep',cobalt%wet_lith,isd,jsd)
+    call g_tracer_get_values(tracer_list,'no3','runoff_tracer_flux',cobalt%runoff_flux_no3,isd,jsd)
+    call g_tracer_get_values(tracer_list,'no3','drydep',cobalt%dry_no3,isd,jsd)
+    call g_tracer_get_values(tracer_list,'no3','wetdep',cobalt%wet_no3,isd,jsd)
+    call g_tracer_get_values(tracer_list,'nh4','drydep',cobalt%dry_nh4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'nh4','wetdep',cobalt%wet_nh4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'po4','drydep',cobalt%dry_po4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'po4','wetdep',cobalt%wet_po4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'ldon','runoff_tracer_flux',cobalt%runoff_flux_ldon,isd,jsd)
+    call g_tracer_get_values(tracer_list,'sldon','runoff_tracer_flux',cobalt%runoff_flux_sldon,isd,jsd)
+    call g_tracer_get_values(tracer_list,'srdon','runoff_tracer_flux',cobalt%runoff_flux_srdon,isd,jsd)
+    call g_tracer_get_values(tracer_list,'ndet','runoff_tracer_flux',cobalt%runoff_flux_ndet,isd,jsd)
+    call g_tracer_get_values(tracer_list,'po4','runoff_tracer_flux',cobalt%runoff_flux_po4,isd,jsd)
+    call g_tracer_get_values(tracer_list,'ldop','runoff_tracer_flux',cobalt%runoff_flux_ldop,isd,jsd)
+    call g_tracer_get_values(tracer_list,'sldop','runoff_tracer_flux',cobalt%runoff_flux_sldop,isd,jsd)
+    call g_tracer_get_values(tracer_list,'srdop','runoff_tracer_flux',cobalt%runoff_flux_srdop,isd,jsd)
 ! JGJ: Added for CMIP6
-    call g_tracer_get_pointer(tracer_list,'dic','stf_gas',cobalt%stf_gas_dic)
-    call g_tracer_get_pointer(tracer_list,'o2','stf_gas',cobalt%stf_gas_o2)
-    call g_tracer_get_pointer(tracer_list,'dic','deltap',cobalt%deltap_dic)
-    call g_tracer_get_pointer(tracer_list,'o2','deltap',cobalt%deltap_o2)
+    call g_tracer_get_values(tracer_list,'dic','stf_gas',cobalt%stf_gas_dic,isd,jsd)
+    call g_tracer_get_values(tracer_list,'o2','stf_gas',cobalt%stf_gas_o2,isd,jsd)
+    call g_tracer_get_values(tracer_list,'dic','deltap',cobalt%deltap_dic,isd,jsd)
+    call g_tracer_get_values(tracer_list,'o2','deltap',cobalt%deltap_o2,isd,jsd)
 
 
 !---------------------------------------------------------------------
@@ -8676,6 +8962,18 @@ write (stdlogunit, generic_COBALT_nml)
 
     call mpp_clock_end(id_clock_cobalt_calc_diagnostics)
     call mpp_clock_begin(id_clock_cobalt_send_diagnostics)
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: after vertical integrals'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
 
 !---------------------------------------------------------------------
 !
@@ -8710,10 +9008,6 @@ write (stdlogunit, generic_COBALT_nml)
             used = g_send_data(phyto(n)%id_jexuloss_n, phyto(n)%jexuloss_n*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-!       if (phyto(n)%id_jhploss_n .gt. 0)          &
-!            used = g_send_data(phyto(n)%id_jhploss_n, phyto(n)%jhploss_n*rho_dzt,     &
-!            model_time, rmask = grid_tmask,&
-!            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_juptake_fe .gt. 0)          &
             used = g_send_data(phyto(n)%id_juptake_fe, phyto(n)%juptake_fe*rho_dzt,   &
             model_time, rmask = grid_tmask,&
@@ -8742,10 +9036,10 @@ write (stdlogunit, generic_COBALT_nml)
             used = g_send_data(phyto(n)%id_jprod_n, phyto(n)%jprod_n*rho_dzt,   &
             model_time, rmask = grid_tmask,&
             is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-!       if (phyto(n)%id_liebig_lim .gt. 0)      &
-!            used = g_send_data(phyto(n)%id_liebig_lim,phyto(n)%liebig_lim,          &
-!            model_time, rmask = grid_tmask,& 
-!            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+       if (phyto(n)%id_liebig_lim .gt. 0)      &
+            used = g_send_data(phyto(n)%id_liebig_lim,phyto(n)%liebig_lim,          &
+            model_time, rmask = grid_tmask,& 
+            is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
        if (phyto(n)%id_mu .gt. 0)              &
             used = g_send_data(phyto(n)%id_mu,        phyto(n)%mu,                  &
             model_time, rmask = grid_tmask,& 
@@ -8803,10 +9097,6 @@ write (stdlogunit, generic_COBALT_nml)
        used = g_send_data(bact(1)%id_jzloss_n, bact(1)%jzloss_n*rho_dzt,           &
        model_time, rmask = grid_tmask,&
        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-!    if (bact(1)%id_jhploss_n .gt. 0)          &
-!       used = g_send_data(bact(1)%id_jhploss_n, bact(1)%jhploss_n*rho_dzt,           &
-!       model_time, rmask = grid_tmask,&
-!       is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (bact(1)%id_jvirloss_n .gt. 0)          &
        used = g_send_data(bact(1)%id_jvirloss_n, bact(1)%jvirloss_n*rho_dzt,           &
        model_time, rmask = grid_tmask,&
@@ -8973,56 +9263,38 @@ write (stdlogunit, generic_COBALT_nml)
     !    used = g_send_data(cobalt%id_jprod_ldop, cobalt%jprod_ldop*rho_dzt,           &
     !    model_time, rmask = grid_tmask,&
     !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_jprod_nh4 .gt. 0)          &
-    !    used = g_send_data(cobalt%id_jprod_nh4, cobalt%jprod_nh4*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_jprod_po4 .gt. 0)          &
-    !    used = g_send_data(cobalt%id_jprod_po4, cobalt%jprod_po4*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (do_fan_dunne_fe) then  !{
-      if (cobalt%id_jfec .gt. 0)              &
-         used = g_send_data(cobalt%id_jfec,       cobalt%jfec*rho_dzt,       &
-         model_time, rmask = grid_tmask,&
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-      if (cobalt%id_jprod_fec .gt. 0)          &
-         used = g_send_data(cobalt%id_jprod_fec, cobalt%jprod_fec*rho_dzt,           &
-         model_time, rmask = grid_tmask,&
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-      if (cobalt%id_jprod_h2o2 .gt. 0)              &
-         used = g_send_data(cobalt%id_jprod_h2o2,       cobalt%jprod_h2o2*rho_dzt,       &
-         model_time, rmask = grid_tmask,&
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    endif !}
-    !if (cobalt%id_jprod_fed .gt. 0)          &
-    !    used = g_send_data(cobalt%id_jprod_fed, cobalt%jprod_fed*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_jprod_fedet .gt. 0)          &
-    !    used = g_send_data(cobalt%id_jprod_fedet,  cobalt%jprod_fedet*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_jprod_sidet .gt. 0)          &
-    !    used = g_send_data(cobalt%id_jprod_sidet, cobalt%jprod_sidet*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_jprod_sio4 .gt. 0)          &
-    !    used = g_send_data(cobalt%id_jprod_sio4, cobalt%jprod_sio4*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_nh4 .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_nh4, cobalt%jprod_nh4*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+   if (cobalt%id_jprod_nh4_plus_btm .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_nh4_plus_btm, cobalt%jprod_nh4_plus_btm*rho_dzt, &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_po4 .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_po4, cobalt%jprod_po4*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_fed .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_fed, cobalt%jprod_fed*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_fedet .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_fedet,  cobalt%jprod_fedet*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_sidet .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_sidet, cobalt%jprod_sidet*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_jprod_sio4 .gt. 0)          &
+        used = g_send_data(cobalt%id_jprod_sio4, cobalt%jprod_sio4*rho_dzt,           &
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jprod_lithdet .gt. 0)          &
         used = g_send_data(cobalt%id_jprod_lithdet, cobalt%jprod_lithdet*rho_dzt,           &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_det_jzloss_n .gt. 0)          &
-    !    used = g_send_data(cobalt%id_det_jzloss_n, cobalt%det_jzloss_n*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    !if (cobalt%id_det_jhploss_n .gt. 0)          &
-    !    used = g_send_data(cobalt%id_det_jhploss_n, cobalt%det_jhploss_n*rho_dzt,           &
-    !    model_time, rmask = grid_tmask,&
-    !    is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jdiss_cadet_arag .gt. 0)          &
         used = g_send_data(cobalt%id_jdiss_cadet_arag, cobalt%jdiss_cadet_arag*rho_dzt,           &
         model_time, rmask = grid_tmask,&
@@ -9067,6 +9339,10 @@ write (stdlogunit, generic_COBALT_nml)
          used = g_send_data(cobalt%id_expkT,       cobalt%expkT,       &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_expkreminT .gt. 0)              &
+         used = g_send_data(cobalt%id_expkreminT,       cobalt%expkreminT,       &
+         model_time, rmask = grid_tmask,&
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_hp_temp_lim .gt. 0)            &
          used = g_send_data(cobalt%id_hp_temp_lim, cobalt%hp_temp_lim,         &
          model_time, rmask = grid_tmask,&
@@ -9081,6 +9357,10 @@ write (stdlogunit, generic_COBALT_nml)
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jno3denit_wc .gt. 0)            &
          used = g_send_data(cobalt%id_jno3denit_wc,  cobalt%jno3denit_wc*rho_dzt,  &
+         model_time, rmask = grid_tmask,&
+         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+   if (cobalt%id_jo2resp_wc .gt. 0)            &
+         used = g_send_data(cobalt%id_jo2resp_wc,  cobalt%jo2resp_wc*rho_dzt,  &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_jnitrif .gt. 0)              &
@@ -9109,14 +9389,6 @@ write (stdlogunit, generic_COBALT_nml)
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_total_filter_feeding .gt. 0)  &
          used = g_send_data(cobalt%id_total_filter_feeding,cobalt%total_filter_feeding,&
-         model_time, rmask = grid_tmask,&
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (cobalt%id_net_prim_prod .gt. 0)  &
-         used = g_send_data(cobalt%id_net_prim_prod,cobalt%net_prim_prod*rho_dzt,&
-         model_time, rmask = grid_tmask,&
-         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
-    if (cobalt%id_gross_prim_prod.gt. 0)  &
-         used = g_send_data(cobalt%id_gross_prim_prod,cobalt%gross_prim_prod*rho_dzt,&
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_nlg_diatoms.gt. 0)  &
@@ -9406,20 +9678,6 @@ write (stdlogunit, generic_COBALT_nml)
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
-    if (do_fan_dunne_fe) then  !{
-      if (cobalt%id_sfc_fec .gt. 0)             &
-         used = g_send_data(cobalt%id_sfc_fec,       cobalt%p_fec(:,:,1,tau),         &
-         model_time, rmask = grid_tmask(:,:,1),&
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-      if (cobalt%id_sfc_fe2 .gt. 0)            &
-         used = g_send_data(cobalt%id_sfc_fe2, cobalt%f_fe2(:,:,1),            &
-         model_time, rmask = grid_tmask(:,:,1),&
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-      if (cobalt%id_sfc_fe3 .gt. 0)            &
-         used = g_send_data(cobalt%id_sfc_fe3, cobalt%f_fe3(:,:,1),            &
-         model_time, rmask = grid_tmask(:,:,1),&
-         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-    endif !}
     do n= 1, NUM_PHYTO
        if (phyto(n)%id_sfc_f_n .gt. 0)              &
           used = g_send_data(phyto(n)%id_sfc_f_n, phyto(n)%f_n(:,:,1),            & 
@@ -9479,16 +9737,6 @@ write (stdlogunit, generic_COBALT_nml)
        used = g_send_data(cobalt%id_dep_dry_fed, cobalt%dry_fed,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
-    if (do_fan_dunne_fe) then  !{
-      if (cobalt%id_dep_dry_h2o2 .gt. 0)     &
-        used = g_send_data(cobalt%id_dep_dry_h2o2, cobalt%dry_h2o2,                        &
-        model_time, rmask = grid_tmask(:,:,1),&
-        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
-      if (cobalt%id_dep_wet_h2o2 .gt. 0)     &
-        used = g_send_data(cobalt%id_dep_wet_h2o2, cobalt%wet_h2o2,                        &
-        model_time, rmask = grid_tmask(:,:,1),&
-        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
-    endif !}
     if (cobalt%id_dep_dry_lith .gt. 0)     &
        used = g_send_data(cobalt%id_dep_dry_lith, cobalt%dry_lith,                        &
        model_time, rmask = grid_tmask(:,:,1),&
@@ -9586,6 +9834,10 @@ write (stdlogunit, generic_COBALT_nml)
     !
     if (cobalt%id_jprod_allphytos_100 .gt. 0)     &
        used = g_send_data(cobalt%id_jprod_allphytos_100, cobalt%jprod_allphytos_100,         &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_jprod_diat_100 .gt. 0)     &
+       used = g_send_data(cobalt%id_jprod_diat_100, cobalt%jprod_diat_100,         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     do n= 1, NUM_PHYTO  !{
@@ -9873,6 +10125,8 @@ write (stdlogunit, generic_COBALT_nml)
 !         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK:
+    ! CAS comment on spreadsheet implies that this is the explicitly represented
+    ! pool and seems to suggest that we shouldn't add the background
     !add background of 42 uM (as in other parts of cobalt)- may need to change to 3.8e-5 per JPD
     cobalt%dissoc(:,:,:) = cobalt%doc_background +                                                     &
         cobalt%c_2_n * (cobalt%p_ldon(:,:,:,tau) + cobalt%p_sldon(:,:,:,tau) + cobalt%p_srdon(:,:,:,tau) )
@@ -9934,13 +10188,13 @@ write (stdlogunit, generic_COBALT_nml)
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-    if (cobalt%id_zoomicro.gt. 0)  &
-         used = g_send_data(cobalt%id_zoomicro,  cobalt%p_nsmz(:,:,:,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_zmicro.gt. 0)  &
+         used = g_send_data(cobalt%id_zmicro,  cobalt%p_nsmz(:,:,:,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-    if (cobalt%id_zoomeso.gt. 0)  &
-         used = g_send_data(cobalt%id_zoomeso,  (cobalt%p_nlgz(:,:,:,tau)+cobalt%p_nmdz(:,:,:,tau)) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_zmeso.gt. 0)  &
+         used = g_send_data(cobalt%id_zmeso,  (cobalt%p_nlgz(:,:,:,tau)+cobalt%p_nmdz(:,:,:,tau)) * cobalt%c_2_n * cobalt%Rho_0,  &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10017,18 +10271,19 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK: spreadsheet has chldiat= theta_lg_diatoms*c_2_n*nlg_diatoms*1035*12e3
 ! need theta_lg_diatoms ?
+! CAS - I think we should multiply by 12e-3 rather than 12e3 to get kg chl m-3, I made changes accordingly
     if (cobalt%id_chldiat .gt. 0)            &
-        used = g_send_data(cobalt%id_chldiat,  phyto(LARGE)%theta * cobalt%nlg_diatoms * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+        used = g_send_data(cobalt%id_chldiat,  phyto(LARGE)%theta * cobalt%nlg_diatoms * cobalt%c_2_n * cobalt%Rho_0 * 12e-3,   &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_chldiaz .gt. 0)            &
-        used = g_send_data(cobalt%id_chldiaz,  phyto(DIAZO)%theta * cobalt%p_ndi(:,:,:,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+        used = g_send_data(cobalt%id_chldiaz,  phyto(DIAZO)%theta * cobalt%p_ndi(:,:,:,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e-3,   &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_chlpico .gt. 0)            &
-        used = g_send_data(cobalt%id_chlpico,  phyto(SMALL)%theta * cobalt%p_nsm(:,:,:,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+        used = g_send_data(cobalt%id_chlpico,  phyto(SMALL)%theta * cobalt%p_nsm(:,:,:,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e-3,   &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10036,12 +10291,12 @@ write (stdlogunit, generic_COBALT_nml)
 ! and Oyr has:              chlmisc = (theta_lgp*(nlg-nlg_diatoms))*c_2_n*1035*12e3
     if (cobalt%id_chlmisc .gt. 0)            &
         used = g_send_data(cobalt%id_chlmisc,  phyto(LARGE)%theta * (cobalt%p_nlg(:,:,:,tau)-cobalt%nlg_diatoms) *  &
-        cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+        cobalt%c_2_n * cobalt%Rho_0 * 12e-3,   &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! PENDING: get pon  and convert to carbon units ?
-! CHECK: Omon only - check calculation/units
+! CHECK: Omon only - check calculation/units (CAS: looks good to me)
     if (cobalt%id_poc .gt. 0)            &
         used = g_send_data(cobalt%id_poc,  (cobalt%p_ndi(:,:,:,tau) + cobalt%p_nlg(:,:,:,tau) + &
         cobalt%p_nsm(:,:,:,tau) + cobalt%p_nbact(:,:,:,tau) +  cobalt%p_ndet(:,:,:,tau) + &
@@ -10051,6 +10306,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK: Omon has this as: pon=(ndi+nlgp+nsmp+ndet+nhet)*1035
 ! and Oyr has            : pon=(ndi+nlgp+nsmp+ndet+nbact+nsmz+nmdz+nlgz)*1035
+! CAS: Looks good, this is the correct translation from TOPAZ to COBALT
     if (cobalt%id_pon .gt. 0)            &
         used = g_send_data(cobalt%id_pon,  (cobalt%p_ndi(:,:,:,tau) + cobalt%p_nlg(:,:,:,tau) + &
         cobalt%p_nsm(:,:,:,tau) + cobalt%p_nbact(:,:,:,tau) +  cobalt%p_ndet(:,:,:,tau) + &
@@ -10061,12 +10317,22 @@ write (stdlogunit, generic_COBALT_nml)
 ! CHECK: Orange on spreadsheet
 ! Omon has: pop=pdet*1035
 ! Oyr has: pop=(p_2_n_di*ndi+nlgp+nsmp+pdet+nbact+nsmz+nmdz+nlgz)*1035
+! CAS: added bacteria and more general accomodation of static but different p_2_n ratios
     if (cobalt%id_pop .gt. 0)            &
-        used = g_send_data(cobalt%id_pop,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,:,tau)) + cobalt%p_nlg(:,:,:,tau) + &
-        cobalt%p_nsm(:,:,:,tau) + cobalt%p_nbact(:,:,:,tau) +  cobalt%p_pdet(:,:,:,tau) + &
-        cobalt%p_nsmz(:,:,:,tau) + cobalt%p_nmdz(:,:,:,tau) + cobalt%p_nlgz(:,:,:,tau)) * cobalt%Rho_0,  &
+        used = g_send_data(cobalt%id_pop,  (phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,:,tau) + &
+        phyto(LARGE)%p_2_n_static * cobalt%p_nlg(:,:,:,tau) + phyto(SMALL)%p_2_n_static * cobalt%p_nsm(:,:,:,tau) + &
+        cobalt%p_pdet(:,:,:,tau) + zoo(1)%q_p_2_n * cobalt%p_nsmz(:,:,:,tau) + zoo(2)%q_p_2_n * cobalt%p_nmdz(:,:,:,tau) + &
+        zoo(3)%q_p_2_n * cobalt%p_nlgz(:,:,:,tau) + bact(1)%q_p_2_n * cobalt%p_nbact(:,:,:,tau)) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
+! CAS: old code, delete once satisfied with new code above
+!    if (cobalt%id_pop .gt. 0)            &
+!        used = g_send_data(cobalt%id_pop,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,:,tau)) + cobalt%p_nlg(:,:,:,tau) + &
+!        cobalt%p_nsm(:,:,:,tau) + cobalt%p_nbact(:,:,:,tau) +  cobalt%p_pdet(:,:,:,tau) + &
+!        cobalt%p_nsmz(:,:,:,tau) + cobalt%p_nmdz(:,:,:,tau) + cobalt%p_nlgz(:,:,:,tau)) * cobalt%Rho_0,  &
+!        model_time, rmask = grid_tmask,&
+!        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_bfe .gt. 0)            &
         used = g_send_data(cobalt%id_bfe,  (cobalt%p_fedi(:,:,:,tau) + cobalt%p_felg(:,:,:,tau) + cobalt%p_fesm(:,:,:,tau) + & 
@@ -10087,9 +10353,11 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK: Orange on spreadsheet 
 ! Oyr only
+! CAS: added p_2_n ratios for other phyto groups
     if (cobalt%id_phyp .gt. 0)            &
-        used = g_send_data(cobalt%id_phyp,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,:,tau)) + cobalt%p_nlg(:,:,:,tau) + &
-        cobalt%p_nsm(:,:,:,tau)) * cobalt%Rho_0,  &
+        used = g_send_data(cobalt%id_phyp,  (phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,:,tau) + &
+        phyto(LARGE)%p_2_n_static * cobalt%p_nlg(:,:,:,tau) + phyto(SMALL)%p_2_n_static * cobalt%p_nsm(:,:,:,tau) )* &
+        cobalt%Rho_0,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10170,14 +10438,16 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: no rho_dzt ?
+! CAS: Should have rho_dzt, I have updated
     if (cobalt%id_pcalc .gt. 0)            &
-        used = g_send_data(cobalt%id_pcalc,  cobalt%jprod_cadet_calc / dzt,  &
+        used = g_send_data(cobalt%id_pcalc,  cobalt%jprod_cadet_calc * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: no rho_dzt ?
+! CAS: should have rho_dzt, I have updated
     if (cobalt%id_parag .gt. 0)            &
-        used = g_send_data(cobalt%id_parag,  cobalt%jprod_cadet_arag / dzt,  &
+        used = g_send_data(cobalt%id_parag,  cobalt%jprod_cadet_arag * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10218,91 +10488,100 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: remoc=(jprod_nh4*c_2_n/dht) for k=1,kbot-1 + (jprod_nh4+f_ndet_btf-fndet_burial)*c_2_n/dht for k=kbot
+! CAS: added jprod_nh4_plus_btm to calculate
     if (cobalt%id_remoc .gt. 0)            &
-        used = g_send_data(cobalt%id_remoc,  cobalt%remoc,  &
+        used = g_send_data(cobalt%id_remoc,  cobalt%jprod_nh4_plus_btm*cobalt%c_2_n*rho_dzt/dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: add redissolution term  fcased_redis/dht ??
+! CAS: added redisolution from sediment
     if (cobalt%id_dcalc .gt. 0)            &
-        used = g_send_data(cobalt%id_dcalc,  cobalt%jdiss_cadet_calc / dzt, &
+        used = g_send_data(cobalt%id_dcalc,  cobalt%jdiss_cadet_calc_plus_btm*rho_dzt/dzt, &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: add redissolution term  f_cased_arag_btf/dht ??
+! CAS: added redisolution from sediment
     if (cobalt%id_darag .gt. 0)            &
-        used = g_send_data(cobalt%id_darag,  cobalt%jdiss_cadet_arag / dzt, &
+        used = g_send_data(cobalt%id_darag,  cobalt%jdiss_cadet_arag_plus_btm*rho_dzt/dzt, &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: ask John
+! CAS: fixed unit conversion on production from all groups by adding *rho_dzt,
     if (cobalt%id_ppdiat .gt. 0)            &
-        used = g_send_data(cobalt%id_ppdiat,  phyto(LARGE)%jprod_n * phyto(LARGE)%silim * cobalt%c_2_n / dzt,  &
+        used = g_send_data(cobalt%id_ppdiat,  phyto(LARGE)%jprod_n * phyto(LARGE)%silim * rho_dzt * cobalt%c_2_n / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_ppdiaz .gt. 0)            &
-        used = g_send_data(cobalt%id_ppdiaz,  phyto(DIAZO)%jprod_n * cobalt%c_2_n / dzt,  &
+        used = g_send_data(cobalt%id_ppdiaz,  phyto(DIAZO)%jprod_n * rho_dzt * cobalt%c_2_n / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_pppico .gt. 0)            &
-        used = g_send_data(cobalt%id_pppico,  phyto(SMALL)%jprod_n * cobalt%c_2_n / dzt,  &
+        used = g_send_data(cobalt%id_pppico,  phyto(SMALL)%jprod_n * rho_dzt * cobalt%c_2_n / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: ppmisc=(jprod_nlgp-jprod_nlg_diatoms)*c_2_n/dht
+! CAS: OK, except needed a *rho_dzt
     if (cobalt%id_ppmisc .gt. 0)            &
-        used = g_send_data(cobalt%id_ppmisc,  (phyto(LARGE)%jprod_n * (1 - phyto(LARGE)%silim)) * cobalt%c_2_n / dzt,  &
+        used = g_send_data(cobalt%id_ppmisc,  (phyto(LARGE)%jprod_n * (1 - phyto(LARGE)%silim)) * rho_dzt * cobalt%c_2_n / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: _z regridding 
+! CAS fixed conversion for all bddt terms 
     if (cobalt%id_bddtdic .gt. 0)            &
-        used = g_send_data(cobalt%id_bddtdic,  cobalt%jdic_plus_btm * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_bddtdic,  cobalt%jdic_plus_btm * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_bddtdin .gt. 0)            &
-        used = g_send_data(cobalt%id_bddtdin,  cobalt%jdin_plus_btm * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_bddtdin,  cobalt%jdin_plus_btm * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_bddtdip .gt. 0)            &
-        used = g_send_data(cobalt%id_bddtdip,  cobalt%jpo4_plus_btm * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_bddtdip,  cobalt%jpo4_plus_btm * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_bddtdife .gt. 0)            &
-        used = g_send_data(cobalt%id_bddtdife,  cobalt%jfed_plus_btm * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_bddtdife,  cobalt%jfed_plus_btm * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_bddtdisi .gt. 0)            &
-        used = g_send_data(cobalt%id_bddtdisi,  cobalt%jsio4_plus_btm * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_bddtdisi,  cobalt%jsio4_plus_btm * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_bddtalk .gt. 0)            &
-        used = g_send_data(cobalt%id_bddtalk,  cobalt%jalk_plus_btm * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_bddtalk,  cobalt%jalk_plus_btm * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
+! CAS: fixed conversion
     if (cobalt%id_fescav .gt. 0)            &
-        used = g_send_data(cobalt%id_fescav,  cobalt%jfe_ads * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_fescav,  cobalt%jfe_ads * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: fediss = jfedet + jfe_des in TOPAZ
+! CAS: fixed conversion
     if (cobalt%id_fediss .gt. 0)            &
-        used = g_send_data(cobalt%id_fediss,  cobalt%jremin_fedet * cobalt%Rho_0 * rho_dzt,  &
+        used = g_send_data(cobalt%id_fediss,  cobalt%jremin_fedet * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! also in Omon
+! CAS: fixed conversion
     if (cobalt%id_graz .gt. 0)            &
         used = g_send_data(cobalt%id_graz,  (phyto(DIAZO)%jzloss_n +  phyto(LARGE)%jzloss_n +  &
-        phyto(SMALL)%jzloss_n) * cobalt%Rho_0 *cobalt%c_2_n  * rho_dzt,  &
+        phyto(SMALL)%jzloss_n) * cobalt%c_2_n  * rho_dzt / dzt,  &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10310,195 +10589,195 @@ write (stdlogunit, generic_COBALT_nml)
 ! JGJ 2016/08/08 CMIP6 OcnBgchem Omon: Marine Biogeochemical 2-D Surface Fields 
 !  Identical to Oyr 3-D Tracer fields but for surface only
 
-    if (cobalt%id_sfc_dissic .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_dissic,  cobalt%p_dic(:,:,1,tau) * cobalt%Rho_0,           &
+    if (cobalt%id_dissicos .gt. 0)            &
+        used = g_send_data(cobalt%id_dissicos,  cobalt%p_dic(:,:,1,tau) * cobalt%Rho_0,           &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING:
-!    if (cobalt%id_sfc_dissicnat .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_dissicnat,                                                    &
+!    if (cobalt%id_dissicnatos .gt. 0)            &
+!        used = g_send_data(cobalt%id_dissicnatos,                                                    &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-!    if (cobalt%id_sfc_dissicabio .gt. 0)            
-!        used = g_send_data(cobalt%id_sfc_dissicabio,                                                    &
+!    if (cobalt%id_dissicabioos .gt. 0)            
+!        used = g_send_data(cobalt%id_dissicabioos,                                                    &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-!    if (cobalt%id_sfc_dissi14cabio .gt. 0)            
-!        used = g_send_data(cobalt%id_sfc_dissi14cabio,                                                    &
+!    if (cobalt%id_dissi14cabioos .gt. 0)            
+!        used = g_send_data(cobalt%id_dissi14cabioos,                                                    &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK:
     !see above - added background of 42 uM (as in other parts of cobalt)- may need to change to 3.8e-5 per JPD
-    if (cobalt%id_sfc_dissoc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_dissoc,  cobalt%dissoc(:,:,1) * cobalt%Rho_0,       &
+    if (cobalt%id_dissocos .gt. 0)            &
+        used = g_send_data(cobalt%id_dissocos,  cobalt%dissoc(:,:,1) * cobalt%Rho_0,       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phyc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_phyc,  (cobalt%p_nlg(:,:,1,tau) + cobalt%p_nsm(:,:,1,tau) +  &
+    if (cobalt%id_phycos .gt. 0)            &
+        used = g_send_data(cobalt%id_phycos,  (cobalt%p_nlg(:,:,1,tau) + cobalt%p_nsm(:,:,1,tau) +  &
         cobalt%p_ndi(:,:,1,tau)) * cobalt%c_2_n * cobalt%Rho_0, &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_zooc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_zooc,  (cobalt%p_nlgz(:,:,1,tau) + cobalt%p_nsmz(:,:,1,tau) +  &
+    if (cobalt%id_zoocos .gt. 0)            &
+        used = g_send_data(cobalt%id_zoocos,  (cobalt%p_nlgz(:,:,1,tau) + cobalt%p_nsmz(:,:,1,tau) +  &
         cobalt%p_nmdz(:,:,1,tau)) * cobalt%c_2_n * cobalt%Rho_0, &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_bacc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_bacc,  cobalt%p_nbact(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_baccos .gt. 0)            &
+        used = g_send_data(cobalt%id_baccos,  cobalt%p_nbact(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_detoc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_detoc,  cobalt%p_ndet(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_detocos .gt. 0)            &
+        used = g_send_data(cobalt%id_detocos,  cobalt%p_ndet(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_calc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_calc,  cobalt%p_cadet_calc(:,:,1,tau) * cobalt%Rho_0,  &
+    if (cobalt%id_calcos .gt. 0)            &
+        used = g_send_data(cobalt%id_calcos,  cobalt%p_cadet_calc(:,:,1,tau) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_arag .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_arag,  cobalt%p_cadet_arag(:,:,1,tau) * cobalt%Rho_0,  &
+    if (cobalt%id_aragos .gt. 0)            &
+        used = g_send_data(cobalt%id_aragos,  cobalt%p_cadet_arag(:,:,1,tau) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phydiat.gt. 0)  &
-        used = g_send_data(cobalt%id_sfc_phydiat,  cobalt%nlg_diatoms(:,:,1) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_phydiatos.gt. 0)  &
+        used = g_send_data(cobalt%id_phydiatos,  cobalt%nlg_diatoms(:,:,1) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phydiaz.gt. 0)  &
-        used = g_send_data(cobalt%id_sfc_phydiaz,  cobalt%p_ndi(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_phydiazos.gt. 0)  &
+        used = g_send_data(cobalt%id_phydiazos,  cobalt%p_ndi(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phypico.gt. 0)  &
-        used = g_send_data(cobalt%id_sfc_phypico,  cobalt%p_nsm(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_phypicoos.gt. 0)  &
+        used = g_send_data(cobalt%id_phypicoos,  cobalt%p_nsm(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phymisc.gt. 0)  &
-        used = g_send_data(cobalt%id_sfc_phymisc,  (cobalt%p_nlg(:,:,1,tau)-cobalt%nlg_diatoms(:,:,1)) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_phymiscos.gt. 0)  &
+        used = g_send_data(cobalt%id_phymiscos,  (cobalt%p_nlg(:,:,1,tau)-cobalt%nlg_diatoms(:,:,1)) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_zoomicro.gt. 0)  &
-        used = g_send_data(cobalt%id_sfc_zoomicro,  cobalt%p_nsmz(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_zmicroos.gt. 0)  &
+        used = g_send_data(cobalt%id_zmicroos,  cobalt%p_nsmz(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_zoomeso.gt. 0)  &
-        used = g_send_data(cobalt%id_sfc_zoomeso,  (cobalt%p_nlgz(:,:,1,tau)+cobalt%p_nmdz(:,:,1,tau)) * cobalt%c_2_n * cobalt%Rho_0,  &
+    if (cobalt%id_zmesoos.gt. 0)  &
+        used = g_send_data(cobalt%id_zmesoos,  (cobalt%p_nlgz(:,:,1,tau)+cobalt%p_nmdz(:,:,1,tau)) * cobalt%c_2_n * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_talk .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_talk,  cobalt%p_alk(:,:,1,tau) * cobalt%Rho_0,       &
+    if (cobalt%id_talkos .gt. 0)            &
+        used = g_send_data(cobalt%id_talkos,  cobalt%p_alk(:,:,1,tau) * cobalt%Rho_0,       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING:
-!    if (cobalt%id_sfc_talknat .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_talknat,                     
+!    if (cobalt%id_talknatos .gt. 0)            &
+!        used = g_send_data(cobalt%id_talknatos,                     
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: this is using ntau=1
-    if (cobalt%id_sfc_ph .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_ph,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+    if (cobalt%id_phos .gt. 0)            &
+        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING: not in spreadsheet
-!    if (cobalt%id_sfc_phnat .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_phnat,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+!    if (cobalt%id_phnatos .gt. 0)            &
+!        used = g_send_data(cobalt%id_phnatos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING: not in spreadsheet
-!    if (cobalt%id_sfc_phabio .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_phabio,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+!    if (cobalt%id_phabioos .gt. 0)            &
+!        used = g_send_data(cobalt%id_phabioos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_o2_cmip .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_o2_cmip,  cobalt%p_o2(:,:,1,tau) * cobalt%Rho_0,   &
+    if (cobalt%id_o2os .gt. 0)            &
+        used = g_send_data(cobalt%id_o2os,  cobalt%p_o2(:,:,1,tau) * cobalt%Rho_0,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING:
-!    if (cobalt%id_sfc_o2sat .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_o2sat,  cobalt%o2sat (:,:,1)
+!    if (cobalt%id_o2satos .gt. 0)            &
+!        used = g_send_data(cobalt%id_o2satos,  cobalt%o2sat (:,:,1)
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_no3_cmip .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_no3_cmip,  cobalt%p_no3(:,:,1,tau) * cobalt%Rho_0,   &
+    if (cobalt%id_no3os .gt. 0)            &
+        used = g_send_data(cobalt%id_no3os,  cobalt%p_no3(:,:,1,tau) * cobalt%Rho_0,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_nh4_cmip .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_nh4_cmip,  cobalt%p_nh4(:,:,1,tau) * cobalt%Rho_0,   &
+    if (cobalt%id_nh4os.gt. 0)            &
+        used = g_send_data(cobalt%id_nh4os,  cobalt%p_nh4(:,:,1,tau) * cobalt%Rho_0,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_po4_cmip .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_po4_cmip,  cobalt%p_po4(:,:,1,tau) * cobalt%Rho_0,   &
+    if (cobalt%id_po4os.gt. 0)            &
+        used = g_send_data(cobalt%id_po4os,  cobalt%p_po4(:,:,1,tau) * cobalt%Rho_0,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_dfe .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_dfe,  cobalt%p_fed(:,:,1,tau) * cobalt%Rho_0,       &
+    if (cobalt%id_dfeos .gt. 0)            &
+        used = g_send_data(cobalt%id_dfeos,  cobalt%p_fed(:,:,1,tau) * cobalt%Rho_0,       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_si .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_si,  cobalt%p_sio4(:,:,1,tau) * cobalt%Rho_0,       &
+    if (cobalt%id_sios .gt. 0)            &
+        used = g_send_data(cobalt%id_sios,  cobalt%p_sio4(:,:,1,tau) * cobalt%Rho_0,       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_chl_cmip .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_chl_cmip,  cobalt%f_chl(:,:,1) * cobalt%Rho_0 / 1e9,   &
+    if (cobalt%id_chlos .gt. 0)            &
+        used = g_send_data(cobalt%id_chlos,  cobalt%f_chl(:,:,1) * cobalt%Rho_0 / 1e9,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: spreadsheet has chldiat= theta_lg_diatoms*c_2_n*nlg_diatoms*1035*12e3
 ! need theta_lg_diatoms ?
-    if (cobalt%id_sfc_chldiat .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_chldiat,  phyto(LARGE)%theta(:,:,1) * cobalt%nlg_diatoms(:,:,1) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+    if (cobalt%id_chldiatos .gt. 0)            &
+        used = g_send_data(cobalt%id_chldiatos,  phyto(LARGE)%theta(:,:,1) * cobalt%nlg_diatoms(:,:,1) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_chldiaz .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_chldiaz,  phyto(DIAZO)%theta(:,:,1) * cobalt%p_ndi(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+    if (cobalt%id_chldiazos .gt. 0)            &
+        used = g_send_data(cobalt%id_chldiazos,  phyto(DIAZO)%theta(:,:,1) * cobalt%p_ndi(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_chlpico .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_chlpico,  phyto(SMALL)%theta(:,:,1) * cobalt%p_nsm(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
+    if (cobalt%id_chlpicoos .gt. 0)            &
+        used = g_send_data(cobalt%id_chlpicoos,  phyto(SMALL)%theta(:,:,1) * cobalt%p_nsm(:,:,1,tau) * cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: Omon has this as : chlmisc = ((theta_lgp*nlgp)-(theta_lg_diatoms*nlg_diatoms))*c_2_n*1035*12e3
 ! and Oyr has:              chlmisc = (theta_lgp*(nlg-nlg_diatoms))*c_2_n*1035*12e3
-    if (cobalt%id_sfc_chlmisc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_chlmisc,  phyto(LARGE)%theta(:,:,1) * (cobalt%p_nlg(:,:,1,tau)-cobalt%nlg_diatoms(:,:,1)) *  &
+    if (cobalt%id_chlmiscos .gt. 0)            &
+        used = g_send_data(cobalt%id_chlmiscos,  phyto(LARGE)%theta(:,:,1) * (cobalt%p_nlg(:,:,1,tau)-cobalt%nlg_diatoms(:,:,1)) *  &
         cobalt%c_2_n * cobalt%Rho_0 * 12e3,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: Omon has this as: pon=(ndi+nlgp+nsmp+ndet+nhet)*1035
 ! and Oyr has            : pon=(ndi+nlgp+nsmp+ndet+nbact+nsmz+nmdz+nlgz)*1035
-    if (cobalt%id_sfc_pon .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_pon,  (cobalt%p_ndi(:,:,1,tau) + cobalt%p_nlg(:,:,1,tau) + &
+    if (cobalt%id_ponos .gt. 0)            &
+        used = g_send_data(cobalt%id_ponos,  (cobalt%p_ndi(:,:,1,tau) + cobalt%p_nlg(:,:,1,tau) + &
         cobalt%p_nsm(:,:,1,tau) + cobalt%p_nbact(:,:,1,tau) +  cobalt%p_ndet(:,:,1,tau) + &
         cobalt%p_nsmz(:,:,1,tau) + cobalt%p_nmdz(:,:,1,tau) + cobalt%p_nlgz(:,:,1,tau)) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
@@ -10507,72 +10786,72 @@ write (stdlogunit, generic_COBALT_nml)
 ! CHECK: Orange on spreadsheet
 ! Omon has: pop=pdet*1035
 ! Oyr has: pop=(p_2_n_di*ndi+nlgp+nsmp+pdet+nbact+nsmz+nmdz+nlgz)*1035
-    if (cobalt%id_sfc_pop .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_pop,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,1,tau)) + cobalt%p_nlg(:,:,1,tau) + &
+    if (cobalt%id_popos .gt. 0)            &
+        used = g_send_data(cobalt%id_popos,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,1,tau)) + cobalt%p_nlg(:,:,1,tau) + &
         cobalt%p_nsm(:,:,1,tau) + cobalt%p_nbact(:,:,1,tau) +  cobalt%p_pdet(:,:,1,tau) + &
         cobalt%p_nsmz(:,:,1,tau) + cobalt%p_nmdz(:,:,1,tau) + cobalt%p_nlgz(:,:,1,tau)) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_bfe .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_bfe,  (cobalt%p_fedi(:,:,1,tau) + cobalt%p_felg(:,:,1,tau) + cobalt%p_fesm(:,:,1,tau) + & 
+    if (cobalt%id_bfeos .gt. 0)            &
+        used = g_send_data(cobalt%id_bfeos,  (cobalt%p_fedi(:,:,1,tau) + cobalt%p_felg(:,:,1,tau) + cobalt%p_fesm(:,:,1,tau) + & 
         cobalt%p_fedet(:,:,1,tau))  * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_bsi .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_bsi,  (cobalt%p_silg(:,:,1,tau) + cobalt%p_sidet(:,:,1,tau))  * cobalt%Rho_0,  &
+    if (cobalt%id_bsios .gt. 0)            &
+        used = g_send_data(cobalt%id_bsios,  (cobalt%p_silg(:,:,1,tau) + cobalt%p_sidet(:,:,1,tau))  * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phyn .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_phyn,  (cobalt%p_nlg(:,:,1,tau) + cobalt%p_nsm(:,:,1,tau) +  &
+    if (cobalt%id_phynos .gt. 0)            &
+        used = g_send_data(cobalt%id_phynos,  (cobalt%p_nlg(:,:,1,tau) + cobalt%p_nsm(:,:,1,tau) +  &
         cobalt%p_ndi(:,:,1,tau)) * cobalt%Rho_0, &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: Orange on spreadsheet 
-    if (cobalt%id_sfc_phyp .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_phyp,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,1,tau)) + cobalt%p_nlg(:,:,1,tau) + &
+    if (cobalt%id_phypos .gt. 0)            &
+        used = g_send_data(cobalt%id_phypos,  ((phyto(DIAZO)%p_2_n_static * cobalt%p_ndi(:,:,1,tau)) + cobalt%p_nlg(:,:,1,tau) + &
         cobalt%p_nsm(:,:,1,tau)) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_phyfe .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_phyfe,  (cobalt%p_fedi(:,:,1,tau) + cobalt%p_felg(:,:,1,tau) +  &
+    if (cobalt%id_phyfeos .gt. 0)            &
+        used = g_send_data(cobalt%id_phyfeos,  (cobalt%p_fedi(:,:,1,tau) + cobalt%p_felg(:,:,1,tau) +  &
         cobalt%p_fesm(:,:,1,tau)) * cobalt%Rho_0, &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_physi .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_physi,  cobalt%p_silg(:,:,1,tau) * cobalt%Rho_0,  &
+    if (cobalt%id_physios .gt. 0)            &
+        used = g_send_data(cobalt%id_physios,  cobalt%p_silg(:,:,1,tau) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_co3 .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_co3,  cobalt%f_co3_ion(:,:,1) * cobalt%Rho_0,  &
+    if (cobalt%id_co3os .gt. 0)            &
+        used = g_send_data(cobalt%id_co3os,  cobalt%f_co3_ion(:,:,1) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING: not in spreadsheet
-!    if (cobalt%id_sfc_co3nat .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_co3nat,  cobalt%f_co3_ion(:,:,1) * cobalt%Rho_0,  &
+!    if (cobalt%id_co3natos .gt. 0)            &
+!        used = g_send_data(cobalt%id_co3natos,  cobalt%f_co3_ion(:,:,1) * cobalt%Rho_0,  &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING: not in spreadsheet
-!    if (cobalt%id_sfc_co3abio .gt. 0)            &
-!        used = g_send_data(cobalt%id_sfc_co3abio,  cobalt%f_co3_ion(:,:,1) * cobalt%Rho_0,  &
+!    if (cobalt%id_co3abioos .gt. 0)            &
+!        used = g_send_data(cobalt%id_co3abioos,  cobalt%f_co3_ion(:,:,1) * cobalt%Rho_0,  &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_co3satcalc .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_co3satcalc,  cobalt%co3_sol_calc(:,:,1) * cobalt%Rho_0,  &
+    if (cobalt%id_co3satcalcos .gt. 0)            &
+        used = g_send_data(cobalt%id_co3satcalcos,  cobalt%co3_sol_calc(:,:,1) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_sfc_co3satarag .gt. 0)            &
-        used = g_send_data(cobalt%id_sfc_co3satarag,  cobalt%co3_sol_arag(:,:,1) * cobalt%Rho_0,  &
+    if (cobalt%id_co3sataragos .gt. 0)            &
+        used = g_send_data(cobalt%id_co3sataragos,  cobalt%co3_sol_arag(:,:,1) * cobalt%Rho_0,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
@@ -10587,12 +10866,19 @@ write (stdlogunit, generic_COBALT_nml)
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
+! CHECK2
+! 2017/08/04 jgj added limndiaz - check if we have this term and correct as needed 
+!    if (cobalt%id_limndiaz .gt. 0)            &
+!        used = g_send_data(cobalt%id_limndiaz,  phyto(DIAZ)%no3lim + phyto(LARGE)%nh4lim, &
+!        model_time, rmask = grid_tmask,&
+!        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
     if (cobalt%id_limnpico .gt. 0)            &
         used = g_send_data(cobalt%id_limnpico,  phyto(SMALL)%no3lim + phyto(SMALL)%nh4lim, &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-! CHECK: same as limndiat
+! same as limndiat 
     if (cobalt%id_limnmisc .gt. 0)            &
         used = g_send_data(cobalt%id_limnmisc,  phyto(LARGE)%no3lim + phyto(LARGE)%nh4lim, &
         model_time, rmask = grid_tmask,&
@@ -10614,6 +10900,7 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: same as limirrdiat
+! CAS: yes, that is correct
     if (cobalt%id_limirrmisc .gt. 0)            &
         used = g_send_data(cobalt%id_limirrmisc,  phyto(LARGE)%irrlim,  &
         model_time, rmask = grid_tmask,&
@@ -10635,6 +10922,7 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! CHECK: same as limfediat
+! CAS: yes, that is correct
     if (cobalt%id_limfemisc .gt. 0)            &
         used = g_send_data(cobalt%id_limfemisc,  phyto(LARGE)%felim,  &
         model_time, rmask = grid_tmask,&
@@ -10648,17 +10936,18 @@ write (stdlogunit, generic_COBALT_nml)
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_intpnitrate .gt. 0)            &
-        used = g_send_data(cobalt%id_intpnitrate,  (phyto(DIAZO)%jprod_n_new_100 +  phyto(LARGE)%jprod_n_new_100 +  &
+    if (cobalt%id_intppnitrate .gt. 0)            &
+        used = g_send_data(cobalt%id_intppnitrate,  (phyto(DIAZO)%jprod_n_new_100 +  phyto(LARGE)%jprod_n_new_100 +  &
         phyto(SMALL)%jprod_n_new_100) * cobalt%c_2_n,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: need silim_100 ??
-!    if (cobalt%id_intppdiat .gt. 0)            &
-!        used = g_send_data(cobalt%id_intppdiat,  phyto(LARGE)%jprod_n_100 * phyto(LARGE)%silim * cobalt%c_2_n,  &
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: defined jprod_diat_100, removed extra "p" from idividual group production
+    if (cobalt%id_intppdiat .gt. 0)            &
+        used = g_send_data(cobalt%id_intppdiat,  cobalt%jprod_diat_100 * cobalt%c_2_n,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_intppdiaz .gt. 0)            &
         used = g_send_data(cobalt%id_intppdiaz,  phyto(DIAZO)%jprod_n_100 * cobalt%c_2_n,  &
@@ -10671,22 +10960,26 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: need silim_100 ??
-!    if (cobalt%id_intppmisc .gt. 0)            &
-!        used = g_send_data(cobalt%id_intppmisc,  phyto(LARGE)%jprod_n_100 * (1.0 - phyto(LARGE)%silim) * cobalt%c_2_n,  &
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: can now use jprod_diat_100 to back out misc production
+    if (cobalt%id_intppmisc .gt. 0)            &
+        used = g_send_data(cobalt%id_intppmisc,  (phyto(LARGE)%jprod_n_100 - cobalt%jprod_diat_100)  * cobalt%c_2_n,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: Ask John
+! CAS: I think this is fine
     if (cobalt%id_intpbn .gt. 0)            &
         used = g_send_data(cobalt%id_intpbn,  cobalt%jprod_allphytos_100, &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: add jprod_ptot_100, check units
-!    if (cobalt%id_intpbp .gt. 0)            &
-!        used = g_send_data(cobalt%id_intpbp,  cobalt%jprod_ptot_100 ,  &
-!        model_time, rmask = grid_tmask,&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: I've added juptake_po4_100 in a manner analagous to iron below
+    if (cobalt%id_intpbp .gt. 0)             & 
+        used = g_send_data(cobalt%id_intpbp, (phyto(DIAZO)%juptake_po4_100 +  phyto(LARGE)%juptake_po4_100 +  &
+        phyto(SMALL)%juptake_po4_100),  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: units
     if (cobalt%id_intpbfe .gt. 0)            &
@@ -10696,6 +10989,7 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: units
+! CAS: looks fine 
     if (cobalt%id_intpbsi .gt. 0)            &
         used = g_send_data(cobalt%id_intpbsi,  phyto(LARGE)%juptake_sio4_100, &
         model_time, rmask = grid_tmask(:,:,1),&
@@ -10712,66 +11006,69 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_expc100 .gt. 0)            &
-        used = g_send_data(cobalt%id_expc100,  cobalt%fndet_100 * cobalt%c_2_n,  &
+    if (cobalt%id_epc100 .gt. 0)            &
+        used = g_send_data(cobalt%id_epc100,  cobalt%fndet_100 * cobalt%c_2_n,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_expn100 .gt. 0)            &
-        used = g_send_data(cobalt%id_expn100,  cobalt%fndet_100,   &
+    if (cobalt%id_epn100 .gt. 0)            &
+        used = g_send_data(cobalt%id_epn100,  cobalt%fndet_100,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_expp100 .gt. 0)            &
-        used = g_send_data(cobalt%id_expp100,  cobalt%fpdet_100,   &
+    if (cobalt%id_epp100 .gt. 0)            &
+        used = g_send_data(cobalt%id_epp100,  cobalt%fpdet_100,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_expfe100 .gt. 0)            &
-        used = g_send_data(cobalt%id_expfe100,  cobalt%ffedet_100,   &
+    if (cobalt%id_epfe100 .gt. 0)            &
+        used = g_send_data(cobalt%id_epfe100,  cobalt%ffedet_100,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_expsi100 .gt. 0)            &
-        used = g_send_data(cobalt%id_expsi100,  cobalt%fsidet_100,   &
+    if (cobalt%id_epsi100 .gt. 0)            &
+        used = g_send_data(cobalt%id_epsi100,  cobalt%fsidet_100,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_expcalc100 .gt. 0)            &
-        used = g_send_data(cobalt%id_expcalc100,  cobalt%fcadet_calc_100,   &
+    if (cobalt%id_epcalc100 .gt. 0)            &
+        used = g_send_data(cobalt%id_epcalc100,  cobalt%fcadet_calc_100,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: should be AT 100m 
-    if (cobalt%id_exparag100 .gt. 0)            &
-        used = g_send_data(cobalt%id_exparag100,  cobalt%fcadet_arag_100,   &
+    if (cobalt%id_eparag100 .gt. 0)            &
+        used = g_send_data(cobalt%id_eparag100,  cobalt%fcadet_arag_100,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: Need to sum over k
-!    if (cobalt%id_intdissic .gt. 0)            &
-!        used = g_send_data(cobalt%id_intdissic,  cobalt%tot_layer_int_c,   &
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: should be wc_vert_int_dic?, *12e-3 to go from moles C m-2 to kg C m-2
+    if (cobalt%id_intdic .gt. 0)            &
+        used = g_send_data(cobalt%id_intdic,  cobalt%wc_vert_int_dic*12e-3,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: add tot_layer_int_doc, check units
 ! CHECK: Need to sum over k
-!    if (cobalt%id_intdissoc .gt. 0)            &          
-!        used = g_send_data(cobalt%id_intdissoc,  cobalt%tot_layer_int_doc,   &
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: added wc_vert_int_doc, *12e-3 to go from moles C m-2 to kg C m-2
+    if (cobalt%id_intdoc .gt. 0)            &          
+        used = g_send_data(cobalt%id_intdoc,  cobalt%wc_vert_int_doc*12e-3,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: add tot_layer_int_poc, check units
 ! CHECK: Need to sum over k
-!    if (cobalt%id_intpoc .gt. 0)            &
-!        used = g_send_data(cobalt%id_intpoc,  cobalt%tot_layer_int_poc,   &
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: added wc_vert_int_poc, *12e-3 to go from moles C m-2 to kg C m-2
+    if (cobalt%id_intpoc .gt. 0)            &
+        used = g_send_data(cobalt%id_intpoc,  cobalt%wc_vert_int_poc*12e-3,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_spco2 .gt. 0)            &
         used = g_send_data(cobalt%id_spco2,  cobalt%pco2_csurf * 0.1013,   &
@@ -10840,27 +11137,32 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: icfriver = runoff_flux_dic  + fcased_redis ??
+! CAS: fcased_redis is accounted for elsewhere, just keep runoff
     if (cobalt%id_icfriver .gt. 0)            &
-        used = g_send_data(cobalt%id_icfriver,  cobalt%runoff_flux_dic + cobalt%fcased_redis,  &
+        used = g_send_data(cobalt%id_icfriver,  cobalt%runoff_flux_dic,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: fric = fcased_redis ??
+! CAS: I think this should be fcased_burial
     if (cobalt%id_fric .gt. 0)            &
-        used = g_send_data(cobalt%id_fric,  cobalt%fcased_redis,  &
+        used = g_send_data(cobalt%id_fric,  cobalt%fcased_burial,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING:
-!    if (cobalt%id_ocfriver .gt. 0)            &
-!        used = g_send_data(cobalt%id_ocfriver,  
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: organic nitrogen runoff from rivers*c_2_n ratio
+    if (cobalt%id_ocfriver .gt. 0)            &
+        used = g_send_data(cobalt%id_ocfriver, cobalt%c_2_n* &
+        (cobalt%runoff_flux_ldon+cobalt%runoff_flux_sldon+cobalt%runoff_flux_srdon),&  
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-!    if (cobalt%id_froc .gt. 0)            &
-!        used = g_send_data(cobalt%id_froc, 
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! CAS: equal to ndet burial*c_2_n
+    if (cobalt%id_froc .gt. 0)            &
+        used = g_send_data(cobalt%id_froc,cobalt%c_2_n*cobalt%fndet_burial, & 
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_intpn2 .gt. 0)            &
         used = g_send_data(cobalt%id_intpn2,  cobalt%wc_vert_int_nfix,  &
@@ -10868,14 +11170,16 @@ write (stdlogunit, generic_COBALT_nml)
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: TOPAZ: nongas_source_n=runoff_flux_no3+runoff_flux_nh4 +dry_no3+wet_no3+dry_nh4+wet_nh4+wc_vert_int_nfix
+! CAS: should we include 1) don fluxes from rivers? 2) nh4 fluxes from rivers? 3) nh4 deposition?
     if (cobalt%id_fsn .gt. 0)            &
         used = g_send_data(cobalt%id_fsn,  cobalt%runoff_flux_no3 + cobalt%dry_no3 + cobalt%wet_no3 + cobalt%wc_vert_int_nfix,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! CHECK: TOPAZ: fno3denit_tot=fno3denit_sed+wc_vert_int_jno3denit,  where wc_vert_int_jno3denit=jno3denit_wc*rho_dzt (sum over k)
+! CAS: added burial
     if (cobalt%id_frn .gt. 0)            &
-        used = g_send_data(cobalt%id_frn,  cobalt%fno3denit_sed + cobalt%wc_vert_int_jno3denit,   &
+        used = g_send_data(cobalt%id_frn,  cobalt%fno3denit_sed + cobalt%wc_vert_int_jno3denit + cobalt%fndet_burial, &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
@@ -10989,19 +11293,20 @@ write (stdlogunit, generic_COBALT_nml)
 
 !==============================================================================================================
 ! JGJ 2016/08/08 CMIP6 OcnBgchem day: Marine Biogeochemical daily fields
-! chlos = Sea Surface Total Chlorophyll Mass Concentration - same calculation as id_sfc_chl
-! phycos = Sea Surface Phytoplankton Carbon Concentration - same calculation as id_sfc_phyc
+! chlos = Sea Surface Total Chlorophyll Mass Concentration - in Omon and Oday
+! phycos = Sea Surface Phytoplankton Carbon Concentration - in Omon and Oday
 
-    if (cobalt%id_chlos .gt. 0)            &
-        used = g_send_data(cobalt%id_chlos,  cobalt%f_chl(:,:,1) * cobalt%Rho_0 / 1e9,   &
-        model_time, rmask = grid_tmask(:,:,1),&
-        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+! previously computed
+!    if (cobalt%id_chlos .gt. 0)            &
+!        used = g_send_data(cobalt%id_chlos,  cobalt%f_chl(:,:,1) * cobalt%Rho_0 / 1e9,   &
+!        model_time, rmask = grid_tmask(:,:,1),&
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-    if (cobalt%id_phycos .gt. 0)            &
-        used = g_send_data(cobalt%id_phycos,  (cobalt%p_nlg(:,:,1,tau) + cobalt%p_nsm(:,:,1,tau) +  &
-        cobalt%p_ndi(:,:,1,tau)) * cobalt%c_2_n * cobalt%Rho_0, &
-        model_time, rmask = grid_tmask(:,:,1),&
-        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+!    if (cobalt%id_phycos .gt. 0)            &
+!        used = g_send_data(cobalt%id_phycos,  (cobalt%p_nlg(:,:,1,tau) + cobalt%p_nsm(:,:,1,tau) +  &
+!        cobalt%p_ndi(:,:,1,tau)) * cobalt%c_2_n * cobalt%Rho_0, &
+!        model_time, rmask = grid_tmask(:,:,1),&
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 !==============================================================================================================
 ! 2016/08/15 JGJ: 100m integrals w/o CMOR conversion 
@@ -11068,6 +11373,18 @@ write (stdlogunit, generic_COBALT_nml)
 
 !==============================================================================================================
 
+!
+!  2017/08/07 add checksums for debugging
+!
+    if (debug) then
+      outunit = stdout()
+      write(outunit,*) 'From generic_COBALT: at end of send diagnostcis'
+      write(outunit,*) 'no3 chksum = ',mpp_chksum(cobalt%f_no3(isc:iec,jsc:jec,:))
+      write(outunit,*) 'nh4 chksum = ',mpp_chksum(cobalt%f_nh4(isc:iec,jsc:jec,:))
+      write(outunit,*) ' o2 chksum = ',mpp_chksum(cobalt%f_o2(isc:iec,jsc:jec,:))
+      write(outunit,*) 'dic chksum = ',mpp_chksum(cobalt%p_dic(isc:iec,jsc:jec,:,tau))
+    endif
+!
 
     call mpp_clock_end(id_clock_cobalt_send_diagnostics)
 
@@ -11082,7 +11399,7 @@ write (stdlogunit, generic_COBALT_nml)
   !
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau)
+  !   call generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt)
   !  </TEMPLATE>
   !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
   !   Pointer to the head of generic tracer list.
@@ -11163,9 +11480,10 @@ write (stdlogunit, generic_COBALT_nml)
        enddo; enddo ; !} i, j
 
        if(present(dzt)) then
-         do j = jsc, jec ; do i = isc, iec  !{
-          cobalt%zt(i,j,1) = dzt(i,j,1)
-         enddo; enddo ; !} i, j
+! 2017/08/11 jgj is cobalt type defined/passed here ?
+!        do j = jsc, jec ; do i = isc, iec  !{
+!         cobalt%zt(i,j,1) = dzt(i,j,1)
+!        enddo; enddo ; !} i, j
        elseif (trim(co2_calc) == 'mocsy') then
          call mpp_error(FATAL,"mocsy method of co2_calc needs dzt to be passed to the FMS_ocmip2_co2calc subroutine.")
        endif
@@ -11181,7 +11499,9 @@ write (stdlogunit, generic_COBALT_nml)
             htotal_field(:,:,1),                           &
                                 !Optional In
             co2_calc=trim(co2_calc),                       & 
-            zt=cobalt%zt(:,:,1),                           & 
+            !! jgj 2017/08/11
+            !!zt=cobalt%zt(:,:,1),                           & 
+            zt=dzt(:,:,1),                                 & 
                                 !OUT
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
             pCO2surf=cobalt%pco2_csurf(:,:), &
@@ -11222,6 +11542,7 @@ write (stdlogunit, generic_COBALT_nml)
 
     call g_tracer_get_values(tracer_list,'o2','alpha', o2_alpha ,isd,jsd)
     call g_tracer_get_values(tracer_list,'o2','csurf', o2_csurf ,isd,jsd)
+
     do j=jsc,jec ; do i=isc,iec
        !This calculation needs an input of SST and SSS
        sal = SSS(i,j) ; ST = SST(i,j)
@@ -11291,6 +11612,10 @@ write (stdlogunit, generic_COBALT_nml)
        o2_saturation = (1000.0/22391.6) * grid_tmask(i,j,1) *  & !convert from ml/l to mol m-3
             exp( cobalt%a_0 + cobalt%a_1*ts + cobalt%a_2*ts2 + cobalt%a_3*ts3 + cobalt%a_4*ts4 + cobalt%a_5*ts5 + &
             (cobalt%b_0 + cobalt%b_1*ts + cobalt%b_2*ts2 + cobalt%b_3*ts3 + cobalt%c_0*sal)*sal)
+
+! CHECK2
+! 2017/08/04 added for CMIP6 - but need 3-D field
+!!       o2sat(i,j,1) = o2_saturation
 
        !---------------------------------------------------------------------
        !  Compute the Schmidt number of O2 in seawater using the
@@ -11535,10 +11860,6 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%f_sio4(isd:ied, jsd:jed, 1:nk))       ; cobalt%f_sio4=0.0
     allocate(cobalt%co3_sol_arag(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_arag=0.0
     allocate(cobalt%co3_sol_calc(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_calc=0.0
-    allocate(cobalt%omega_arag(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_arag=0.0
-    allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
-    allocate(cobalt%omegaa(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegaa=0.0
-    allocate(cobalt%omegac(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegac=0.0
     allocate(cobalt%f_chl(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_chl=0.0
     allocate(cobalt%f_co3_ion(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_co3_ion=0.0
     allocate(cobalt%f_htotal(isd:ied, jsd:jed, 1:nk))     ; cobalt%f_htotal=0.0
@@ -11610,6 +11931,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%jprod_cadet_arag(isd:ied, jsd:jed, 1:nk)); cobalt%jprod_cadet_arag=0.0
     allocate(cobalt%jprod_cadet_calc(isd:ied, jsd:jed, 1:nk)); cobalt%jprod_cadet_calc=0.0
     allocate(cobalt%jprod_nh4(isd:ied, jsd:jed, 1:nk))    ; cobalt%jprod_nh4=0.0
+    allocate(cobalt%jprod_nh4_plus_btm(isd:ied, jsd:jed, 1:nk))    ; cobalt%jprod_nh4_plus_btm=0.0
     allocate(cobalt%jprod_po4(isd:ied, jsd:jed, 1:nk))    ; cobalt%jprod_po4=0.0
     allocate(cobalt%det_jzloss_n(isd:ied, jsd:jed, 1:nk)) ; cobalt%det_jzloss_n=0.0
     allocate(cobalt%det_jzloss_p(isd:ied, jsd:jed, 1:nk)) ; cobalt%det_jzloss_p=0.0
@@ -11620,7 +11942,9 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%det_jhploss_fe(isd:ied, jsd:jed, 1:nk)); cobalt%det_jhploss_fe=0.0
     allocate(cobalt%det_jhploss_si(isd:ied, jsd:jed, 1:nk)); cobalt%det_jhploss_si=0.0
     allocate(cobalt%jdiss_cadet_arag(isd:ied, jsd:jed, 1:nk)); cobalt%jdiss_cadet_arag=0.0
+    allocate(cobalt%jdiss_cadet_arag_plus_btm(isd:ied, jsd:jed, 1:nk)); cobalt%jdiss_cadet_arag_plus_btm=0.0
     allocate(cobalt%jdiss_cadet_calc(isd:ied, jsd:jed, 1:nk)); cobalt%jdiss_cadet_calc=0.0
+    allocate(cobalt%jdiss_cadet_calc_plus_btm(isd:ied, jsd:jed, 1:nk)); cobalt%jdiss_cadet_calc_plus_btm=0.0
     allocate(cobalt%jdiss_sidet(isd:ied, jsd:jed, 1:nk))  ; cobalt%jdiss_sidet=0.0
     allocate(cobalt%jremin_ndet(isd:ied, jsd:jed, 1:nk))  ; cobalt%jremin_ndet=0.0
     allocate(cobalt%jremin_pdet(isd:ied, jsd:jed, 1:nk))  ; cobalt%jremin_pdet=0.0
@@ -11629,19 +11953,23 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%jfe_coast(isd:ied, jsd:jed, 1:nk))    ; cobalt%jfe_coast=0.0
     allocate(cobalt%kfe_eq_lig(isd:ied, jsd:jed, 1:nk))   ; cobalt%kfe_eq_lig=0.0
     allocate(cobalt%expkT(isd:ied, jsd:jed, 1:nk))        ; cobalt%expkT=0.0
+    allocate(cobalt%expkreminT(isd:ied, jsd:jed, 1:nk))   ; cobalt%expkreminT=0.0
     allocate(cobalt%hp_temp_lim(isd:ied, jsd:jed, 1:nk))  ; cobalt%hp_temp_lim=0.0
     allocate(cobalt%irr_inst(isd:ied, jsd:jed, 1:nk))     ; cobalt%irr_inst=0.0
     allocate(cobalt%irr_mix(isd:ied, jsd:jed, 1:nk))      ; cobalt%irr_mix=0.0
     allocate(cobalt%jno3denit_wc(isd:ied, jsd:jed, 1:nk)) ; cobalt%jno3denit_wc=0.0
+    allocate(cobalt%jo2resp_wc(isd:ied, jsd:jed, 1:nk))   ; cobalt%jo2resp_wc=0.0
     allocate(cobalt%jnitrif(isd:ied, jsd:jed, 1:nk))      ; cobalt%jnitrif=0.0
+    allocate(cobalt%omega_arag(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_arag=0.0
+    allocate(cobalt%omega_calc(isd:ied, jsd:jed, 1:nk))   ; cobalt%omega_calc=0.0
+    allocate(cobalt%omegaa(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegaa=0.0
+    allocate(cobalt%omegac(isd:ied, jsd:jed, 1:nk))       ; cobalt%omegac=0.0
     allocate(cobalt%tot_layer_int_c(isd:ied, jsd:jed,1:nk))  ; cobalt%tot_layer_int_c=0.0
     allocate(cobalt%tot_layer_int_fe(isd:ied, jsd:jed,1:nk)) ; cobalt%tot_layer_int_fe=0.0
     allocate(cobalt%tot_layer_int_n(isd:ied, jsd:jed, 1:nk)) ; cobalt%tot_layer_int_n=0.0
     allocate(cobalt%tot_layer_int_p(isd:ied, jsd:jed, 1:nk)) ; cobalt%tot_layer_int_p=0.0
     allocate(cobalt%tot_layer_int_si(isd:ied, jsd:jed, 1:nk)); cobalt%tot_layer_int_si=0.0
     allocate(cobalt%total_filter_feeding(isd:ied,jsd:jed,1:nk)); cobalt%total_filter_feeding=0.0
-    allocate(cobalt%net_prim_prod(isd:ied, jsd:jed, 1:nk)); cobalt%net_prim_prod=0.0
-    allocate(cobalt%gross_prim_prod(isd:ied, jsd:jed, 1:nk)); cobalt%gross_prim_prod=0.0
     allocate(cobalt%nlg_diatoms(isd:ied, jsd:jed, 1:nk)); cobalt%nlg_diatoms=0.0
     allocate(cobalt%q_si_2_n_lg_diatoms(isd:ied, jsd:jed, 1:nk)); cobalt%q_si_2_n_lg_diatoms=0.0
     allocate(cobalt%zt(isd:ied, jsd:jed, 1:nk))           ; cobalt%zt=0.0
@@ -11681,6 +12009,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%remoc(isd:ied, jsd:jed, 1:nk))         ; cobalt%remoc=0.0
     allocate(cobalt%tot_layer_int_doc(isd:ied, jsd:jed, 1:nk)); cobalt%tot_layer_int_doc=0.0
     allocate(cobalt%tot_layer_int_poc(isd:ied, jsd:jed, 1:nk)); cobalt%tot_layer_int_poc=0.0
+    allocate(cobalt%tot_layer_int_dic(isd:ied, jsd:jed, 1:nk)); cobalt%tot_layer_int_dic=0.0
     allocate(cobalt%f_alk_int_100(isd:ied, jsd:jed))       ; cobalt%f_alk_int_100=0.0
     allocate(cobalt%f_dic_int_100(isd:ied, jsd:jed))       ; cobalt%f_dic_int_100=0.0
     allocate(cobalt%f_din_int_100(isd:ied, jsd:jed))       ; cobalt%f_din_int_100=0.0
@@ -11696,6 +12025,8 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%jprod_ptot_100(isd:ied, jsd:jed))      ; cobalt%jprod_ptot_100=0.0
     allocate(cobalt%wc_vert_int_c(isd:ied, jsd:jed))       ; cobalt%wc_vert_int_c=0.0
     allocate(cobalt%wc_vert_int_dic(isd:ied, jsd:jed))        ; cobalt%wc_vert_int_dic=0.0
+    allocate(cobalt%wc_vert_int_doc(isd:ied, jsd:jed))        ; cobalt%wc_vert_int_doc=0.0
+    allocate(cobalt%wc_vert_int_poc(isd:ied, jsd:jed))        ; cobalt%wc_vert_int_poc=0.0
     allocate(cobalt%wc_vert_int_jfe_coast(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jfe_coast=0.0
     allocate(cobalt%wc_vert_int_jno3denit(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jno3denit=0.0
     allocate(cobalt%wc_vert_int_nfix(isd:ied, jsd:jed))       ; cobalt%wc_vert_int_nfix=0.0
@@ -11711,12 +12042,14 @@ write (stdlogunit, generic_COBALT_nml)
        allocate(phyto(n)%jexuloss_n_100(isd:ied,jsd:jed))   ; phyto(n)%jexuloss_n_100  = 0.0
        allocate(phyto(n)%f_n_100(isd:ied,jsd:jed))          ; phyto(n)%f_n_100  = 0.0
        allocate(phyto(n)%juptake_fe_100(isd:ied,jsd:jed))   ; phyto(n)%juptake_fe_100  = 0.0
+       allocate(phyto(n)%juptake_po4_100(isd:ied,jsd:jed))  ; phyto(n)%juptake_po4_100  = 0.0
     enddo
     allocate(phyto(DIAZO)%jprod_n_n2_100(isd:ied,jsd:jed)); phyto(DIAZO)%jprod_n_n2_100 = 0.0
     allocate(phyto(SMALL)%jvirloss_n_100(isd:ied,jsd:jed))  ; phyto(SMALL)%jvirloss_n_100 = 0.0
     allocate(phyto(SMALL)%jaggloss_n_100(isd:ied,jsd:jed))  ; phyto(SMALL)%jaggloss_n_100 = 0.0
     allocate(phyto(LARGE)%jaggloss_n_100(isd:ied,jsd:jed))  ; phyto(LARGE)%jaggloss_n_100 = 0.0
     allocate(cobalt%jprod_allphytos_100(isd:ied,jsd:jed))   ; cobalt%jprod_allphytos_100 = 0.0
+    allocate(cobalt%jprod_diat_100(isd:ied,jsd:jed))   ; cobalt%jprod_diat_100 = 0.0
     allocate(phyto(LARGE)%juptake_sio4_100(isd:ied,jsd:jed)) ; phyto(LARGE)%juptake_sio4_100 = 0.0
 
    do n = 1, NUM_ZOO
@@ -11790,16 +12123,34 @@ write (stdlogunit, generic_COBALT_nml)
       allocate(cobalt%c14o2_alpha  (isd:ied, jsd:jed));        cobalt%c14o2_alpha=0.0
       allocate(cobalt%b_di14c      (isd:ied, jsd:jed));        cobalt%b_di14c=0.0
    endif                                                   !RADIOCARBON>>
-!   if (do_fan_dunne_fe) then  !{
-      allocate(cobalt%f_fec(isd:ied, jsd:jed, 1:nk));        cobalt%f_fec=0.0
-      allocate(cobalt%f_fe2(isd:ied, jsd:jed, 1:nk));        cobalt%f_fe2=0.0
-      allocate(cobalt%f_fe3(isd:ied, jsd:jed, 1:nk));        cobalt%f_fe3=0.0
-      allocate(cobalt%f_h2o2(isd:ied, jsd:jed, 1:nk));       cobalt%f_h2o2=0.0
-      allocate(cobalt%jfec(isd:ied, jsd:jed, 1:nk));         cobalt%jfec=0.0
-      allocate(cobalt%jh2o2(isd:ied, jsd:jed, 1:nk));        cobalt%jh2o2=0.0
-      allocate(cobalt%jprod_fec(isd:ied, jsd:jed, 1:nk));    cobalt%jprod_fec=0.0
-      allocate(cobalt%jprod_h2o2(isd:ied, jsd:jed, 1:nk));   cobalt%jprod_h2o2=0.0
-!   endif       
+      allocate(cobalt%runoff_flux_alk(isd:ied, jsd:jed));      cobalt%runoff_flux_alk=0.0
+      allocate(cobalt%runoff_flux_dic(isd:ied, jsd:jed));      cobalt%runoff_flux_dic=0.0
+      allocate(cobalt%runoff_flux_di14c(isd:ied, jsd:jed));    cobalt%runoff_flux_di14c=0.0
+      allocate(cobalt%runoff_flux_lith(isd:ied, jsd:jed));     cobalt%runoff_flux_lith=0.0
+      allocate(cobalt%runoff_flux_fed(isd:ied, jsd:jed));      cobalt%runoff_flux_fed=0.0
+      allocate(cobalt%runoff_flux_no3(isd:ied, jsd:jed));      cobalt%runoff_flux_no3=0.0
+      allocate(cobalt%runoff_flux_ldon(isd:ied, jsd:jed));     cobalt%runoff_flux_ldon=0.0
+      allocate(cobalt%runoff_flux_sldon(isd:ied, jsd:jed));    cobalt%runoff_flux_sldon=0.0
+      allocate(cobalt%runoff_flux_srdon(isd:ied, jsd:jed));    cobalt%runoff_flux_srdon=0.0
+      allocate(cobalt%runoff_flux_ndet(isd:ied, jsd:jed));     cobalt%runoff_flux_ndet=0.0
+      allocate(cobalt%runoff_flux_po4(isd:ied, jsd:jed));      cobalt%runoff_flux_po4=0.0
+      allocate(cobalt%runoff_flux_ldop(isd:ied, jsd:jed));     cobalt%runoff_flux_ldop=0.0
+      allocate(cobalt%runoff_flux_sldop(isd:ied, jsd:jed));    cobalt%runoff_flux_sldop=0.0
+      allocate(cobalt%runoff_flux_srdop(isd:ied, jsd:jed));    cobalt%runoff_flux_srdop=0.0
+      allocate(cobalt%dry_fed(isd:ied, jsd:jed));              cobalt%dry_fed=0.0
+      allocate(cobalt%wet_fed(isd:ied, jsd:jed));              cobalt%wet_fed=0.0
+      allocate(cobalt%dry_lith(isd:ied, jsd:jed));             cobalt%dry_lith=0.0
+      allocate(cobalt%wet_lith(isd:ied, jsd:jed));             cobalt%wet_lith=0.0
+      allocate(cobalt%dry_no3(isd:ied, jsd:jed));              cobalt%dry_no3=0.0
+      allocate(cobalt%wet_no3(isd:ied, jsd:jed));              cobalt%wet_no3=0.0
+      allocate(cobalt%dry_nh4(isd:ied, jsd:jed));              cobalt%dry_nh4=0.0
+      allocate(cobalt%wet_nh4(isd:ied, jsd:jed));              cobalt%wet_nh4=0.0
+      allocate(cobalt%dry_po4(isd:ied, jsd:jed));              cobalt%dry_po4=0.0
+      allocate(cobalt%wet_po4(isd:ied, jsd:jed));              cobalt%wet_po4=0.0
+      allocate(cobalt%stf_gas_dic(isd:ied, jsd:jed));          cobalt%stf_gas_dic=0.0
+      allocate(cobalt%stf_gas_o2(isd:ied, jsd:jed));           cobalt%stf_gas_o2=0.0
+      allocate(cobalt%deltap_dic(isd:ied, jsd:jed));           cobalt%deltap_dic=0.0
+      allocate(cobalt%deltap_o2(isd:ied, jsd:jed));            cobalt%deltap_o2=0.0
 
 
   end subroutine user_allocate_arrays
@@ -11854,6 +12205,7 @@ write (stdlogunit, generic_COBALT_nml)
        deallocate(phyto(n)%mu_mix)
        deallocate(phyto(n)%agg_lim)
        deallocate(phyto(n)%juptake_fe_100)
+       deallocate(phyto(n)%juptake_po4_100)
     enddo
     do n = 2, NUM_PHYTO
        deallocate(phyto(n)%nh4lim)
@@ -12004,6 +12356,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%jprod_cadet_arag)  
     deallocate(cobalt%jprod_cadet_calc)  
     deallocate(cobalt%jprod_nh4)  
+    deallocate(cobalt%jprod_nh4_plus_btm)  
     deallocate(cobalt%jprod_po4)  
     deallocate(cobalt%det_jzloss_n)  
     deallocate(cobalt%det_jzloss_p)  
@@ -12014,7 +12367,9 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%det_jhploss_fe)  
     deallocate(cobalt%det_jhploss_si)  
     deallocate(cobalt%jdiss_cadet_arag)  
+    deallocate(cobalt%jdiss_cadet_arag_plus_btm)  
     deallocate(cobalt%jdiss_cadet_calc)  
+    deallocate(cobalt%jdiss_cadet_calc_plus_btm)  
     deallocate(cobalt%jdiss_sidet)  
     deallocate(cobalt%jremin_ndet)  
     deallocate(cobalt%jremin_pdet)  
@@ -12023,6 +12378,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%jfe_coast)  
     deallocate(cobalt%kfe_eq_lig)  
     deallocate(cobalt%expkT)  
+    deallocate(cobalt%expkreminT) 
     deallocate(cobalt%hp_temp_lim)  
     deallocate(cobalt%hp_jingest_n)
     deallocate(cobalt%hp_jingest_p)
@@ -12031,6 +12387,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%irr_inst)  
     deallocate(cobalt%irr_mix)  
     deallocate(cobalt%jno3denit_wc)  
+    deallocate(cobalt%jo2resp_wc)  
     deallocate(cobalt%jnitrif)  
     deallocate(cobalt%omega_arag)  
     deallocate(cobalt%omega_calc)  
@@ -12042,8 +12399,6 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%tot_layer_int_p)  
     deallocate(cobalt%tot_layer_int_si)  
     deallocate(cobalt%total_filter_feeding)  
-    deallocate(cobalt%net_prim_prod)  
-    deallocate(cobalt%gross_prim_prod)  
     deallocate(cobalt%nlg_diatoms)  
     deallocate(cobalt%q_si_2_n_lg_diatoms)  
     deallocate(cobalt%zt)  
@@ -12055,6 +12410,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%remoc)  
     deallocate(cobalt%tot_layer_int_doc)  
     deallocate(cobalt%tot_layer_int_poc)  
+    deallocate(cobalt%tot_layer_int_dic)
 
 !==============================================================================================================
 
@@ -12087,6 +12443,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%fndet_burial)  
     deallocate(cobalt%fpdet_burial)
     deallocate(cobalt%jprod_allphytos_100)
+    deallocate(cobalt%jprod_diat_100)
     deallocate(cobalt%hp_jingest_n_100) 
     deallocate(cobalt%hp_jremin_n_100)  
     deallocate(cobalt%hp_jprod_ndet_100)  
@@ -12132,6 +12489,8 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%jprod_ptot_100)
     deallocate(cobalt%wc_vert_int_c)  
     deallocate(cobalt%wc_vert_int_dic)  
+    deallocate(cobalt%wc_vert_int_doc)
+    deallocate(cobalt%wc_vert_int_poc)  
     deallocate(cobalt%wc_vert_int_jfe_coast)  
     deallocate(cobalt%wc_vert_int_jno3denit)  
     deallocate(cobalt%wc_vert_int_nfix)  
@@ -12188,16 +12547,34 @@ write (stdlogunit, generic_COBALT_nml)
       deallocate(cobalt%c14o2_csurf)  
       deallocate(cobalt%b_di14c )
     endif                                                   !RADIOCARBON>>
-!    if (do_fan_dunne_fe) then  !{
-      deallocate(cobalt%f_fec)  
-      deallocate(cobalt%f_fe2)  
-      deallocate(cobalt%f_fe3)  
-      deallocate(cobalt%f_h2o2)  
-      deallocate(cobalt%jfec)  
-      deallocate(cobalt%jh2o2 )
-      deallocate(cobalt%jprod_fec)  
-      deallocate(cobalt%jprod_h2o2)  
-!    endif       
+      deallocate(cobalt%runoff_flux_alk)
+      deallocate(cobalt%runoff_flux_dic)
+      deallocate(cobalt%runoff_flux_di14c)
+      deallocate(cobalt%runoff_flux_lith)
+      deallocate(cobalt%runoff_flux_fed)
+      deallocate(cobalt%runoff_flux_no3)
+      deallocate(cobalt%runoff_flux_ldon)
+      deallocate(cobalt%runoff_flux_sldon)
+      deallocate(cobalt%runoff_flux_srdon)
+      deallocate(cobalt%runoff_flux_ndet)
+      deallocate(cobalt%runoff_flux_po4)
+      deallocate(cobalt%runoff_flux_ldop)
+      deallocate(cobalt%runoff_flux_sldop)
+      deallocate(cobalt%runoff_flux_srdop)
+      deallocate(cobalt%dry_fed)
+      deallocate(cobalt%wet_fed)
+      deallocate(cobalt%dry_lith)
+      deallocate(cobalt%wet_lith)
+      deallocate(cobalt%dry_no3)
+      deallocate(cobalt%wet_no3)
+      deallocate(cobalt%dry_nh4)
+      deallocate(cobalt%wet_nh4)
+      deallocate(cobalt%dry_po4)
+      deallocate(cobalt%wet_po4)
+      deallocate(cobalt%stf_gas_dic)
+      deallocate(cobalt%stf_gas_o2)
+      deallocate(cobalt%deltap_dic)
+      deallocate(cobalt%deltap_o2)
 
   end subroutine user_deallocate_arrays
 
