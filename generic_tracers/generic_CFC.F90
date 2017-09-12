@@ -54,6 +54,9 @@ module generic_CFC
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get
   use g_tracer_utils, only : g_tracer_send_diag, g_tracer_get_values  
 
+  use g_tracer_utils, only : g_diag_type, g_diag_field_add
+  use g_tracer_utils, only : register_diag_field=>g_register_diag_field
+  use g_tracer_utils, only : g_send_data
 
   implicit none ; private
 
@@ -63,6 +66,7 @@ module generic_CFC
   public do_generic_CFC
   public generic_CFC_register
   public generic_CFC_init
+  public generic_CFC_register_diag
   public generic_CFC_update_from_coupler
   public generic_CFC_update_from_source
   public generic_CFC_set_boundary_values
@@ -73,6 +77,7 @@ module generic_CFC
   logical, save :: do_generic_CFC = .false.
 
   real, parameter :: epsln=1.0e-30
+  real, parameter :: missing_value1=-1.0e+10
 
   !
   !This type contains all the parameters and arrays used in this module.
@@ -108,6 +113,29 @@ module generic_CFC
 
 
   type(generic_CFC_params) :: param
+
+  !An auxiliary type for storing varible names
+  type, public :: vardesc
+     character(len=fm_string_len) :: name     ! The variable name in a NetCDF file.
+     character(len=fm_string_len) :: longname ! The long name of that variable.
+     character(len=1)  :: hor_grid ! The hor. grid:  u, v, h, q, or 1.
+     character(len=1)  :: z_grid   ! The vert. grid:  L, i, or 1.
+     character(len=1)  :: t_grid   ! The time description: s, a, m, or 1.
+     character(len=fm_string_len) :: units    ! The dimensions of the variable.
+     character(len=1)  :: mem_size ! The size in memory: d or f.
+  end type vardesc
+
+  type generic_CFC_type
+    integer :: &
+      id_fgcfc11      = -1, &
+      id_fgcfc12      = -1
+    real, dimension (:,:), pointer :: &
+      stf_gas_cfc11, &
+      stf_gas_cfc12
+
+  end type generic_CFC_type
+
+  type(generic_CFC_type) :: cfc
 
 contains
 
@@ -153,6 +181,44 @@ contains
     !    call user_allocate_arrays !None for CFC module currently
 
   end subroutine generic_CFC_init
+
+  !   Register diagnostic fields to be used in this module.
+  !   Note that the tracer fields are automatically registered in user_add_tracers
+  !   User adds only diagnostics for fields that are not a member of g_tracer_type
+  !
+  subroutine generic_CFC_register_diag(diag_list)
+    type(g_diag_type), pointer :: diag_list
+    type(vardesc)  :: vardesc_temp
+    integer        :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau, axes(3)
+    type(time_type):: init_time
+    character(len=fm_string_len)          :: cmor_field_name
+    character(len=fm_string_len)          :: cmor_long_name
+    character(len=fm_string_len)          :: cmor_units
+    character(len=fm_string_len)          :: cmor_standard_name
+!    real                                  :: conversion
+
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes=axes,init_time=init_time)
+
+    !   The following vardesc types contain a package of metadata about each tracer,
+    ! including, in order, the following elements: name; longname; horizontal
+    ! staggering ('h') for collocation with thickness points ; vertical staggering
+    ! ('L') for a layer variable ; temporal staggering ('s' for snapshot) ; units ;
+    ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
+    ! 64-bit doubles). For most tracers, only the name, longname and units should
+    ! be changed.
+
+    vardesc_temp = vardesc("fgcfc11","Surface Downward CFC11 flux",'h','1','s','mol sec-1 m-2','f')
+    cfc%id_fgcfc11 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_downward_mole_flux_of_cfc11")
+
+    vardesc_temp = vardesc("fgcfc12","Surface Downward CFC12 flux",'h','1','s','mol sec-1 m-2','f')
+    cfc%id_fgcfc12 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_downward_mole_flux_of_cfc12")
+
+  end subroutine generic_CFC_register_diag
+
 
   subroutine user_allocate_arrays
     !Allocate all the private arrays.
@@ -292,33 +358,38 @@ contains
     !and provide the corresponding parameters array
     !methods: flux_gas,flux_runoff,flux_wetdep,flux_drydep  
     !
-    !prog_tracers: cfc_11,cfc_12 
+    !prog_tracers: cfc11,cfc12 
     !diag_tracers: none
     !
-    !cfc_12
+    !cfc12
     call g_tracer_add(tracer_list,package_name,&
-         name       = 'cfc_12',               &
-         longname   = 'cfc_12 Concentration',          &
+         name       = 'cfc12',               &
+         longname   = 'Moles Per Unit Mass of CFC-12 in sea water',          &
          units      = 'mol/kg',                        &
          prog       = .true.,                          &
-         requires_src_info  = .false.,                  &
+         requires_src_info  = .false.,                 &
          flux_gas       = .true.,                      &
          flux_gas_type  = 'air_sea_gas_flux_generic',  &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
-         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
+         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc', &
+         standard_name = "mole_concentration_of_cfc12_in_sea_water", &
+         diag_field_units = 'mol m-3', &
+         diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
-    !g_cfc_11
+    !cfc11
     call g_tracer_add(tracer_list,package_name,        &
-         name       = 'cfc_11',                        &
-         longname   = 'cfc_11 Concentration',          &
+         name       = 'cfc11',                        &
+         longname   = 'Moles Per Unit Mass of CFC-11 in sea water',          &
          units      = 'mol/kg',                        &
          prog       = .true.,                          &
-         requires_src_info  = .false.,                  &
+         requires_src_info  = .false.,                 &
          flux_gas       = .true.,                      &
          flux_gas_type  = 'air_sea_gas_flux_generic',  &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
-         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc' )
-
+         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc', &
+         standard_name = "mole_concentration_of_cfc11_in_sea_water", &
+         diag_field_units = 'mol m-3', &
+         diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
 
   end subroutine user_add_tracers
@@ -356,11 +427,40 @@ contains
   !   Currently an empty stub for CFCs.
   !  </DESCRIPTION>
   ! </SUBROUTINE>
-  subroutine generic_CFC_update_from_source(tracer_list)
+  subroutine generic_CFC_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+                                            ilb,jlb,tau,dt,grid_dat,model_time)
+
     type(g_tracer_type), pointer :: tracer_list
-    !
-    !No source update for CFC's currently exit in code.
-    !
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt,dzt
+    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
+    integer,                        intent(in) :: ilb,jlb,tau
+    real,                           intent(in) :: dt
+    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat
+    type(time_type),                intent(in) :: model_time
+
+    character(len=fm_string_len), parameter :: sub_name = 'generic_SF6_update_from_source'
+    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau 
+    real, dimension(:,:,:) ,pointer :: grid_tmask
+    integer, dimension(:,:),pointer :: mask_coast, grid_kmt
+
+    logical :: used, first
+
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
+         grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
+
+    call g_tracer_get_pointer(tracer_list,'cfc11','stf_gas',cfc%stf_gas_cfc11)
+    call g_tracer_get_pointer(tracer_list,'cfc12','stf_gas',cfc%stf_gas_cfc12)
+
+    if (cfc%id_fgcfc11 .gt. 0)            &
+        used = g_send_data(cfc%id_fgcfc11,  cfc%stf_gas_cfc11,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (cfc%id_fgcfc12 .gt. 0)            &
+        used = g_send_data(cfc%id_fgcfc12,  cfc%stf_gas_cfc12,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
     return
   end subroutine generic_CFC_update_from_source
 
@@ -404,8 +504,8 @@ contains
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: conv_fac,sal,ta,SST,alpha_11,alpha_12,sc_11,sc_12
     real, dimension(:,:,:)  ,pointer  :: grid_tmask
-    real, dimension(:,:,:,:), pointer :: g_cfc_11_field,g_cfc_12_field
-    real, dimension(:,:), ALLOCATABLE :: g_cfc_11_alpha,g_cfc_11_csurf,g_cfc_12_alpha,g_cfc_12_csurf
+    real, dimension(:,:,:,:), pointer :: g_cfc11_field,g_cfc12_field
+    real, dimension(:,:), ALLOCATABLE :: g_cfc11_alpha,g_cfc11_csurf,g_cfc12_alpha,g_cfc12_csurf
     real, dimension(:,:), ALLOCATABLE :: sc_no_11,sc_no_12
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_CFC_set_boundary_values'
@@ -421,13 +521,13 @@ contains
     !
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask) 
 
-    call g_tracer_get_pointer(tracer_list,'cfc_11','field',g_cfc_11_field)
-    call g_tracer_get_pointer(tracer_list,'cfc_12','field',g_cfc_12_field)
+    call g_tracer_get_pointer(tracer_list,'cfc11','field',g_cfc11_field)
+    call g_tracer_get_pointer(tracer_list,'cfc12','field',g_cfc12_field)
 
-    allocate(g_cfc_11_alpha(isd:ied, jsd:jed)); g_cfc_11_alpha=0.0
-    allocate(g_cfc_11_csurf(isd:ied, jsd:jed)); g_cfc_11_csurf=0.0
-    allocate(g_cfc_12_alpha(isd:ied, jsd:jed)); g_cfc_12_alpha=0.0
-    allocate(g_cfc_12_csurf(isd:ied, jsd:jed)); g_cfc_12_csurf=0.0
+    allocate(g_cfc11_alpha(isd:ied, jsd:jed)); g_cfc11_alpha=0.0
+    allocate(g_cfc11_csurf(isd:ied, jsd:jed)); g_cfc11_csurf=0.0
+    allocate(g_cfc12_alpha(isd:ied, jsd:jed)); g_cfc12_alpha=0.0
+    allocate(g_cfc12_csurf(isd:ied, jsd:jed)); g_cfc12_csurf=0.0
     allocate(sc_no_11(isd:ied, jsd:jed))
     allocate(sc_no_12(isd:ied, jsd:jed))
 
@@ -508,13 +608,13 @@ contains
        ! In 'ocmip2_generic' atmos_ocean_fluxes.F90 coupler formulation,
        ! the schmidt number is carried in explicitly
        !
-       g_cfc_11_alpha(i,j) = alpha_11              
+       g_cfc11_alpha(i,j) = alpha_11              
 
-       g_cfc_11_csurf(i,j) = g_cfc_11_field(i,j,1,taum1) *  param%Rho_0
+       g_cfc11_csurf(i,j) = g_cfc11_field(i,j,1,taum1) *  param%Rho_0
 
-       g_cfc_12_alpha(i,j) = alpha_12              
+       g_cfc12_alpha(i,j) = alpha_12              
 
-       g_cfc_12_csurf(i,j) = g_cfc_12_field(i,j,1,taum1) *  param%Rho_0
+       g_cfc12_csurf(i,j) = g_cfc12_field(i,j,1,taum1) *  param%Rho_0
  
     enddo; enddo
     !=============
@@ -524,15 +624,15 @@ contains
     !
     !Set %csurf and %alpha for these tracers. This will mark them for sending fluxes to coupler
     !
-    call g_tracer_set_values(tracer_list,'cfc_11','alpha',g_cfc_11_alpha,isd,jsd)
-    call g_tracer_set_values(tracer_list,'cfc_11','csurf',g_cfc_11_csurf,isd,jsd)
-    call g_tracer_set_values(tracer_list,'cfc_11','sc_no',sc_no_11,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc11','alpha',g_cfc11_alpha,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc11','csurf',g_cfc11_csurf,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc11','sc_no',sc_no_11,isd,jsd)
 
-    call g_tracer_set_values(tracer_list,'cfc_12','alpha',g_cfc_12_alpha,isd,jsd)
-    call g_tracer_set_values(tracer_list,'cfc_12','csurf',g_cfc_12_csurf,isd,jsd)
-    call g_tracer_set_values(tracer_list,'cfc_12','sc_no',sc_no_12,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc12','alpha',g_cfc12_alpha,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc12','csurf',g_cfc12_csurf,isd,jsd)
+    call g_tracer_set_values(tracer_list,'cfc12','sc_no',sc_no_12,isd,jsd)
 
-    deallocate(g_cfc_11_alpha,g_cfc_11_csurf,g_cfc_12_alpha,g_cfc_12_csurf,sc_no_11,sc_no_12)
+    deallocate(g_cfc11_alpha,g_cfc11_csurf,g_cfc12_alpha,g_cfc12_csurf,sc_no_11,sc_no_12)
 
   end subroutine generic_CFC_set_boundary_values
 
