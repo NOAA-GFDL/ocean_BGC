@@ -338,15 +338,15 @@ contains
 
     stdoutunit=stdout();stdlogunit=stdlog()
 
-    #ifdef INTERNAL_FILE_NML
+#ifdef INTERNAL_FILE_NML
     read (input_nml_file, nml=generic_abiotic_nml, iostat=io_status)
     ierr = check_nml_error(io_status,'generic_abiotic_nml')
-    #else
+#else
     ioun = open_namelist_file()
     read  (ioun, generic_abiotic_nml,iostat=io_status)
     ierr = check_nml_error(io_status,'generic_abiotic_nml')
     call close_file (ioun)
-    #endif
+#endif
     
     write (stdoutunit,'(/)')
     write (stdoutunit, generic_abiotic_nml)

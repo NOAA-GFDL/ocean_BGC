@@ -85,15 +85,15 @@ subroutine read_mocsy_namelist()
     integer :: ioun, ierr, io_status, stdoutunit, stdlogunit
     stdoutunit=stdout();stdlogunit=stdlog()
 
-    #ifdef INTERNAL_FILE_NML
+#ifdef INTERNAL_FILE_NML
     read (input_nml_file, nml=mocsy_nml, iostat=io_status)
     ierr = check_nml_error(io_status,'mocsy_nml')
-    #else
+#else
     ioun = open_namelist_file()
     read  (ioun, mocsy_nml,iostat=io_status)
     ierr = check_nml_error(io_status,'mocsy_nml')
     call close_file (ioun)
-    #endif
+#endif
     
     write (stdoutunit,'(/)')
     write (stdoutunit, mocsy_nml)
