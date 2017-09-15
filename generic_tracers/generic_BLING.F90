@@ -4351,7 +4351,7 @@ write (stdlogunit, generic_bling_nml)
 
 ! CHECK: this is using ntau=1
     if (bling%id_ph .gt. 0)                                                      &
-        used = g_send_data(bling%id_ph,  log10(bling%f_htotal + epsln) * -1.0,           &
+        used = g_send_data(bling%id_ph,  log10(bling%f_htotal + epsln) * (-1.0),           &
         model_time, rmask = grid_tmask,                                          &
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -4547,7 +4547,7 @@ write (stdlogunit, generic_bling_nml)
 
 ! CHECK: this is using ntau=1
     if (bling%id_phos .gt. 0)                                                  &
-        used = g_send_data(bling%id_phos,  log10(bling%f_htotal(:,:,1) + epsln) * -1.0, &
+        used = g_send_data(bling%id_phos,  log10(bling%f_htotal(:,:,1) + epsln) * (-1.0), &
         model_time, rmask = grid_tmask(:,:,1),                                   &
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 

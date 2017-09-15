@@ -10211,7 +10211,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK: this is using ntau=1
     if (cobalt%id_ph .gt. 0)            &
-        used = g_send_data(cobalt%id_ph,  log10(cobalt%f_htotal) * -1.0,       &
+        used = g_send_data(cobalt%id_ph,  log10(cobalt%f_htotal) * (-1.0),       &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10692,7 +10692,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK: this is using ntau=1
     if (cobalt%id_phos .gt. 0)            &
-        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)) * (-1.0),       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
