@@ -3746,6 +3746,12 @@ contains
             verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
             cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
             x_cell_method, y_cell_method, v_cell_method)
+    elseif(size(axes) .eq. 1) then
+       g_register_diag_field = register_diag_field_MOM(trim(module_name), field_name, diag_CS_ptr%axesTi, init_time,&
+            long_name, units, MOM_missing_value, range, mask_variant, standard_name,      &
+            verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
+            cmor_long_name, cmor_units, cmor_standard_name, cell_methods, &
+            x_cell_method, y_cell_method, v_cell_method)
     endif
 #else
     if(present(cmor_field_name)) then
