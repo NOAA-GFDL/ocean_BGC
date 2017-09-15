@@ -86,6 +86,7 @@
 !   to both supply sufficient organic matter remineralization to the Pacific nutricline
 !   and prevent excessive supply of organic matter to the deep Pacific sea floor.
 ! Added saturation state dependence of Calcite formation.
+! Added ballast protection by lithogenic material
 !
 !
 !</DESCRIPTION>
@@ -294,6 +295,7 @@ namelist /generic_bling_nml/ co2_calc, do_14c, do_carbon, do_carbon_pre, &
           rho_dense,        &                  ! Deep boundary density for exposure tracers
           rho_light,        &                  ! Shallow boundary density for exposure tracers
           rpcaco3,          &                  ! Ballast protection ratio by CaCO3
+          rplith,           &                  ! Ballast protection ratio by Lithogenic material
           lith_flux,        &                  ! Seafloor flux of lithogenic material (global constant)
           thetamax_hi,      &                  ! Maximum Chl:C ratio when iron-replete
           thetamax_lo,      &                  ! Maximum Chl:C ratio when iron-limited
@@ -2075,6 +2077,7 @@ write (stdlogunit, generic_bling_nml)
     ! Archer (2002)
     !
     call g_tracer_add_param('rpcaco3', bling%rpcaco3, 0.070/12/106.0*100)        ! mol P mol Ca-1
+    call g_tracer_add_param('rplith',  bling%rplith,  0.065/12.0/106.0)          ! mol P g lith-1
     !
     ! Add maximum remineralization length scale for stability
     !
@@ -3290,7 +3293,8 @@ write (stdlogunit, generic_bling_nml)
         (bling%f_o2(i,j,1) /  (bling%k_o2 + bling%f_o2(i,j,1)) * (1. -     &
         bling%remin_min)+ bling%remin_min) / (bling%wsink(i,j,1) + epsln) *&
         max(bling%inv_z_min, (bling%jpop(i,j,1) * rho_dzt(i,j,1) -         &
-        bling%rpcaco3 * bling%fcaco3(i,j,1)) / (bling%jpop(i,j,1) *        &
+        bling%rpcaco3 * bling%fcaco3(i,j,1) - bling%rplith *               &
+        bling%lith_flux / spery) / (bling%jpop(i,j,1) *                    &
         rho_dzt(i,j,1) + epsln) * bling%zt(i,j,1) / (bling%zt(i,j,1) +     &
         bling%z_bact))
 
@@ -3313,8 +3317,9 @@ write (stdlogunit, generic_bling_nml)
         (bling%f_o2(i,j,k) / (bling%k_o2 + bling%f_o2(i,j,k)) * (1. -      &
         bling%remin_min)+ bling%remin_min) / (bling%wsink(i,j,k) + epsln) *&
         max(bling%inv_z_min, (bling%fpop(i,j,k-1) - bling%rpcaco3 *        &
-        bling%fcaco3(i,j,k)) / (bling%fpop(i,j,k-1) + epsln) *             &
-         bling%zt(i,j,k) / (bling%zt(i,j,k) + bling%z_bact))
+        bling%fcaco3(i,j,k) - bling%rplith * bling%lith_flux / spery) /    &
+        (bling%fpop(i,j,k-1) + epsln) * bling%zt(i,j,k) /                  &
+        (bling%zt(i,j,k) + bling%z_bact))
 
       bling%fpop(i,j,k) = (bling%fpop(i,j,k-1) +                           &
         bling%jpop(i,j,k) * rho_dzt(i,j,k)) /                              &
