@@ -78,12 +78,18 @@ module generic_SF6
   !nnz: Find out about the timing overhead for using type%x rather than x
 
   type generic_SF6_params
+     real :: d1, d2, d3, d4   ! Coefficients in the calculation of the
+                              ! SF6 solubility, in units of ND, K-1, log(K)^-1, K-2.
+
+     real :: e1, e2, e3       ! More coefficients in the calculation of the 
+                              ! SF6 solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+
      real :: sA, sB, sC, sD, sE   ! Coefficients in the calculation of SF6
                                   ! Schmidt number, in units of ND, degC-1, degC-2, degC-3.
-     real :: A1, A2, A3           ! Coefficients in the calculation of SF6
-                                  ! solubility, in units of ND, K-1, log(K)^-1.
-     real :: B1, B2, B3           ! More coefficients in the calculation of SF6
-                                  ! solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+    !real :: A1, A2, A3           ! Coefficients in the calculation of SF6
+    !                             ! solubility, in units of ND, K-1, log(K)^-1.
+    !real :: B1, B2, B3           ! More coefficients in the calculation of SF6
+    !                             ! solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
       real :: Rho_0
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
@@ -237,12 +243,25 @@ contains
     !
     ! NOTE: Constants below DO NOT match those in Orr et al. 2017 GMDD
     !-----------------------------------------------------------------------
-    call g_tracer_add_param('A1', param%A1, -96.5975)
-    call g_tracer_add_param('A2', param%A2,  139.883)
-    call g_tracer_add_param('A3', param%A3,  37.8193)
-    call g_tracer_add_param('B1', param%B1,  0.0310693)
-    call g_tracer_add_param('B2', param%B2, -0.0356385)
-    call g_tracer_add_param('B3', param%B3,  0.00743254)
+    !call g_tracer_add_param('A1', param%A1, -96.5975)
+    !call g_tracer_add_param('A2', param%A2,  139.883)
+    !call g_tracer_add_param('A3', param%A3,  37.8193)
+    !call g_tracer_add_param('B1', param%B1,  0.0310693)
+    !call g_tracer_add_param('B2', param%B2, -0.0356385)
+    !call g_tracer_add_param('B3', param%B3,  0.00743254)
+    !-----------------------------------------------------------------------
+    !     Solubility coefficients for alpha in mol/l/atm
+    !      (1) for CFC11, (2) for CFC12
+    !     after Warner and Weiss (1985) DSR, vol 32 for CFC11 and CFC12
+    !-----------------------------------------------------------------------
+    call g_tracer_add_param('d1', param%d1, -80.0343)
+    call g_tracer_add_param('d2', param%d2,  117.232)
+    call g_tracer_add_param('d3', param%d3,  29.5817)
+    call g_tracer_add_param('d4', param%d4,  0.0)
+    call g_tracer_add_param('e1', param%e1,  0.0335183)
+    call g_tracer_add_param('e2', param%e2, -0.0373942)
+    call g_tracer_add_param('e3', param%e3,  0.00774862)
+
 
     !  Rho_0 is used in the Boussinesq
     !  approximation to calculations of pressure and
@@ -458,9 +477,14 @@ contains
        !---------------------------------------------------------------------
 
        !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
+       !alpha = conv_fac * grid_tmask(i,j,1) * &
+       !     exp(param%A1 + param%A2/ta + param%A3*log(ta) +&
+       !     sal * (param%B1 + ta * (param%B2 + ta * param%B3))&
+       !     )
+
        alpha = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%A1 + param%A2/ta + param%A3*log(ta) +&
-            sal * (param%B1 + ta * (param%B2 + ta * param%B3))&
+            exp(param%d1 + param%d2/ta + param%d3*log(ta) + param%d4*ta*ta +&
+            sal * ((param%e3 * ta + param%e2) * ta + param%e1)&
             )
 
        !---------------------------------------------------------------------
