@@ -5240,7 +5240,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('rpcaco3', cobalt%rpcaco3, 0.070/12.0*16.0/106.0*100.0)          ! mol N mol Ca-1
     call g_tracer_add_param('rplith',  cobalt%rplith,  0.065/12.0*16.0/106.0)                ! mol N g lith-1
     call g_tracer_add_param('rpsio2',  cobalt%rpsio2,  0.026/12.0*16.0/106.0*60.0)           ! mol N mol Si-1
-    call g_tracer_add_param('gamma_ndet',  cobalt%gamma_ndet, cobalt%wsink / 188.0 )         ! s-1
+    call g_tracer_add_param('gamma_ndet',  cobalt%gamma_ndet, cobalt%wsink / 350.0 )         ! s-1
     call g_tracer_add_param('gamma_cadet_arag',cobalt%gamma_cadet_arag,cobalt%wsink/760.0)   ! s-1
     call g_tracer_add_param('gamma_cadet_calc',cobalt%gamma_cadet_calc,cobalt%wsink/1343.0)  ! s-1
     call g_tracer_add_param('gamma_sidet',  cobalt%gamma_sidet, cobalt%wsink / 2000.0 )      ! s-1
@@ -7431,8 +7431,9 @@ write (stdlogunit, generic_COBALT_nml)
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
        cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
             phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
-            (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k)))
-         cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nh4
+            (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
+            ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
+         cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
        else
          cobalt%jnitrif(i,j,k) = 0.0
        endif !}
@@ -8517,7 +8518,8 @@ write (stdlogunit, generic_COBALT_nml)
 ! CAS: yes, I think so, I've made the change
           cobalt%jno3_plus_btm(i,j,k)  = cobalt%jno3(i,j,k) - cobalt%fno3denit_sed(i,j) / rho_dzt(i,j,k)
 
-          cobalt%jo2_plus_btm(i,j,k)   = cobalt%jo2(i,j,k) +                        &
+! NOTE: should terms be subtracted? See JPD email from 2014/07/15
+          cobalt%jo2_plus_btm(i,j,k)   = cobalt%jo2(i,j,k) -                        &
             (cobalt%o2_2_nh4 * (cobalt%fnoxic_sed(i,j) + cobalt%fnfeso4red_sed(i,j))) / rho_dzt(i,j,k)
 
 ! updated
