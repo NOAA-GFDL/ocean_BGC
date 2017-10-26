@@ -59,12 +59,13 @@ character(len=128) :: tagname = '$Name$'
 character(len=3) :: boron_formulation = 'l10'
 character(len=3) :: dissociation_constants = 'm10'
 character(len=2) :: hf_equilibrium_constant = 'dg'
-real :: salinity_epsln = 1.e-10
+real :: epsln = 1.e-10
+real :: minimum_temperature = -2.
 logical :: sal_floor_based_on_alk = .true.
 
 namelist /mocsy_nml/ boron_formulation, dissociation_constants, &
-                     hf_equilibrium_constant, salinity_epsln,   &
-                     sal_floor_based_on_alk
+                     hf_equilibrium_constant, epsln,   &
+                     minimum_temperature, sal_floor_based_on_alk
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
@@ -287,19 +288,16 @@ end if
             salinity = max(s_in(i,j),ta_in(i,j)*84.)   ! yields concentration in g/kg (per mil)
           endif
 
-          ! Apply a numerical floor to salinity
-          salinity = max(salinity,salinity_epsln)
-
           ! Assign Mocsy inputs
-          Patm(1)  = 1.           ! atm
-          depth(1) = zt(i,j)      ! m
-          lat(1)   = 30.          ! degrees
-          temp(1)  = t_in(i,j)    ! degC
-          sal(1)   = salinity     ! psu
-          alk(1)   = ta_in(i,j)   ! mol/kg
-          dic(1)   = dic_in(i,j)  ! mol/kg
-          sil(1)   = sit_in(i,j)  ! mol/kg
-          phos(1)  = pt_in(i,j)   ! mol/kg
+          Patm(1)  = 1.      ! atm
+          depth(1) = zt(i,j) ! m
+          lat(1)   = 30.     ! degrees
+          temp(1)  = max(t_in(i,j),minimum_temperature) ! degC
+          sal(1)   = max(salinity,epsln)    ! psu
+          alk(1)   = max(ta_in(i,j),epsln)  ! mol/kg
+          dic(1)   = max(dic_in(i,j),epsln) ! mol/kg
+          sil(1)   = max(sit_in(i,j),epsln) ! mol/kg
+          phos(1)  = max(pt_in(i,j),epsln)  ! mol/kg
 
           call vars(ph, pco2, fco2, co2, hco3, co3, OmegaA, OmegaC, BetaD, rhoSW, p, tempis, &
                     temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
