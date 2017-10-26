@@ -61,10 +61,11 @@ character(len=3) :: dissociation_constants = 'm10'
 character(len=2) :: hf_equilibrium_constant = 'dg'
 real :: salinity_epsln = 1.e-10
 logical :: sal_floor_based_on_alk = .true.
+logical :: print_oor_warnings = .false.
 
 namelist /mocsy_nml/ boron_formulation, dissociation_constants, &
                      hf_equilibrium_constant, salinity_epsln,   &
-                     sal_floor_based_on_alk
+                     sal_floor_based_on_alk, print_oor_warnings
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
@@ -305,7 +306,7 @@ end if
                     temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
                     optCON='mol/kg', optT='Tpot   ', optP='m ', optb=boron_formulation,      &
                     optK1K2=dissociation_constants, optkf=hf_equilibrium_constant,           &
-                    optgas='Pinsitu')
+                    optgas='Pinsitu',verbose=print_oor_warnings)
 
           htotal(i,j) = 10.**(-1.*ph(1))
 
