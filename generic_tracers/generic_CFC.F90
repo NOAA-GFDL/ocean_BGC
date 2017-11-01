@@ -91,20 +91,20 @@ module generic_CFC
      !real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
      !real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
      ! units of ND, degC-1, degC-2, degC-3.
-     !real :: d1_11, d2_11, d3_11, d4_11   ! Coefficients in the calculation of the
-     !real :: d1_12, d2_12, d3_12, d4_12   ! CFC11 and CFC12 solubilities, in units
-     ! of ND, K-1, log(K)^-1, K-2.
-     !real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
-     !real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
-     ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+     real :: d1_11, d2_11, d3_11, d4_11   ! Coefficients in the calculation of the
+     real :: d1_12, d2_12, d3_12, d4_12   ! CFC11 and CFC12 solubilities, in units
+                                          ! of ND, K-1, log(K)^-1, K-2.
+     real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
+     real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
+                                          ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
      real :: sA_11, sB_11, sC_11, sD_11, sE_11   ! Coefficients in the calculation of the
      real :: sA_12, sB_12, sC_12, sD_12, sE_12   ! CFC11 and CFC12 Schmidt numbers, in
                                                  ! units of ND, degC-1, degC-2, degC-3.
-     real :: A1_11, A2_11, A3_11                 ! Coefficients in the calculation of the
-     real :: A1_12, A2_12, A3_12                 ! CFC11 and CFC12 solubilities, in units
+     !real :: A1_11, A2_11, A3_11                ! Coefficients in the calculation of the
+     !real :: A1_12, A2_12, A3_12                ! CFC11 and CFC12 solubilities, in units
                                                  ! of ND, K-1, log(K)^-1, K-2.
-     real :: B1_11, B2_11, B3_11                 ! More coefficients in the calculation of
-     real :: B1_12, B2_12, B3_12                 ! the CFC11 and CFC12 solubilities, in
+     !real :: B1_11, B2_11, B3_11                ! More coefficients in the calculation of
+     !real :: B1_12, B2_12, B3_12                ! the CFC11 and CFC12 solubilities, in
                                                  ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
       real :: Rho_0
      character(len=fm_string_len) :: ice_restart_file
@@ -283,37 +283,37 @@ contains
     !      (1) for CFC11, (2) for CFC12
     !     after Warner and Weiss (1985) DSR, vol 32 for CFC11 and CFC12
     !-----------------------------------------------------------------------
-    !call g_tracer_add_param('d1_11', param%d1_11, -229.9261)
-    !call g_tracer_add_param('d2_11', param%d2_11,  319.6552)
-    !call g_tracer_add_param('d3_11', param%d3_11,  119.4471)
-    !call g_tracer_add_param('d4_11', param%d4_11, -1.39165)
-    !call g_tracer_add_param('e1_11', param%e1_11, -0.142382)
-    !call g_tracer_add_param('e2_11', param%e2_11,  0.091459)
-    !call g_tracer_add_param('e3_11', param%e3_11, -0.0157274)
-    !call g_tracer_add_param('d1_12', param%d1_12, -218.0971)
-    !call g_tracer_add_param('d2_12', param%d2_12,  298.9702)
-    !call g_tracer_add_param('d3_12', param%d3_12,  113.8049)
-    !call g_tracer_add_param('d4_12', param%d4_12, -1.39165)
-    !call g_tracer_add_param('e1_12', param%e1_12, -0.143566)
-    !call g_tracer_add_param('e2_12', param%e2_12,  0.091015)
-    !call g_tracer_add_param('e3_12', param%e3_12, -0.0153924)
+    call g_tracer_add_param('d1_11', param%d1_11, -229.9261)
+    call g_tracer_add_param('d2_11', param%d2_11,  319.6552)
+    call g_tracer_add_param('d3_11', param%d3_11,  119.4471)
+    call g_tracer_add_param('d4_11', param%d4_11, -1.39165)
+    call g_tracer_add_param('e1_11', param%e1_11, -0.142382)
+    call g_tracer_add_param('e2_11', param%e2_11,  0.091459)
+    call g_tracer_add_param('e3_11', param%e3_11, -0.0157274)
+    call g_tracer_add_param('d1_12', param%d1_12, -218.0971)
+    call g_tracer_add_param('d2_12', param%d2_12,  298.9702)
+    call g_tracer_add_param('d3_12', param%d3_12,  113.8049)
+    call g_tracer_add_param('d4_12', param%d4_12, -1.39165)
+    call g_tracer_add_param('e1_12', param%e1_12, -0.143566)
+    call g_tracer_add_param('e2_12', param%e2_12,  0.091015)
+    call g_tracer_add_param('e3_12', param%e3_12, -0.0153924)
     !-----------------------------------------------------------------------
     !     Solubility coefficients for alpha in mol/l/atm
     !      (1) for CFC11, (2) for CFC12
     !     after Wanninkhof (2014), L&O: Methods, 12, 351-362
     !-----------------------------------------------------------------------
-    call g_tracer_add_param('A1_11', param%A1_11, -134.1536)
-    call g_tracer_add_param('A2_11', param%A2_11,  203.2156)
-    call g_tracer_add_param('A3_11', param%A3_11,  56.2320)
-    call g_tracer_add_param('B1_11', param%B1_11, -0.144449)
-    call g_tracer_add_param('B2_11', param%B2_11,  0.092952)
-    call g_tracer_add_param('B3_11', param%B3_11, -0.0159977)
-    call g_tracer_add_param('A1_12', param%A1_12, -122.3246)
-    call g_tracer_add_param('A2_12', param%A2_12,  182.5306)
-    call g_tracer_add_param('A3_12', param%A3_12,  50.5898)
-    call g_tracer_add_param('B1_12', param%B1_12, -0.145633)
-    call g_tracer_add_param('B2_12', param%B2_12,  0.092509)
-    call g_tracer_add_param('B3_12', param%B3_12, -0.0156627)
+    !call g_tracer_add_param('A1_11', param%A1_11, -134.1536)
+    !call g_tracer_add_param('A2_11', param%A2_11,  203.2156)
+    !call g_tracer_add_param('A3_11', param%A3_11,  56.2320)
+    !call g_tracer_add_param('B1_11', param%B1_11, -0.144449)
+    !call g_tracer_add_param('B2_11', param%B2_11,  0.092952)
+    !call g_tracer_add_param('B3_11', param%B3_11, -0.0159977)
+    !call g_tracer_add_param('A1_12', param%A1_12, -122.3246)
+    !call g_tracer_add_param('A2_12', param%A2_12,  182.5306)
+    !call g_tracer_add_param('A3_12', param%A3_12,  50.5898)
+    !call g_tracer_add_param('B1_12', param%B1_12, -0.145633)
+    !call g_tracer_add_param('B2_12', param%B2_12,  0.092509)
+    !call g_tracer_add_param('B3_12', param%B3_12, -0.0156627)
 
     !  Rho_0 is used in the Boussinesq
     !  approximation to calculations of pressure and
@@ -557,15 +557,15 @@ contains
        !---------------------------------------------------------------------
 
        !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
-       !alpha_11 = conv_fac * grid_tmask(i,j,1) * &
-       !     exp(param%d1_11 + param%d2_11/ta + param%d3_11*log(ta) + param%d4_11*ta*ta +&
-       !     sal * ((param%e3_11 * ta + param%e2_11) * ta + param%e1_11)&
-       !     )
+       alpha_11 = conv_fac * grid_tmask(i,j,1) * &
+            exp(param%d1_11 + param%d2_11/ta + param%d3_11*log(ta) + param%d4_11*ta*ta +&
+            sal * ((param%e3_11 * ta + param%e2_11) * ta + param%e1_11)&
+            )
 
-       !alpha_12 = conv_fac * grid_tmask(i,j,1) * &
-       !     exp(param%d1_12 + param%d2_12/ta + param%d3_12*log(ta) + param%d4_12*ta*ta +&
-       !     sal * ((param%e3_12 * ta + param%e2_12) * ta + param%e1_12)&
-       !     )
+       alpha_12 = conv_fac * grid_tmask(i,j,1) * &
+            exp(param%d1_12 + param%d2_12/ta + param%d3_12*log(ta) + param%d4_12*ta*ta +&
+            sal * ((param%e3_12 * ta + param%e2_12) * ta + param%e1_12)&
+            )
        !---------------------------------------------------------------------
        !     Calculate solubilities
        !       Use Warner and Weiss (1985) DSR, vol 32, final result
@@ -575,15 +575,15 @@ contains
        !---------------------------------------------------------------------
 
        !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
-       alpha_11 = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%A1_11 + param%A2_11/ta + param%A3_11*log(ta) +&
-            sal * (param%B1_11 + ta * (param%B2_11 + ta * param%B3_11))&
-            )
+       !alpha_11 = conv_fac * grid_tmask(i,j,1) * &
+       !     exp(param%A1_11 + param%A2_11/ta + param%A3_11*log(ta) +&
+       !     sal * (param%B1_11 + ta * (param%B2_11 + ta * param%B3_11))&
+       !     )
 
-       alpha_12 = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%A1_12 + param%A2_12/ta + param%A3_12*log(ta) +&
-            sal * (param%B1_12 + ta * (param%B2_12 + ta * param%B3_12))&
-            )
+       !alpha_12 = conv_fac * grid_tmask(i,j,1) * &
+       !     exp(param%A1_12 + param%A2_12/ta + param%A3_12*log(ta) +&
+       !     sal * (param%B1_12 + ta * (param%B2_12 + ta * param%B3_12))&
+       !     )
 
        !---------------------------------------------------------------------
        !     Calculate Schmidt numbers
