@@ -72,6 +72,7 @@ logical :: apply_temperature_floor = .true.
 
 namelist /mocsy_nml/ boron_formulation, dissociation_constants, &
                      hf_equilibrium_constant, epsln,   &
+                     print_oor_warnings, &
                      maximum_salinity, max_species_value, &
                      minimum_temperature, sal_floor_based_on_alk, &
                      apply_epsln_floor, apply_species_ceiling, &
