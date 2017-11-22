@@ -62,7 +62,8 @@ character(len=2) :: hf_equilibrium_constant = 'dg'
 real :: epsln = 1.e-10
 real :: minimum_temperature = -2.
 real :: maximum_salinity = 200.
-real :: max_species_value = 1.
+real :: max_species_value = 4.  ! max_species_value based on pure salt (NaCl) at 200 psu
+                                !       200 (g/kg) / 58.4428 (g/mol) = 3.4 mol/kg 
 logical :: sal_floor_based_on_alk = .true.
 logical :: print_oor_warnings = .false.
 logical :: apply_epsln_floor = .true.
