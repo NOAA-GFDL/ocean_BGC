@@ -61,12 +61,23 @@ character(len=3) :: dissociation_constants = 'm10'
 character(len=2) :: hf_equilibrium_constant = 'dg'
 real :: epsln = 1.e-10
 real :: minimum_temperature = -2.
+real :: maximum_salinity = 200.
+real :: max_species_value = 4.  ! max_species_value based on pure salt (NaCl) at 200 psu
+                                !       200 (g/kg) / 58.4428 (g/mol) = 3.4 mol/kg 
 logical :: sal_floor_based_on_alk = .true.
 logical :: print_oor_warnings = .false.
+logical :: apply_epsln_floor = .true.
+logical :: apply_species_ceiling = .true.
+logical :: apply_salinity_ceiling = .true.
+logical :: apply_temperature_floor = .true.
 
 namelist /mocsy_nml/ boron_formulation, dissociation_constants, &
                      hf_equilibrium_constant, epsln,   &
-                     minimum_temperature, sal_floor_based_on_alk
+                     print_oor_warnings, &
+                     maximum_salinity, max_species_value, &
+                     minimum_temperature, sal_floor_based_on_alk, &
+                     apply_epsln_floor, apply_species_ceiling, &
+                     apply_salinity_ceiling, apply_temperature_floor
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
@@ -293,12 +304,35 @@ end if
           Patm(1)  = 1.      ! atm
           depth(1) = zt(i,j) ! m
           lat(1)   = 30.     ! degrees
-          temp(1)  = max(t_in(i,j),minimum_temperature) ! degC
-          sal(1)   = max(salinity,epsln)    ! psu
-          alk(1)   = max(ta_in(i,j),epsln)  ! mol/kg
-          dic(1)   = max(dic_in(i,j),epsln) ! mol/kg
-          sil(1)   = max(sit_in(i,j),epsln) ! mol/kg
-          phos(1)  = max(pt_in(i,j),epsln)  ! mol/kg
+          temp(1)  = t_in(i,j)   ! degC
+          sal(1)   = salinity    ! psu
+          alk(1)   = ta_in(i,j)  ! mol/kg
+          dic(1)   = dic_in(i,j) ! mol/kg
+          sil(1)   = sit_in(i,j) ! mol/kg
+          phos(1)  = pt_in(i,j)  ! mol/kg
+
+          if (apply_temperature_floor) then
+            temp(1)  = max(temp(1),minimum_temperature) ! degC
+          endif
+
+          if (apply_epsln_floor) then
+            sal(1)   = max(sal(1),epsln)  ! psu
+            alk(1)   = max(alk(1),epsln)  ! mol/kg
+            dic(1)   = max(dic(1),epsln)  ! mol/kg
+            sil(1)   = max(sil(1),epsln)  ! mol/kg
+            phos(1)  = max(phos(1),epsln) ! mol/kg
+         endif
+
+         if (apply_species_ceiling) then
+            alk(1)   = min(alk(1),max_species_value)  ! mol/kg
+            dic(1)   = min(dic(1),max_species_value)  ! mol/kg
+            sil(1)   = min(sil(1),max_species_value)  ! mol/kg
+            phos(1)  = min(phos(1),max_species_value) ! mol/kg
+         endif
+
+         if (apply_salinity_ceiling) then
+            sal(1)   = min(sal(1),maximum_salinity)  ! psu
+         endif
 
           call vars(ph, pco2, fco2, co2, hco3, co3, OmegaA, OmegaC, BetaD, rhoSW, p, tempis, &
                     temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
