@@ -4401,6 +4401,11 @@ write (stdlogunit, generic_bling_nml)
         model_time, rmask = grid_tmask,                                          &
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
+    if (bling%id_phyp .gt. 0)                                                    &
+        used = g_send_data(bling%id_phyp,  bling%f_biomass_p * bling%Rho_0,      &
+        model_time, rmask = grid_tmask,                                          &
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+
     if (bling%id_co3 .gt. 0)                                                     &
         used = g_send_data(bling%id_co3,  bling%f_co3_ion * bling%Rho_0,         &
         model_time, rmask = grid_tmask,                                          &
