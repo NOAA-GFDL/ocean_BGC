@@ -44,6 +44,9 @@ module generic_SF6
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get
   use g_tracer_utils, only : g_tracer_send_diag, g_tracer_get_values  
 
+  use g_tracer_utils, only : g_diag_type, g_diag_field_add
+  use g_tracer_utils, only : register_diag_field=>g_register_diag_field
+  use g_tracer_utils, only : g_send_data
 
   implicit none ; private
 
@@ -53,6 +56,7 @@ module generic_SF6
   public do_generic_SF6
   public generic_SF6_register
   public generic_SF6_init
+  public generic_SF6_register_diag
   public generic_SF6_update_from_coupler
   public generic_SF6_update_from_source
   public generic_SF6_set_boundary_values
@@ -63,6 +67,7 @@ module generic_SF6
   logical, save :: do_generic_SF6 = .false.
 
   real, parameter :: epsln=1.0e-30
+  real, parameter :: missing_value1=-1.0e+10
 
   !
   !This type contains all the parameters and arrays used in this module.
@@ -73,19 +78,45 @@ module generic_SF6
   !nnz: Find out about the timing overhead for using type%x rather than x
 
   type generic_SF6_params
+     real :: d1, d2, d3, d4   ! Coefficients in the calculation of the
+                              ! SF6 solubility, in units of ND, K-1, log(K)^-1, K-2.
+
+     real :: e1, e2, e3       ! More coefficients in the calculation of the 
+                              ! SF6 solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+
      real :: sA, sB, sC, sD, sE   ! Coefficients in the calculation of SF6
                                   ! Schmidt number, in units of ND, degC-1, degC-2, degC-3.
-     real :: A1, A2, A3           ! Coefficients in the calculation of SF6
-                                  ! solubility, in units of ND, K-1, log(K)^-1.
-     real :: B1, B2, B3           ! More coefficients in the calculation of SF6
-                                  ! solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+    !real :: A1, A2, A3           ! Coefficients in the calculation of SF6
+    !                             ! solubility, in units of ND, K-1, log(K)^-1.
+    !real :: B1, B2, B3           ! More coefficients in the calculation of SF6
+    !                             ! solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
       real :: Rho_0
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
   end type generic_SF6_params
 
-
   type(generic_SF6_params) :: param
+
+  !An auxiliary type for storing varible names
+  type, public :: vardesc
+     character(len=fm_string_len) :: name     ! The variable name in a NetCDF file.
+     character(len=fm_string_len) :: longname ! The long name of that variable.
+     character(len=1)  :: hor_grid ! The hor. grid:  u, v, h, q, or 1.
+     character(len=1)  :: z_grid   ! The vert. grid:  L, i, or 1.
+     character(len=1)  :: t_grid   ! The time description: s, a, m, or 1.
+     character(len=fm_string_len) :: units    ! The dimensions of the variable.
+     character(len=1)  :: mem_size ! The size in memory: d or f.
+  end type vardesc
+
+  type generic_SF6_type
+    integer :: &
+      id_fgsf6      = -1
+    real, dimension (:,:), pointer :: &
+      stf_gas_sf6
+
+  end type generic_SF6_type
+
+  type(generic_SF6_type) :: sf6
 
 contains
 
@@ -132,6 +163,40 @@ contains
 
   end subroutine generic_SF6_init
 
+  !   Register diagnostic fields to be used in this module.
+  !   Note that the tracer fields are automatically registered in user_add_tracers
+  !   User adds only diagnostics for fields that are not a member of g_tracer_type
+  !
+  subroutine generic_SF6_register_diag(diag_list)
+    type(g_diag_type), pointer :: diag_list
+    type(vardesc)  :: vardesc_temp
+    integer        :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau, axes(3)
+    type(time_type):: init_time
+    character(len=fm_string_len)          :: cmor_field_name
+    character(len=fm_string_len)          :: cmor_long_name
+    character(len=fm_string_len)          :: cmor_units
+    character(len=fm_string_len)          :: cmor_standard_name
+!    real                                  :: conversion
+
+
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,axes=axes,init_time=init_time)
+
+    !   The following vardesc types contain a package of metadata about each tracer,
+    ! including, in order, the following elements: name; longname; horizontal
+    ! staggering ('h') for collocation with thickness points ; vertical staggering
+    ! ('L') for a layer variable ; temporal staggering ('s' for snapshot) ; units ;
+    ! and precision in non-restart output files ('f' for 32-bit float or 'd' for
+    ! 64-bit doubles). For most tracers, only the name, longname and units should
+    ! be changed.
+
+    vardesc_temp = vardesc("fgsf6","Surface Downward SF6 Flux",'h','1','s','mol sec-1 m-2','f')
+    sf6%id_fgsf6 = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         standard_name="surface_downward_mole_flux_of_sf6")
+
+  end subroutine generic_SF6_register_diag
+
+
   subroutine user_allocate_arrays
     !Allocate all the private arrays.
     !None for SF6 module currently
@@ -175,13 +240,28 @@ contains
     !     Solubility coefficients for alpha in mol/l/atm
     !      for SF6
     !     after Wanninkhof (2014), L&O: Methods, 12, 351-362
+    !
+    ! NOTE: Constants below DO NOT match those in Orr et al. 2017 GMDD
     !-----------------------------------------------------------------------
-    call g_tracer_add_param('A1', param%A1, -96.5975)
-    call g_tracer_add_param('A2', param%A2,  139.883)
-    call g_tracer_add_param('A3', param%A3,  37.8193)
-    call g_tracer_add_param('B1', param%B1,  0.0310693)
-    call g_tracer_add_param('B2', param%B2, -0.0356385)
-    call g_tracer_add_param('B3', param%B3,  0.00743254)
+    !call g_tracer_add_param('A1', param%A1, -96.5975)
+    !call g_tracer_add_param('A2', param%A2,  139.883)
+    !call g_tracer_add_param('A3', param%A3,  37.8193)
+    !call g_tracer_add_param('B1', param%B1,  0.0310693)
+    !call g_tracer_add_param('B2', param%B2, -0.0356385)
+    !call g_tracer_add_param('B3', param%B3,  0.00743254)
+    !-----------------------------------------------------------------------
+    !     Solubility coefficients for alpha in mol/l/atm
+    !      (1) for CFC11, (2) for CFC12
+    !     after Warner and Weiss (1985) DSR, vol 32 for CFC11 and CFC12
+    !-----------------------------------------------------------------------
+    call g_tracer_add_param('d1', param%d1, -80.0343)
+    call g_tracer_add_param('d2', param%d2,  117.232)
+    call g_tracer_add_param('d3', param%d3,  29.5817)
+    call g_tracer_add_param('d4', param%d4,  0.0)
+    call g_tracer_add_param('e1', param%e1,  0.0335183)
+    call g_tracer_add_param('e2', param%e2, -0.0373942)
+    call g_tracer_add_param('e3', param%e3,  0.00774862)
+
 
     !  Rho_0 is used in the Boussinesq
     !  approximation to calculations of pressure and
@@ -230,16 +310,18 @@ contains
     !diag_tracers: none
     !
     !sf6
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'sf6',               &
-         longname   = 'sf6 Concentration', &
-         units      = 'mol/kg',            &
-         prog       = .true.,              &
-         flux_gas       = .true.,                      &
-         flux_gas_type  = 'air_sea_gas_flux_generic',                  &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
-         flux_gas_restart_file  = 'ocmip_sf6_airsea_flux.res.nc' )
-
+    call g_tracer_add(tracer_list,package_name,                   &
+         name = 'sf6',                                            &
+         longname = 'Moles Per Unit Mass of SF6 in sea water',    &
+         units = 'mol/kg',                                        &
+         prog = .true.,                                           &
+         flux_gas = .true.,                                       &
+         flux_gas_type  = 'air_sea_gas_flux_generic',             &
+         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),             &
+         flux_gas_restart_file  = 'ocmip_sf6_airsea_flux.res.nc', &
+         standard_name = "mole_concentration_of_sulfur_hexafluoride_in_sea_water", &
+         diag_field_units = 'mol m-3', &
+         diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
   end subroutine user_add_tracers
 
@@ -270,17 +352,39 @@ contains
 
   ! <SUBROUTINE NAME="generic_SF6_update_from_source">
   !  <OVERVIEW>
-  !   Update tracer concentration fields due to the source/sink contributions.
   !  </OVERVIEW>
   !  <DESCRIPTION>
   !   Currently an empty stub for SF6s.
   !  </DESCRIPTION>
   ! </SUBROUTINE>
-  subroutine generic_SF6_update_from_source(tracer_list)
+  subroutine generic_SF6_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+                                            ilb,jlb,tau,dt,grid_dat,model_time)
+
     type(g_tracer_type), pointer :: tracer_list
-    !
-    !No source update for SF6's currently exit in code.
-    !
+    real, dimension(ilb:,jlb:,:),   intent(in) :: rho_dzt,dzt
+    real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
+    integer,                        intent(in) :: ilb,jlb,tau
+    real,                           intent(in) :: dt
+    real, dimension(ilb:,jlb:),     intent(in) :: grid_dat
+    type(time_type),                intent(in) :: model_time
+
+    character(len=fm_string_len), parameter :: sub_name = 'generic_SF6_update_from_source'
+    integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau 
+    real, dimension(:,:,:) ,pointer :: grid_tmask
+    integer, dimension(:,:),pointer :: mask_coast, grid_kmt
+
+    logical :: used, first
+
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
+         grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
+
+    call g_tracer_get_pointer(tracer_list,'sf6','stf_gas',sf6%stf_gas_sf6)
+ 
+    if (sf6%id_fgsf6 .gt. 0)            &
+        used = g_send_data(sf6%id_fgsf6,  sf6%stf_gas_sf6,   &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
     return
   end subroutine generic_SF6_update_from_source
 
@@ -373,9 +477,14 @@ contains
        !---------------------------------------------------------------------
 
        !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
+       !alpha = conv_fac * grid_tmask(i,j,1) * &
+       !     exp(param%A1 + param%A2/ta + param%A3*log(ta) +&
+       !     sal * (param%B1 + ta * (param%B2 + ta * param%B3))&
+       !     )
+
        alpha = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%A1 + param%A2/ta + param%A3*log(ta) +&
-            sal * (param%B1 + ta * (param%B2 + ta * param%B3))&
+            exp(param%d1 + param%d2/ta + param%d3*log(ta) + param%d4*ta*ta +&
+            sal * ((param%e3 * ta + param%e2) * ta + param%e1)&
             )
 
        !---------------------------------------------------------------------
