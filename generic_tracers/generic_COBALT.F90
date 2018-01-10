@@ -6639,8 +6639,6 @@ write (stdlogunit, generic_COBALT_nml)
        phyto(n)%f_mu_mem(i,j,k) = phyto(n)%f_mu_mem(i,j,k) + (phyto(n)%mu_mix(i,j,k) - &
              phyto(n)%f_mu_mem(i,j,k))*min(1.0,cobalt%gamma_mu_mem*dt)*grid_tmask(i,j,k)
     enddo; enddo ; enddo; enddo !} i,j,k,n
-    outunit = stdout()
-    write(outunit,*) 'f_mu_mem(300,432,1) = ',phyto(2)%f_mu_mem(300,432,1) 
 
 !
     !-----------------------------------------------------------------------
@@ -7351,8 +7349,8 @@ write (stdlogunit, generic_COBALT_nml)
       else if (trim(co2_calc) == "mocsy") then
          cobalt%omega_arag(i,j,k) = cobalt%omegaa(i,j,k)  ! from Mocsy
          cobalt%omega_calc(i,j,k) = cobalt%omegac(i,j,k)  ! from Mocsy
-         cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_arag(i,j,k)
-         cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_calc(i,j,k)
+         cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(epsln,cobalt%omega_arag(i,j,k))
+         cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(epsln,cobalt%omega_calc(i,j,k))
       else
         call mpp_error(FATAL,"Unable to compute aragonite and calcite saturation states")
       endif
