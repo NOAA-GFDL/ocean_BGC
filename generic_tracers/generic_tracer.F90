@@ -475,8 +475,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   ! </SUBROUTINE>
 
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
-       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,&
-       grid_ht, current_wave_stress, sosga)
+       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,&
+       frunoff,grid_ht, current_wave_stress, sosga)
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     integer,                        intent(in) :: ilb,jlb,tau
@@ -487,6 +487,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     real, dimension(:),             intent(in) :: max_wavelength_band
     real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band
     real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: internal_heat
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: frunoff 
     real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht
     real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress
     real,                      optional , intent(in) :: sosga ! global avg. sea surface salinity
@@ -521,7 +523,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_COBALT)  call generic_COBALT_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
-         nbands,max_wavelength_band,sw_pen_band,opacity_band)
+         nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,frunoff)
 
     if(do_generic_SF6)  call generic_SF6_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
          ilb,jlb,tau,dtts,grid_dat,model_time)
