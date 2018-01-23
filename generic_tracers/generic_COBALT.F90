@@ -5747,7 +5747,7 @@ write (stdlogunit, generic_COBALT_nml)
             flux_wetdep= .true.,            &
             flux_drydep= .true.,            &
             flux_gas   = .true.,            &
-            implementation='ocmip2_test',   &
+            implementation='ocmip2_vmr',   &
             flux_gas_name  = 'nh3_flux',    &
             flux_gas_type  = 'air_sea_gas_flux_generic', &
             flux_gas_molwt = WTMN,                       &
