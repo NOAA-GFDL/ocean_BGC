@@ -1,3 +1,4 @@
+
 ! <CONTACT EMAIL="Charles.Stock@noaa.gov"> Charles Stock 
 ! </CONTACT>
 !
@@ -791,7 +792,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
      real, dimension(:,:), ALLOCATABLE :: &
           b_alk,b_dic,b_fed,b_nh4,b_no3,b_o2,b_po4,b_sio4,b_di14c,&	! bottom flux terms
           co2_csurf,pco2_csurf,co2_alpha,c14o2_csurf,c14o2_alpha,&
-          nh3_csurf,nh3_alpha,&
+          nh3_csurf,nh3_alpha,pnh3_csurf,&
           fcadet_arag_btm,&
           fcadet_calc_btm,&
           ffedet_btm,&
@@ -1210,6 +1211,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           id_o2_cmip        = -1, &
           id_o2sat          = -1, &
           id_no3_cmip       = -1, &
+          id_pka_nh3        = -1, &
           id_nh4_cmip       = -1, &
           id_po4_cmip       = -1, &
           id_dfe            = -1, &
@@ -2642,9 +2644,11 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_total_filter_feeding = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+
     !
     !  Save river, depositon and bulk elemental fluxes
     !
+
 
     vardesc_temp = vardesc("dep_dry_fed","Dry Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_dry_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
@@ -2684,6 +2688,10 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("dep_wet_po4","Wet Deposition of Phosphate to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_wet_po4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("pka_nh3","pKa of NH3",'h','1','s','','f')
+    cobalt%id_pka_nh3     = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("runoff_flux_alk","Alkalinity runoff flux to the ocean",'h','1','s','mol m-2 s-1','f')
@@ -3666,6 +3674,7 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_field_name="no3_cmip", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_nitrate_in_sea_water", &
          cmor_long_name="Dissolved Nitrate Concentration")
+
 
 !! same name in model and CMOR, but different units - use for now
     vardesc_temp = vardesc("nh4_raw","Dissolved Ammonium Concentration",'h','L','s','mol m-3','f')
@@ -5586,7 +5595,8 @@ write (stdlogunit, generic_COBALT_nml)
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
          flux_bottom= .true.,                                          &
-         init_value = 0.001                                            )
+         init_value = 0.001,                                           &
+         implementation='ocmip2')
     !
     !       Dissolved Fe (assumed to be all available to phytoplankton)
     !
@@ -5737,12 +5747,13 @@ write (stdlogunit, generic_COBALT_nml)
             flux_wetdep= .true.,            &
             flux_drydep= .true.,            &
             flux_gas   = .true.,            &
+            implementation='ocmip2_test',   &
             flux_gas_name  = 'nh3_flux',    &
             flux_gas_type  = 'air_sea_gas_flux_generic', &
             flux_gas_molwt = WTMN,                       &
             flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
             flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
-            flux_param = (/ WTMN/1.e3/),    &         
+            flux_param = (/ WTMN*1.e-3/),    &         
             flux_bottom= .true.,            &
             init_value = 0.001              )
     else
@@ -5753,7 +5764,7 @@ write (stdlogunit, generic_COBALT_nml)
          prog       = .true.,            &         
          flux_wetdep= .true.,            &         
          flux_drydep= .true.,            &         
-         flux_param = (/ WTMN/1.e-3 /),  &         
+         flux_param = (/ WTMN*1.e-3 /),  &         
          flux_bottom= .true.             )  
     end if
     !
@@ -5767,7 +5778,7 @@ write (stdlogunit, generic_COBALT_nml)
          flux_runoff= .true.,            &
          flux_wetdep= .true.,            &
          flux_drydep= .true.,            &
-         flux_param = (/ 14.0067e-03 /), &
+         flux_param = (/ WTMN*1e-03 /), &
          flux_bottom= .true.             )
     !
     !       O2
@@ -5779,6 +5790,7 @@ write (stdlogunit, generic_COBALT_nml)
          prog       = .true.,                                          &
          flux_gas   = .true.,                                          &
          flux_gas_name  = 'o2_flux',                                   &
+         implementation='ocmip2',                                      &
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMO2,                                       &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
@@ -5911,6 +5923,7 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'mol/kg',                         &
          prog       = .true.,                           &
          flux_gas       = .true.,                       &
+         implementation='ocmip2',                       &
          flux_gas_name  = 'c14o2_flux',                 &
          flux_gas_type  = 'air_sea_gas_flux',           &
          flux_gas_molwt = WTMCO2,                       &
@@ -6315,8 +6328,9 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:,:), Allocatable :: pre_totsi, post_totsi
     real, dimension(:,:,:), Allocatable :: pre_totfe, net_srcfe, post_totfe
     real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
+    real, dimension(:,:), Allocatable :: pka_nh3
 
-    real :: pka_nh3,tr,ltr
+    real :: tr,ltr
 
     real :: imbal
     integer :: stdoutunit, imbal_flag, outunit
@@ -6327,6 +6341,9 @@ write (stdlogunit, generic_COBALT_nml)
 
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
+
+    allocate(pka_nh3(isd:ied,jsd:jed))
+    pka_nh3 = 0.
 
     call mpp_clock_begin(id_clock_carbon_calculations)
     !Get necessary fields
@@ -6412,18 +6429,18 @@ write (stdlogunit, generic_COBALT_nml)
     call mpp_clock_end(id_clock_carbon_calculations)
 
     if (do_nh3_atm_ocean_exchange) then
-    do j = jsc, jec ; do i = isc, iec 
-       pka_nh3        = (10.0423-0.0315536*temp(i,j,1)+0.003071*salt(i,j,1))
-       tr             = 298.15/(temp(i,j,1)+273.15)-1.
-       ltr            = -tr+log(298.15/(temp(i,j,1)+273.15))       
-       cobalt%nh3_alpha(i,j)   =  5.76e1*exp(13.79*tr-5.39*ltr)
-       cobalt%nh3_csurf(i,j)   =  cobalt%f_nh4(i,j,1)/(1.+10**(pka_nh3+log10(min(max(cobalt%f_htotal(i,j,1),1e-10),1e-5))))
-    enddo; enddo ; !
+       do j = jsc, jec ; do i = isc, iec 
+          pka_nh3(i,j)   = (10.0423-0.0315536*temp(i,j,1)+0.003071*salt(i,j,1))*grid_tmask(i,j,1)
+          tr             = 298.15/(temp(i,j,1)+273.15)-1.
+          ltr            = -tr+log(298.15/(temp(i,j,1)+273.15))       
+          cobalt%nh3_alpha(i,j)   =  5.76e1*exp(13.79*tr-5.39*ltr) !in mol/kg/atm
+          cobalt%nh3_csurf(i,j)   =  cobalt%f_nh4(i,j,1)/(1.+10**(pka_nh3(i,j)+log10(min(max(cobalt%f_htotal(i,j,1),1e-10),1e-5)))) !in mol/kg
+          cobalt%pnh3_csurf(i,j)  =  cobalt%nh3_csurf(i,j)/cobalt%nh3_alpha(i,j)*1.e6 !in uatm
+       enddo; enddo ; !
+
+       call g_tracer_set_values(tracer_list,'nh4','alpha',cobalt%nh3_alpha    ,isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4','csurf',cobalt%nh3_csurf    ,isd,jsd)    
     end if
-
-    call g_tracer_set_values(tracer_list,'nh4','alpha',cobalt%nh3_alpha    ,isd,jsd)
-    call g_tracer_set_values(tracer_list,'nh4','csurf',cobalt%nh3_csurf    ,isd,jsd)
-
 
       if (do_14c) then                                        !<<RADIOCARBON
       
@@ -8886,6 +8903,14 @@ write (stdlogunit, generic_COBALT_nml)
 
     call mpp_clock_end(id_clock_cobalt_calc_diagnostics)
     call mpp_clock_begin(id_clock_cobalt_send_diagnostics)
+
+    if (cobalt%id_pka_nh3 .gt. 0) then
+       used = g_send_data(cobalt%id_pka_nh3,  pka_nh3,   &
+            model_time, rmask = grid_tmask(:,:,1),&
+            is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+       deallocate(pka_nh3)
+    end if
+
 !
 !---------------------------------------------------------------------
 !
@@ -9539,6 +9564,10 @@ write (stdlogunit, generic_COBALT_nml)
     !
    if (cobalt%id_pco2surf .gt. 0)              &
          used = g_send_data(cobalt%id_pco2surf,      cobalt%pco2_csurf,           &
+         model_time, rmask = grid_tmask(:,:,1),&
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_pnh3surf .gt. 0)              &
+         used = g_send_data(cobalt%id_pnh3surf,      cobalt%pnh3_csurf,           &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_sfc_alk .gt. 0)             &
@@ -11381,7 +11410,7 @@ write (stdlogunit, generic_COBALT_nml)
     !Note: In order for this to work we should NOT zero out the coupler values for generic tracers
     !      This zeroing is done for non-generic TOPAZ by calling zero_ocean_sfc.
     !      Since the coupler values here are non-cumulative there is no need to zero them out anyway.
-
+    
     if (cobalt%init .OR. cobalt%force_update_fluxes) then
        !Get necessary fields
        call g_tracer_get_pointer(tracer_list,'dic'   ,'field', dic_field)
@@ -11399,14 +11428,14 @@ write (stdlogunit, generic_COBALT_nml)
        enddo; enddo ; !} i, j
 
        if(present(dzt)) then
-! 2017/08/11 jgj is cobalt type defined/passed here ?
-!        do j = jsc, jec ; do i = isc, iec  !{
-!         cobalt%zt(i,j,1) = dzt(i,j,1)
-!        enddo; enddo ; !} i, j
+          ! 2017/08/11 jgj is cobalt type defined/passed here ?
+          !        do j = jsc, jec ; do i = isc, iec  !{
+          !         cobalt%zt(i,j,1) = dzt(i,j,1)
+          !        enddo; enddo ; !} i, j
        elseif (trim(co2_calc) == 'mocsy') then
-         call mpp_error(FATAL,"mocsy method of co2_calc needs dzt to be passed to the FMS_ocmip2_co2calc subroutine.")
+          call mpp_error(FATAL,"mocsy method of co2_calc needs dzt to be passed to the FMS_ocmip2_co2calc subroutine.")
        endif
-                 
+
        call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,1), &
             SST(:,:), SSS(:,:),                            &
             dic_field(:,:,1,tau),                          &
@@ -11418,8 +11447,8 @@ write (stdlogunit, generic_COBALT_nml)
             htotal_field(:,:,1),                           &
                                 !Optional In
             co2_calc=trim(co2_calc),                       & 
-            !! jgj 2017/08/11
-            !!zt=cobalt%zt(:,:,1),                           & 
+                                !! jgj 2017/08/11
+                                !!zt=cobalt%zt(:,:,1),                           & 
             zt=dzt(:,:,1),                                 & 
                                 !OUT
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
@@ -11434,52 +11463,50 @@ write (stdlogunit, generic_COBALT_nml)
 
        call g_tracer_set_values(tracer_list,'dic','alpha',co2_alpha    ,isd,jsd)
        call g_tracer_set_values(tracer_list,'dic','csurf',co2_csurf    ,isd,jsd)
-       
+
        !nh3 csurf is the concentration of NH3 in kg/kg       
        if (do_nh3_atm_ocean_exchange) then
-!          write(*,*) 'min htot ',minval(htotal_field(:,:,1))
-       do j = jsc, jec ; do i = isc, iec  !{
-          !nh3
-          pka_nh3        = (10.0423-0.0315536*SST(i,j)+0.003071*SSS(i,j))
-          tr             = 298.15/(SST(i,j)+273.15)-1.
-          ltr            = -tr+log(298.15/(SST(i,j)+273.15))       
-          !mol/kg/atm from Jacobson 2005 (fundamental of atmospheric modeling)
-          nh3_alpha(i,j) = 5.76e1*exp(13.79*tr-5.39*ltr)          
-!          write(*,*) 'pka=',pka_nh3,i,j
-!          write(*,*) 'htotal_field=',htotal_field(i,j,1),i,j
-          nh3_csurf(i,j) = nh4_field(i,j,1,tau)/(1.+10**(pka_nh3+log10(min(max(1e-10,htotal_field(i,j,1)),1e-5))))
-       enddo;enddo
+          !          write(*,*) 'min htot ',minval(htotal_field(:,:,1))
+          do j = jsc, jec ; do i = isc, iec  !{
+             !nh3
+             pka_nh3        = (10.0423-0.0315536*SST(i,j)+0.003071*SSS(i,j))
+             tr             = 298.15/(SST(i,j)+273.15)-1.
+             ltr            = -tr+log(298.15/(SST(i,j)+273.15))       
+             !mol/kg/atm from Jacobson 2005 (fundamental of atmospheric modeling)
+             nh3_alpha(i,j) = 5.76e1*exp(13.79*tr-5.39*ltr)          
+             !          write(*,*) 'pka=',pka_nh3,i,j
+             !          write(*,*) 'htotal_field=',htotal_field(i,j,1),i,j
+             nh3_csurf(i,j) = nh4_field(i,j,1,tau)/(1.+10**(pka_nh3+log10(min(max(1e-10,htotal_field(i,j,1)),1e-5))))
+             cobalt%pnh3_csurf(i,j)  =  cobalt%nh3_csurf(i,j)/nh3_alpha(i,j)*1.e6 !in uatm
+          enddo;enddo
 
-       call g_tracer_set_values(tracer_list,'nh4','alpha',nh3_alpha    ,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4','csurf',nh3_csurf    ,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4','alpha',nh3_alpha    ,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4','csurf',nh3_csurf    ,isd,jsd)
        end if
 
-      if (do_14c) then                                        !<<RADIOCARBON
-      
-        ! Normally, the alpha would be multiplied by the atmospheric 14C/12C ratio. However,
-        ! here that is set to 1, so that alpha_14C = alpha_12C. This needs to be changed!
+       if (do_14c) then                                        !<<RADIOCARBON
 
-       call g_tracer_get_pointer(tracer_list,'di14c'   ,'field', di14c_field)
-    
-        do j = jsc, jec ; do i = isc, iec  !{
-          c14o2_csurf(i,j) =  co2_csurf(i,j) *                &
-            di14c_field(i,j,1,tau) / (dic_field(i,j,1,tau) + epsln)
-          c14o2_alpha(i,j) =  co2_alpha(i,j)
-        enddo; enddo ; !} i, j
+          ! Normally, the alpha would be multiplied by the atmospheric 14C/12C ratio. However,
+          ! here that is set to 1, so that alpha_14C = alpha_12C. This needs to be changed!
 
-        call g_tracer_set_values(tracer_list,'di14c','alpha',c14o2_alpha      ,isd,jsd)
-        call g_tracer_set_values(tracer_list,'di14c','csurf',c14o2_csurf      ,isd,jsd)
+          call g_tracer_get_pointer(tracer_list,'di14c'   ,'field', di14c_field)
 
-      endif                                                   !RADIOCARBON>>
+          do j = jsc, jec ; do i = isc, iec  !{
+             c14o2_csurf(i,j) =  co2_csurf(i,j) *                &
+                  di14c_field(i,j,1,tau) / (dic_field(i,j,1,tau) + epsln)
+             c14o2_alpha(i,j) =  co2_alpha(i,j)
+          enddo; enddo ; !} i, j
+
+          call g_tracer_set_values(tracer_list,'di14c','alpha',c14o2_alpha      ,isd,jsd)
+          call g_tracer_set_values(tracer_list,'di14c','csurf',c14o2_csurf      ,isd,jsd)
+
+       endif                                                   !RADIOCARBON>>
        !!nnz: If source is called uncomment the following
        cobalt%init = .false. !nnz: This is necessary since the above two calls appear in source subroutine too.
     endif
 
     call g_tracer_get_values(tracer_list,'dic','alpha', co2_alpha ,isd,jsd)
     call g_tracer_get_values(tracer_list,'dic','csurf', co2_csurf ,isd,jsd)
-
-    call g_tracer_get_values(tracer_list,'nh4','alpha', nh3_alpha ,isd,jsd)
-    call g_tracer_get_values(tracer_list,'nh4','csurf', nh3_csurf ,isd,jsd)
 
     call g_tracer_get_values(tracer_list,'o2','alpha', o2_alpha ,isd,jsd)
     call g_tracer_get_values(tracer_list,'o2','csurf', o2_csurf ,isd,jsd)
@@ -11577,13 +11604,6 @@ write (stdlogunit, generic_COBALT_nml)
        o2_alpha(i,j) = (o2_saturation / 0.21)
        o2_csurf(i,j) = o2_field(i,j,1,tau) * cobalt%Rho_0 !nnz: MOM has rho(i,j,1,tau)
 
-       !nh3
-       !f1p
-       !henry's constant                                                                                          
-       !from johnson 2008                                                                                         
-       nh3_sc_no(i,j) = schmidt_w(st,sal,25.)*grid_tmask(i,j,1)
-       nh3_csurf(i,j) = nh3_csurf(i,j)*cobalt%Rho_0
-       nh3_alpha(i,j) = nh3_alpha(i,j)*cobalt%Rho_0
     enddo; enddo
 
     !
@@ -11598,9 +11618,25 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_set_values(tracer_list,'o2', 'csurf',o2_csurf, isd,jsd)
     call g_tracer_set_values(tracer_list,'o2', 'sc_no',o2_sc_no, isd,jsd)
 
-    call g_tracer_set_values(tracer_list,'nh4', 'alpha',nh3_alpha, isd,jsd)
-    call g_tracer_set_values(tracer_list,'nh4', 'csurf',nh3_csurf, isd,jsd)
-    call g_tracer_set_values(tracer_list,'nh4', 'sc_no',nh3_sc_no, isd,jsd)
+    if (do_nh3_atm_ocean_exchange) then
+
+       call g_tracer_get_values(tracer_list,'nh4','alpha', nh3_alpha ,isd,jsd)
+       call g_tracer_get_values(tracer_list,'nh4','csurf', nh3_csurf ,isd,jsd)
+
+       do j=jsc,jec ; do i=isc,iec
+       !nh3
+       !f1p
+       !henry's constant                                                                                          
+       !from johnson 2008                                                                                         
+       nh3_sc_no(i,j) = schmidt_w(st,sal,25.)*grid_tmask(i,j,1)
+       nh3_csurf(i,j) = nh3_csurf(i,j)*cobalt%Rho_0
+       nh3_alpha(i,j) = nh3_alpha(i,j)*cobalt%Rho_0
+       end do;end do
+
+       call g_tracer_set_values(tracer_list,'nh4', 'alpha',nh3_alpha, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4', 'csurf',nh3_csurf, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4', 'sc_no',nh3_sc_no, isd,jsd)
+    end if
 
     if (do_14c) then                                      !<<RADIOCARBON
       
@@ -11944,6 +11980,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%co2_alpha(isd:ied, jsd:jed))          ; cobalt%co2_alpha=0.0
     allocate(cobalt%nh3_csurf(isd:ied, jsd:jed))          ; cobalt%nh3_csurf=0.0
     allocate(cobalt%nh3_alpha(isd:ied, jsd:jed))          ; cobalt%nh3_alpha=0.0
+    allocate(cobalt%pnh3_csurf(isd:ied, jsd:jed))         ; cobalt%pnh3_csurf=0.0
     allocate(cobalt%fcadet_arag_btm(isd:ied, jsd:jed))    ; cobalt%fcadet_arag_btm=0.0
     allocate(cobalt%fcadet_calc_btm(isd:ied, jsd:jed))    ; cobalt%fcadet_calc_btm=0.0
     allocate(cobalt%ffedet_btm(isd:ied, jsd:jed))         ; cobalt%ffedet_btm=0.0
@@ -12391,6 +12428,9 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%pco2_csurf)  
     deallocate(cobalt%co2_csurf)  
     deallocate(cobalt%co2_alpha)  
+    deallocate(cobalt%nh3_csurf)  
+    deallocate(cobalt%pnh3_csurf)  
+    deallocate(cobalt%nh3_alpha)  
     deallocate(cobalt%fcadet_arag_btm)  
     deallocate(cobalt%fcadet_calc_btm)  
     deallocate(cobalt%ffedet_btm)  
