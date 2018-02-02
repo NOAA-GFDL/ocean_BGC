@@ -5747,11 +5747,11 @@ write (stdlogunit, generic_COBALT_nml)
             flux_wetdep= .true.,            &
             flux_drydep= .true.,            &
             flux_gas   = .true.,            &
-            implementation='ocmip2_vmr',   &
+            implementation='duce_vmr',   &
             flux_gas_name  = 'nh3_flux',    &
             flux_gas_type  = 'air_sea_gas_flux_generic', &
             flux_gas_molwt = WTMN,                       &
-            flux_gas_param = (/ 9.36e-07, 9.7561e-06 /), &
+            flux_gas_param = (/ 1. /), &
             flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
             flux_param = (/ WTMN*1.e-3/),    &         
             flux_bottom= .true.,            &
