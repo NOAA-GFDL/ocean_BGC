@@ -6662,6 +6662,7 @@ write (stdlogunit, generic_COBALT_nml)
     enddo; enddo ; enddo !} i,j,k
 
     !nh3
+    cobalt%frac_nh3(:,:,:) = 0.
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        cobalt%frac_nh3(i,j,k) = 1./(1.+10**(calc_pka_nh3(temp(i,j,k),salt(i,j,k))+log10(min(max(cobalt%f_htotal(i,j,1),1e-10),1e-5)))) * grid_tmask(i,j,k)
     enddo;  enddo ; enddo !} i,j,k
