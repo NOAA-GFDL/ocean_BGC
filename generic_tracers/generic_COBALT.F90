@@ -6289,7 +6289,7 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
     real :: imbal
     integer :: stdoutunit, imbal_flag, outunit
-     
+    integer :: i_array 
 
 
     r_dt = 1.0 / dt
@@ -6732,6 +6732,7 @@ write (stdlogunit, generic_COBALT_nml)
        bact(1)%ldonlim(i,j,k) = cobalt%f_ldon(i,j,k)/(bact(1)%k_ldon + cobalt%f_ldon(i,j,k))
        bact(1)%o2lim(i,j,k) = max(cobalt%f_o2(i,j,k),cobalt%o2_min)/  &
                               (cobalt%k_o2 + max(cobalt%f_o2(i,j,k),cobalt%o2_min))
+      enddo
        bact(1)%juptake_ldon(i,j,k) = vmax_bact*bact(1)%temp_lim(i,j,k)*bact(1)%ldonlim(i,j,k)* &
                                      bact(1)%o2lim(i,j,k)*bact(1)%f_n(i,j,k)
        bact_uptake_ratio = ( cobalt%f_ldop(i,j,k)/max(cobalt%f_ldon(i,j,k),epsln) )
@@ -10231,7 +10232,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK3: this is using ntau=1
     if (cobalt%id_ph .gt. 0)            &
-        used = g_send_data(cobalt%id_ph,  log10(cobalt%f_htotal) * -1.0,       &
+        used = g_send_data(cobalt%id_ph,  log10(cobalt%f_htotal) * (-1.0),       &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10687,7 +10688,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK3: this is using ntau=1
     if (cobalt%id_phos .gt. 0)            &
-        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)) * (-1.0),       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
