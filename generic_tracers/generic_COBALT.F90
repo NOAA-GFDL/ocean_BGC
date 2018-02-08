@@ -177,14 +177,18 @@ module generic_COBALT
   real,parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
 
+  real, parameter :: frac_nh3_normalize = 6.61e-2 !assumes pka of 9.3 and ocean pH of 8.2
+
+
 ! Namelist Options
 
   character(len=10) ::  co2_calc = 'ocmip2'  ! other option is 'mocsy'
   logical :: do_14c             = .false.
   logical :: debug              = .false.
   logical :: do_nh3_atm_ocean_exchange = .false. 
+  logical :: use_nh3_for_nitrif = .false.
 
-namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
+namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, use_nh3_for_nitrif
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -647,6 +651,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           co3_sol_arag,&
           co3_sol_calc,&
           f_chl,&
+          frac_nh3,&
           f_co3_ion,&
           f_htotal,&
           f_irr_mem,&
@@ -6430,7 +6435,8 @@ write (stdlogunit, generic_COBALT_nml)
 
     if (do_nh3_atm_ocean_exchange) then
        do j = jsc, jec ; do i = isc, iec 
-          pka_nh3(i,j)   = (10.0423-0.0315536*temp(i,j,1)+0.003071*salt(i,j,1))*grid_tmask(i,j,1)
+!          pka_nh3(i,j)   = (10.0423-0.0315536*temp(i,j,1)+0.003071*salt(i,j,1))*grid_tmask(i,j,1)
+          pka_nh3(i,j)   = calc_pka_nh3(temp(i,j,1),salt(i,j,1))*grid_tmask(i,j,1)
           tr             = 298.15/(temp(i,j,1)+273.15)-1.
           ltr            = -tr+log(298.15/(temp(i,j,1)+273.15))       
           cobalt%nh3_alpha(i,j)   =  5.76e1*exp(13.79*tr-5.39*ltr) !in mol/kg/atm
@@ -6654,6 +6660,14 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%f_irr_mem(i,j,k) = (cobalt%f_irr_mem(i,j,k) + (cobalt%irr_mix(i,j,k) - &
           cobalt%f_irr_mem(i,j,k)) * min(1.0,cobalt%gamma_irr_mem * dt)) * grid_tmask(i,j,k)
     enddo; enddo ; enddo !} i,j,k
+
+    !nh3
+    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
+       cobalt%frac_nh3(i,j,k) = 1./(1.+10**(calc_pka_nh3(temp(i,j,k),salt(i,j,k))+log10(min(max(cobalt%f_htotal(i,j,1),1e-10),1e-5)))) * grid_tmask(i,j,k)
+    enddo;  enddo ; enddo !} i,j,k
+
+
+
     !
     ! Phytoplankton growth rate calculation based on Geider et al. (1997)
     !
@@ -7528,10 +7542,17 @@ write (stdlogunit, generic_COBALT_nml)
        !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
+          if (use_nh3_for_nitrif) then
+       cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%frac_nh3(i,j,k) * cobalt%f_nh4(i,j,k) / frac_nh3_normalize *  &
+            phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
+            (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
+            ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
+    else
        cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
             phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
             (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
             ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
+    end if
          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
        else
          cobalt%jnitrif(i,j,k) = 0.0
@@ -8196,6 +8217,7 @@ write (stdlogunit, generic_COBALT_nml)
     !
     call g_tracer_set_values(tracer_list,'cased',  'field',cobalt%f_cased    ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'chl',    'field',cobalt%f_chl      ,isd,jsd,ntau=1)
+    call g_tracer_set_values(tracer_list,'frac_nh3',    'field',cobalt%frac_nh3      ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'irr_mem' ,'field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_ndi' ,'field',phyto(DIAZO)%f_mu_mem ,isd,jsd,ntau=1)
@@ -11469,7 +11491,7 @@ write (stdlogunit, generic_COBALT_nml)
           !          write(*,*) 'min htot ',minval(htotal_field(:,:,1))
           do j = jsc, jec ; do i = isc, iec  !{
              !nh3
-             pka_nh3        = (10.0423-0.0315536*SST(i,j)+0.003071*SSS(i,j))
+             pka_nh3        = calc_pka_nh3(SST(i,j),SSS(i,j))
              tr             = 298.15/(SST(i,j)+273.15)-1.
              ltr            = -tr+log(298.15/(SST(i,j)+273.15))       
              !mol/kg/atm from Jacobson 2005 (fundamental of atmospheric modeling)
@@ -11849,6 +11871,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%co3_sol_arag(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_arag=0.0
     allocate(cobalt%co3_sol_calc(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_calc=0.0
     allocate(cobalt%f_chl(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_chl=0.0
+    allocate(cobalt%frac_nh3(isd:ied, jsd:jed, 1:nk))        ; cobalt%frac_nh3=0.0
     allocate(cobalt%f_co3_ion(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_co3_ion=0.0
     allocate(cobalt%f_htotal(isd:ied, jsd:jed, 1:nk))     ; cobalt%f_htotal=0.0
     allocate(cobalt%f_irr_mem(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_irr_mem=0.0
@@ -12285,6 +12308,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%co3_sol_arag)  
     deallocate(cobalt%co3_sol_calc)  
     deallocate(cobalt%f_chl)  
+    deallocate(cobalt%frac_nh3)
     deallocate(cobalt%f_co3_ion)  
     deallocate(cobalt%f_htotal)  
     deallocate(cobalt%f_irr_mem)  
@@ -12592,8 +12616,8 @@ write (stdlogunit, generic_COBALT_nml)
   function p_sw(t,s) result(p)
     !density of sea water                                                                                          
     !millero and poisson (1981)                                                                                    
-    real*8, intent(in) :: t,s
-    real*8             :: p, a, b, c
+    real, intent(in) :: t,s
+    real             :: p, a, b, c
 
     a = 0.824493-(4.0899d-3*t)+(7.6438d-5*(t**2))-(8.2467d-7*(t**3))+(5.3875d-9*(t**4))
     b = -5.72466d-3+(1.0277d-4*t)-(1.6546d-6*(t**2))
@@ -12607,17 +12631,17 @@ write (stdlogunit, generic_COBALT_nml)
   function n_sw(t,s) result(n)
     !dynamic viscosity                                                                                            
     !laliberte 2007                                                                                               
-    real*8 :: n
-    real*8, intent(in) :: t,s !temperature (c) and salinity                                                       
+    real :: n
+    real, intent(in) :: t,s !temperature (c) and salinity                                                       
     !salt in the order nacl,kcl,cacl2,mgcl2,mgso4                                                                 
-    real*8, parameter :: mass_fraction(5) = (/ 0.798,0.022,0.033,0.047,0.1 /)
-    real*8, parameter :: v1(5) = (/ 16.22 , 6.4883, 32.028, 24.032, 72.269/)
-    real*8, parameter :: v2(5) = (/ 1.3229 , 1.3175, 0.78792, 2.2694, 2.2238/)
-    real*8, parameter :: v3(5) = (/ 1.4849 , -0.7785, -1.1495,  3.7108, 6.6037/)
-    real*8, parameter :: v4(5) = (/ 0.0074691 , 0.09272, 0.0026995,  0.021853, 0.0079004/)
-    real*8, parameter :: v5(5) = (/ 30.78 , -1.3, 780860., -1.1236, 3340.1/)
-    real*8, parameter :: v6(5) = (/ 2.0583 , 2.0811, 5.8442,0.14474, 6.1304/)
-    real*8 :: n_0,ln_n_m,w_i_ln_n_i_tot,ni,w_i_tot,w_i
+    real, parameter :: mass_fraction(5) = (/ 0.798,0.022,0.033,0.047,0.1 /)
+    real, parameter :: v1(5) = (/ 16.22 , 6.4883, 32.028, 24.032, 72.269/)
+    real, parameter :: v2(5) = (/ 1.3229 , 1.3175, 0.78792, 2.2694, 2.2238/)
+    real, parameter :: v3(5) = (/ 1.4849 , -0.7785, -1.1495,  3.7108, 6.6037/)
+    real, parameter :: v4(5) = (/ 0.0074691 , 0.09272, 0.0026995,  0.021853, 0.0079004/)
+    real, parameter :: v5(5) = (/ 30.78 , -1.3, 780860., -1.1236, 3340.1/)
+    real, parameter :: v6(5) = (/ 2.0583 , 2.0811, 5.8442,0.14474, 6.1304/)
+    real :: n_0,ln_n_m,w_i_ln_n_i_tot,ni,w_i_tot,w_i
     integer :: i
 
     w_i_tot=0.
@@ -12638,24 +12662,24 @@ write (stdlogunit, generic_COBALT_nml)
 
 
   function d_hm(t,s,vb) result(d)
-    real*8, intent(in) :: t,s,vb
-    real*8             :: d, epsilonstar
+    real, intent(in) :: t,s,vb
+    real             :: d, epsilonstar
     ! hayduk 1982                                                                                                 
     epsilonstar = (9.58/vb)-1.12
     d=1.25d-8*(vb**(-0.19)-0.292)*((t+273.15)**(1.52))*((n_sw(t,s))**epsilonstar)
   end function d_hm
 
   function d_wc(t,s,vb) result(d)
-    real*8, intent(in) :: t,s,vb
-    real*8             :: d
-    real*8, parameter  :: phi = 2.6
+    real, intent(in) :: t,s,vb
+    real             :: d
+    real, parameter  :: phi = 2.6
     !wilkie and chang 1955                                                                                        
     d = ((t+273.15)*7.4d-8*(phi*18.01)**0.5)/((n_sw(t,s))*(vb**0.6))
   end function d_wc
 
   function v_sw(t,s) result(v)
-    real*8, intent(in) :: t,s
-    real*8             :: n,p,v
+    real, intent(in) :: t,s
+    real             :: n,p,v
     n=n_sw(t,s)*1d-3
     p=p_sw(t,s)
     v = 1d4*n/p
@@ -12663,10 +12687,17 @@ write (stdlogunit, generic_COBALT_nml)
 
   function schmidt_w(t,s,vb) result(sc)
     !schmidt number of the gas in the water                                                                       
-    real*8, intent(in) :: t,s,vb
-    real*8             :: sc
+    real, intent(in) :: t,s,vb
+    real             :: sc
     sc=2.*v_sw(t,s)/(d_hm(t,s,vb)+d_wc(t,s,vb))
   end function schmidt_w
+
+ function calc_pka_nh3(tc,salt) result(pka)
+    !temperature, salinity
+    real, intent(in) :: tc,salt
+    real :: pka
+    pka = 10.0423-0.0315536*tc+0.003071*salt
+  end function calc_pka_nh3
 
 !>>>
 
