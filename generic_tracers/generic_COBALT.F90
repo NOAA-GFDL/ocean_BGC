@@ -177,7 +177,7 @@ module generic_COBALT
   real,parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
 
-  real, parameter :: frac_nh3_default = 6.61e-2 !assumes pka of 9.3 and ocean pH of 8.2
+!  real, parameter :: frac_nh3_default = 6.61e-2 
 
 
 ! Namelist Options
@@ -187,8 +187,21 @@ module generic_COBALT
   logical :: debug              = .false.
   logical :: do_nh3_atm_ocean_exchange = .false. 
   logical :: use_nh3_for_nitrif = .false.
+  real    :: k_nh4_small = 2.0e-8
+  real    :: k_nh4_diazo = 1.0e-7
+  real    :: k_nh4_large = 1.0e-7
+  real    :: k_i_nh4_small = 2.70e-6
+  real    :: k_i_nh4_diazo = 1.26e-6
+  real    :: k_i_nh4_large = 1.26e-6
+  real    :: frac_nh3_default = 6.61e-2 !assumes pka of 9.3 and ocean pH of 8.15
 
-namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, use_nh3_for_nitrif
+  integer :: scheme_no3_nh4_lim = 1 !1-Frost and Franzen (1992)
+                                    !2-Harrison (1997) with Lomas (1999)
+
+  real    :: I_max = 1.
+
+namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, use_nh3_for_nitrif, &
+     k_nh4_small,k_nh4_large,k_nh4_diazo,frac_nh3_default,scheme_no3_nh4_lim,k_i_nh4_small,k_i_nh4_large,k_i_nh4_diazo,I_max
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -200,6 +213,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           k_fe_2_n,      &
           k_fed,         &
           k_nh4,         &
+          k_i_nh4,       &
           k_no3,         &
           k_po4,         &
           k_sio4,        &
@@ -5166,9 +5180,19 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_fed_Di', phyto(DIAZO)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  1.0e-10)                 ! mol Fed kg-1
-    call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  1.0e-7)                  ! mol NH4 kg-1
-    call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  2.0e-8)                  ! mol NH4 kg-1
-    call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  1.0e-7)                  ! mol NH4 kg-1
+!    call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  1.0e-7)                  ! mol NH4 kg-1
+!    call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  2.0e-8)                  ! mol NH4 kg-1
+!    call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  1.0e-7)                  ! mol NH4 kg-1
+
+    call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  k_nh4_large)                  ! mol NH4 kg-1
+    call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  k_nh4_small)                  ! mol NH4 kg-1
+    call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  k_nh4_diazo)                  ! mol NH4 kg-1
+
+    call g_tracer_add_param('k_i_nh4_Lg', phyto(LARGE)%k_i_nh4,  k_i_nh4_large)                  ! mol NH4 kg-1
+    call g_tracer_add_param('k_i_nh4_Sm', phyto(SMALL)%k_i_nh4,  k_i_nh4_small)                  ! mol NH4 kg-1
+    call g_tracer_add_param('k_i_nh4_Di', phyto(DIAZO)%k_i_nh4,  k_i_nh4_diazo)                  ! mol NH4 kg-1
+
+
     call g_tracer_add_param('k_no3_Lg', phyto(LARGE)%k_no3,  2.5e-6)                  ! mol NO3 kg-1
     call g_tracer_add_param('k_no3_Sm', phyto(SMALL)%k_no3,  5.0e-7)                  ! mol NO3 kg-1
     call g_tracer_add_param('k_no3_Di', phyto(DIAZO)%k_no3,  2.5e-6)                  ! mol NO3 kg-1
@@ -6353,7 +6377,7 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
     real, dimension(:,:), Allocatable :: pka_nh3
 
-    real :: tr,ltr
+    real :: tr,ltr,I_max_t,I_eff
 
     real :: imbal
     integer :: stdoutunit, imbal_flag, outunit
@@ -6595,9 +6619,20 @@ write (stdlogunit, generic_COBALT_nml)
        ! (Note nitrate does not limit diazotroph growth but uptake limitation is used 
        ! to determine nitrogen fixation versus facultative no3/nh4 uptake, see Sec. 1.3)
        do n= 1, NUM_PHYTO   !{
-          phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / &
-             ( (phyto(n)%k_no3+cobalt%f_no3(i,j,k)) * (1.0 + cobalt%f_nh4(i,j,k)/phyto(n)%k_nh4) )
-          phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / (phyto(n)%k_nh4 + cobalt%f_nh4(i,j,k))
+          if (scheme_no3_nh4_lim .eq. 1) then
+             phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / &
+                  ( (phyto(n)%k_no3+cobalt%f_no3(i,j,k)) * (1.0 + cobalt%f_nh4(i,j,k)/phyto(n)%k_nh4) )
+          elseif (scheme_no3_nh4_lim .eq. 2 .or. scheme_no3_nh4_lim.eq.3) then
+             if (scheme_no3_nh4_lim.eq.3) then
+                I_max_t = max(min(0.33 + 3.*Temp(i,j,k)/100.,1.),epsln)
+             else
+                I_max_t = I_max
+             end if
+             I_eff = 1.0 - I_max_t*cobalt%f_nh4(i,j,k)/(phyto(n)%k_i_nh4+cobalt%f_nh4(i,j,k))
+             I_eff = max(min(I_eff,1.),epsln)                
+             phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / (phyto(n)%k_no3+cobalt%f_no3(i,j,k))*I_eff
+          end if
+          phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / (phyto(n)%k_nh4 + cobalt%f_nh4(i,j,k))             
        enddo !} n
        !
        ! O2 inhibition term for diazotrophs
@@ -7562,20 +7597,20 @@ write (stdlogunit, generic_COBALT_nml)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
           if (use_nh3_for_nitrif) then
-
-       cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh3(i,j,k)/frac_nh3_default *  &
-            phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
-            (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
-            ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
-    else
-       cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
-            phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
-            (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
-            ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
-    end if
-         cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
+             
+             cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh3(i,j,k)/frac_nh3_default *  &
+                  phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
+                  (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
+                  ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
+          else
+             cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
+                  phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
+                  (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
+                  ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
+          end if
+          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
        else
-         cobalt%jnitrif(i,j,k) = 0.0
+          cobalt%jnitrif(i,j,k) = 0.0
        endif !}
     enddo; enddo; enddo  !} i,j,k
 
