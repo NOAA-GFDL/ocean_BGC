@@ -127,6 +127,7 @@
 module generic_COBALT
 
   use coupler_types_mod, only: coupler_2d_bc_type
+  use data_override_mod, only: data_override
   use field_manager_mod, only: fm_string_len, fm_path_name_len
   use mpp_mod,           only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_mod,           only: CLOCK_COMPONENT, CLOCK_SUBCOMPONENT, CLOCK_MODULE
@@ -6110,6 +6111,65 @@ write (stdlogunit, generic_COBALT_nml)
          prog       = .false.,       &
          init_value = 1.e-10           )
 
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'nh4_tag1',         &
+         longname   = 'NH4_tag1', &
+         units      = 'mol/kg',     &
+         prog       = .false.,       &
+         flux_gas   = .true.,            &
+         implementation='duce_vmr',   &
+         flux_gas_name  = 'nh3_tag1_flux',    &
+         flux_gas_type  = 'air_sea_gas_flux_generic', &
+         flux_gas_molwt = WTMN,                       &
+         flux_gas_param = (/ 1. /), &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_param = (/ WTMN*1.e-3/),    &         
+         init_value = 0.001              )
+
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'nh4_tag2',         &
+         longname   = 'NH4_tag2', &
+         units      = 'mol/kg',     &
+         prog       = .false.,       &
+         flux_gas   = .true.,            &
+         implementation='duce_vmr',   &
+         flux_gas_name  = 'nh3_tag2_flux',    &
+         flux_gas_type  = 'air_sea_gas_flux_generic', &
+         flux_gas_molwt = WTMN,                       &
+         flux_gas_param = (/ 1. /), &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_param = (/ WTMN*1.e-3/),    &         
+         init_value = 0.001              )
+
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'nh4_tag3',         &
+         longname   = 'NH4_tag3', &
+         units      = 'mol/kg',     &
+         prog       = .false.,       &
+         flux_gas   = .true.,            &
+         implementation='duce_vmr',   &
+         flux_gas_name  = 'nh3_tag3_flux',    &
+         flux_gas_type  = 'air_sea_gas_flux_generic', &
+         flux_gas_molwt = WTMN,                       &
+         flux_gas_param = (/ 1. /), &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_param = (/ WTMN*1.e-3/),    &         
+         init_value = 0.001              )
+
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'nh4_tag4',         &
+         longname   = 'NH4_tag4', &
+         units      = 'mol/kg',     &
+         prog       = .false.,       &
+         flux_gas   = .true.,            &
+         implementation='duce_vmr',   &
+         flux_gas_name  = 'nh3_tag4_flux',    &
+         flux_gas_type  = 'air_sea_gas_flux_generic', &
+         flux_gas_molwt = WTMN,                       &
+         flux_gas_param = (/ 1. /), &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_param = (/ WTMN*1.e-3/),    &         
+         init_value = 0.001              )
 
   end subroutine user_add_tracers
 
@@ -6376,6 +6436,8 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:,:), Allocatable :: pre_totfe, net_srcfe, post_totfe
     real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
     real, dimension(:,:), Allocatable :: pka_nh3
+    real, dimension(:,:), Allocatable :: mask_nh4_tag
+
 
     real :: tr,ltr,I_max_t,I_eff
 
@@ -6390,6 +6452,7 @@ write (stdlogunit, generic_COBALT_nml)
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
 
     allocate(pka_nh3(isd:ied,jsd:jed))
+    allocate(mask_nh4_tag(isd:ied,jsd:jed))
     pka_nh3 = 0.
 
     call mpp_clock_begin(id_clock_carbon_calculations)
@@ -6488,6 +6551,23 @@ write (stdlogunit, generic_COBALT_nml)
 
        call g_tracer_set_values(tracer_list,'nh4','alpha',cobalt%nh3_alpha    ,isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4','csurf',cobalt%nh3_csurf    ,isd,jsd)    
+
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag1_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag1','alpha',cobalt%nh3_alpha,isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag1','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag2_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag2','alpha',cobalt%nh3_alpha,isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag2','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag3_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag3','alpha',cobalt%nh3_alpha,isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag3','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag4','alpha',cobalt%nh3_alpha,isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag4','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
     end if
 
       if (do_14c) then                                        !<<RADIOCARBON
@@ -9014,8 +9094,11 @@ write (stdlogunit, generic_COBALT_nml)
        used = g_send_data(cobalt%id_pka_nh3,  pka_nh3,   &
             model_time, rmask = grid_tmask(:,:,1),&
             is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
-       deallocate(pka_nh3)
     end if
+    if (allocated(pka_nh3)) deallocate(pka_nh3)
+    if (allocated(mask_nh4_tag)) deallocate(mask_nh4_tag)
+    
+
 
 !
 !---------------------------------------------------------------------
@@ -11437,12 +11520,14 @@ write (stdlogunit, generic_COBALT_nml)
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt)
+  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt,model_time)
     type(g_tracer_type),          pointer    :: tracer_list
     real, dimension(ilb:,jlb:),   intent(in)   :: SST, SSS
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
+
+    type(time_type),    intent(in) :: model_time
 
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: sal,ST,o2_saturation
@@ -11453,6 +11538,9 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:), ALLOCATABLE :: co2_alpha,co2_csurf,co2_sc_no,o2_alpha,o2_csurf,o2_sc_no,nh3_alpha,nh3_csurf,nh3_sc_no
     real, dimension(:,:), ALLOCATABLE :: c14o2_alpha,c14o2_csurf
     real :: pka_nh3,tr,ltr
+
+    real, dimension(:,:), ALLOCATABLE :: mask_nh4_tag
+
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_set_boundary_values'
 
 
@@ -11477,6 +11565,9 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(o2_sc_no(isd:ied, jsd:jed)); o2_sc_no=0.0
     allocate(htotal_field(isd:ied,jsd:jed,nk),co3_ion_field(isd:ied,jsd:jed,nk))
     htotal_field=0.0 ; co3_ion_field=0.0
+
+    allocate(mask_nh4_tag(isd:ied, jsd:jed)); mask_nh4_tag=0.0
+
 
     !nnz: Since the generic_COBALT_update_from_source() subroutine is called by this time
     !     the following if block is not really necessary (since this calculation is already done in source).
@@ -11573,6 +11664,27 @@ write (stdlogunit, generic_COBALT_nml)
 
           call g_tracer_set_values(tracer_list,'nh4','alpha',nh3_alpha    ,isd,jsd)
           call g_tracer_set_values(tracer_list,'nh4','csurf',nh3_csurf    ,isd,jsd)
+
+          mask_nh4_tag(:,:) = 1.
+          call data_override('OCN', 'nh4_tag1_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+          call g_tracer_set_values(tracer_list,'nh4_tag1','alpha',nh3_alpha,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4_tag1','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
+
+          mask_nh4_tag(:,:) = 1.
+          call data_override('OCN', 'nh4_tag2_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+          call g_tracer_set_values(tracer_list,'nh4_tag2','alpha',nh3_alpha,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4_tag2','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
+
+          mask_nh4_tag(:,:) = 1.
+          call data_override('OCN', 'nh4_tag3_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+          call g_tracer_set_values(tracer_list,'nh4_tag3','alpha',nh3_alpha,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4_tag3','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
+
+          mask_nh4_tag(:,:) = 1.
+          call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+          call g_tracer_set_values(tracer_list,'nh4_tag4','alpha',nh3_alpha,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4_tag4','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
+
        end if   
        !!nnz: If source is called uncomment the following
        cobalt%init = .false. !nnz: This is necessary since the above two calls appear in source subroutine too.
@@ -11721,6 +11833,31 @@ write (stdlogunit, generic_COBALT_nml)
        call g_tracer_set_values(tracer_list,'nh4', 'alpha',nh3_alpha, isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4', 'csurf',nh3_csurf, isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4', 'sc_no',nh3_sc_no, isd,jsd)
+
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag1_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag1', 'alpha',nh3_alpha, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag1', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag1', 'sc_no',nh3_sc_no, isd,jsd)
+
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag2_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag2', 'alpha',nh3_alpha, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag2', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag2', 'sc_no',nh3_sc_no, isd,jsd)
+
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag3_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag3', 'alpha',nh3_alpha, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag3', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag3', 'sc_no',nh3_sc_no, isd,jsd)
+
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag4', 'alpha',nh3_alpha, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag4', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag4', 'sc_no',nh3_sc_no, isd,jsd)
+
     end if
 
     if (do_14c) then                                      !<<RADIOCARBON
@@ -11755,6 +11892,8 @@ write (stdlogunit, generic_COBALT_nml)
          c14o2_alpha,c14o2_csurf,     &
          o2_csurf,o2_sc_no, nh3_alpha,nh3_csurf,&
          nh3_sc_no)
+
+    if (allocated(mask_nh4_tag)) deallocate(mask_nh4_tag)
 
   end subroutine generic_COBALT_set_boundary_values
 
