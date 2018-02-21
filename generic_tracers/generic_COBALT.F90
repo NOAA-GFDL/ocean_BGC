@@ -197,7 +197,7 @@ module generic_COBALT
   real    :: frac_nh3_default = 6.61e-2 !assumes pka of 9.3 and ocean pH of 8.15
 
   integer :: scheme_no3_nh4_lim = 1 !1-Frost and Franzen (1992)
-                                    !2-Harrison (1997) with Lomas (1999)
+                                    !2-O'Neill
 
   real    :: I_max = 1.
 
@@ -6710,17 +6710,13 @@ write (stdlogunit, generic_COBALT_nml)
           if (scheme_no3_nh4_lim .eq. 1) then
              phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / &
                   ( (phyto(n)%k_no3+cobalt%f_no3(i,j,k)) * (1.0 + cobalt%f_nh4(i,j,k)/phyto(n)%k_nh4) )
-          elseif (scheme_no3_nh4_lim .eq. 2 .or. scheme_no3_nh4_lim.eq.3) then
-             if (scheme_no3_nh4_lim.eq.3) then
-                I_max_t = max(min(0.33 + 3.*Temp(i,j,k)/100.,1.),epsln)
-             else
-                I_max_t = I_max
-             end if
-             I_eff = 1.0 - I_max_t*cobalt%f_nh4(i,j,k)/(phyto(n)%k_i_nh4+cobalt%f_nh4(i,j,k))
-             I_eff = max(min(I_eff,1.),epsln)                
-             phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / (phyto(n)%k_no3+cobalt%f_no3(i,j,k))*I_eff
+             phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / (phyto(n)%k_nh4 + cobalt%f_nh4(i,j,k))             
+          elseif (scheme_no3_nh4_lim .eq. 2)
+             phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / &
+                  ( phyto(n)%k_no3+cobalt%f_no3(i,j,k)+phyto(n)%k_no3/phyto(n)%k_nh4*cobalt%f_nh4(i,j,k) )
+             phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / &
+                  ( phyto(n)%k_nh4+cobalt%f_nh4(i,j,k)+phyto(n)%k_nh4/phyto(n)%k_no3*cobalt%f_no3(i,j,k) )
           end if
-          phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / (phyto(n)%k_nh4 + cobalt%f_nh4(i,j,k))             
        enddo !} n
        !
        ! O2 inhibition term for diazotrophs
