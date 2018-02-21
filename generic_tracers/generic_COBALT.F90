@@ -6171,6 +6171,21 @@ write (stdlogunit, generic_COBALT_nml)
          flux_param = (/ WTMN*1.e-3/),    &         
          init_value = 0.001              )
 
+    call g_tracer_add(tracer_list,package_name,&
+         name       = 'nh4_tag5',         &
+         longname   = 'NH4_tag5', &
+         units      = 'mol/kg',     &
+         prog       = .false.,       &
+         flux_gas   = .true.,            &
+         implementation='duce_vmr',   &
+         flux_gas_name  = 'nh3_tag5_flux',    &
+         flux_gas_type  = 'air_sea_gas_flux_generic', &
+         flux_gas_molwt = WTMN,                       &
+         flux_gas_param = (/ 1. /), &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_param = (/ WTMN*1.e-3/),    &         
+         init_value = 0.001              )
+
   end subroutine user_add_tracers
 
 
@@ -6568,6 +6583,10 @@ write (stdlogunit, generic_COBALT_nml)
        call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
        call g_tracer_set_values(tracer_list,'nh4_tag4','alpha',cobalt%nh3_alpha,isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4_tag4','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag5_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag5','alpha',cobalt%nh3_alpha,isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag5','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
     end if
 
       if (do_14c) then                                        !<<RADIOCARBON
@@ -11685,6 +11704,11 @@ write (stdlogunit, generic_COBALT_nml)
           call g_tracer_set_values(tracer_list,'nh4_tag4','alpha',nh3_alpha,isd,jsd)
           call g_tracer_set_values(tracer_list,'nh4_tag4','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
 
+          mask_nh4_tag(:,:) = 1.
+          call data_override('OCN', 'nh4_tag5_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+          call g_tracer_set_values(tracer_list,'nh4_tag5','alpha',nh3_alpha,isd,jsd)
+          call g_tracer_set_values(tracer_list,'nh4_tag5','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
+
        end if   
        !!nnz: If source is called uncomment the following
        cobalt%init = .false. !nnz: This is necessary since the above two calls appear in source subroutine too.
@@ -11857,6 +11881,12 @@ write (stdlogunit, generic_COBALT_nml)
        call g_tracer_set_values(tracer_list,'nh4_tag4', 'alpha',nh3_alpha, isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4_tag4', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4_tag4', 'sc_no',nh3_sc_no, isd,jsd)
+
+       mask_nh4_tag(:,:) = 1.
+       call data_override('OCN', 'nh4_tag5_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
+       call g_tracer_set_values(tracer_list,'nh4_tag5', 'alpha',nh3_alpha, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag5', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
+       call g_tracer_set_values(tracer_list,'nh4_tag5', 'sc_no',nh3_sc_no, isd,jsd)
 
     end if
 
@@ -12919,8 +12949,29 @@ write (stdlogunit, generic_COBALT_nml)
  function calc_pka_nh3(tc,salt) result(pka)
     !temperature, salinity
     real, intent(in) :: tc,salt
-    real :: pka
-    pka = 10.0423-0.0315536*tc+0.003071*salt
+    real :: pka,tk
+!Bell 2007
+!    pka = 10.0423-0.0315536*tc+0.003071*salt
+
+!Clegg 1995
+    real, parameter :: a1=0.0500616
+    real, parameter :: a2=-9.412696
+    real, parameter :: a3=-2.029559e-7
+    real, parameter :: a4=-0.0142372
+    real, parameter :: a5=1.46041e-5
+    real, parameter :: a6=3.730005
+    real, parameter :: a7=7.14045e-5
+    real, parameter :: a8=-0.0229021
+    real, parameter :: a9=-5.521278e-7
+    real, parameter :: a10=1.95413e-4
+    
+    tk=tc+273.15;
+    pka     = 9.244605-2729.33*(1/298.15-1./tk)  &
+            + (a1+a2/tk+a3*tk**2.)*salt**0.5       &
+            + (a4+a5*tk+a6/tk)*salt              &
+            + (a7+a8/tk)*salt**2.                 &
+            + (a9+a10/tk)*salt**3.;
+
   end function calc_pka_nh3
 
 !>>>
