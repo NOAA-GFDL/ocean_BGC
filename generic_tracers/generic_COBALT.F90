@@ -191,9 +191,9 @@ module generic_COBALT
   real    :: k_nh4_small = 2.0e-8
   real    :: k_nh4_diazo = 1.0e-7
   real    :: k_nh4_large = 1.0e-7
-  real    :: k_i_nh4_small = 2.70e-6
-  real    :: k_i_nh4_diazo = 1.26e-6
-  real    :: k_i_nh4_large = 1.26e-6
+  real    :: k_no3_small = 2.0e-8
+  real    :: k_no3_diazo = 1.0e-7
+  real    :: k_no3_large = 1.0e-7
   real    :: frac_nh3_default = 6.61e-2 !assumes pka of 9.3 and ocean pH of 8.15
 
   integer :: scheme_no3_nh4_lim = 1 !1-Frost and Franzen (1992)
@@ -202,7 +202,7 @@ module generic_COBALT
   real    :: I_max = 1.
 
 namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, use_nh3_for_nitrif, &
-     k_nh4_small,k_nh4_large,k_nh4_diazo,frac_nh3_default,scheme_no3_nh4_lim,k_i_nh4_small,k_i_nh4_large,k_i_nh4_diazo,I_max
+     k_nh4_small,k_nh4_large,k_nh4_diazo,frac_nh3_default,scheme_no3_nh4_lim,k_no3_small,k_no3_large,k_no3_diazo
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -886,6 +886,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           wc_vert_int_jno3denit,&
           wc_vert_int_jnitrif,&
           wc_vert_int_juptake_nh4,&
+          wc_vert_int_jprod_nh4,&
           wc_vert_int_juptake_no3,&
           wc_vert_int_nfix
 !==============================================================================================================
@@ -1174,6 +1175,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           id_wc_vert_int_jno3denit = -1,   &
           id_wc_vert_int_jnitrif = -1,     &
           id_wc_vert_int_juptake_nh4 = -1, &
+          id_wc_vert_int_jprod_nh4 = -1, &
           id_wc_vert_int_juptake_no3 = -1, &
           id_wc_vert_int_nfix = -1,        &
           id_total_filter_feeding = -1,&
@@ -3356,6 +3358,10 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_wc_vert_int_juptake_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
+    vardesc_temp = vardesc("wc_vert_int_jprod_nh4"," Water column ammonia based NPP vertical integral",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_wc_vert_int_jprod_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
     vardesc_temp = vardesc("wc_vert_int_juptake_no3","Water column nitrate based NPP, vertical integral",'h','1','s','mol m-2 s-1','f')
     cobalt%id_wc_vert_int_juptake_no3 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
@@ -5178,22 +5184,15 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_fed_Di', phyto(DIAZO)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  1.0e-10)                 ! mol Fed kg-1
-!    call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  1.0e-7)                  ! mol NH4 kg-1
-!    call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  2.0e-8)                  ! mol NH4 kg-1
-!    call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  1.0e-7)                  ! mol NH4 kg-1
 
     call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  k_nh4_large)                  ! mol NH4 kg-1
     call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  k_nh4_small)                  ! mol NH4 kg-1
     call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  k_nh4_diazo)                  ! mol NH4 kg-1
 
-    call g_tracer_add_param('k_i_nh4_Lg', phyto(LARGE)%k_i_nh4,  k_i_nh4_large)                  ! mol NH4 kg-1
-    call g_tracer_add_param('k_i_nh4_Sm', phyto(SMALL)%k_i_nh4,  k_i_nh4_small)                  ! mol NH4 kg-1
-    call g_tracer_add_param('k_i_nh4_Di', phyto(DIAZO)%k_i_nh4,  k_i_nh4_diazo)                  ! mol NH4 kg-1
+    call g_tracer_add_param('k_no3_Lg', phyto(LARGE)%k_no3,  k_no3_large)                  ! mol NO3 kg-1
+    call g_tracer_add_param('k_no3_Sm', phyto(SMALL)%k_no3,  k_no3_small)                  ! mol NO3 kg-1
+    call g_tracer_add_param('k_no3_Di', phyto(DIAZO)%k_no3,  k_no3_diazo)                  ! mol NO3 kg-1
 
-
-    call g_tracer_add_param('k_no3_Lg', phyto(LARGE)%k_no3,  2.5e-6)                  ! mol NO3 kg-1
-    call g_tracer_add_param('k_no3_Sm', phyto(SMALL)%k_no3,  5.0e-7)                  ! mol NO3 kg-1
-    call g_tracer_add_param('k_no3_Di', phyto(DIAZO)%k_no3,  2.5e-6)                  ! mol NO3 kg-1
     call g_tracer_add_param('k_po4_Di', phyto(DIAZO)%k_po4,  5.0e-8)                  ! mol PO4 kg-1
     call g_tracer_add_param('k_po4_Lg', phyto(LARGE)%k_po4,  5.0e-8)                  ! mol PO4 kg-1
     call g_tracer_add_param('k_po4_Sm', phyto(SMALL)%k_po4,  1.0e-8)                  ! mol PO4 kg-1
@@ -6711,7 +6710,7 @@ write (stdlogunit, generic_COBALT_nml)
              phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / &
                   ( (phyto(n)%k_no3+cobalt%f_no3(i,j,k)) * (1.0 + cobalt%f_nh4(i,j,k)/phyto(n)%k_nh4) )
              phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / (phyto(n)%k_nh4 + cobalt%f_nh4(i,j,k))             
-          elseif (scheme_no3_nh4_lim .eq. 2)
+          elseif (scheme_no3_nh4_lim .eq. 2) then
              phyto(n)%no3lim(i,j,k) = cobalt%f_no3(i,j,k) / &
                   ( phyto(n)%k_no3+cobalt%f_no3(i,j,k)+phyto(n)%k_no3/phyto(n)%k_nh4*cobalt%f_nh4(i,j,k) )
              phyto(n)%nh4lim(i,j,k) = cobalt%f_nh4(i,j,k) / &
@@ -8558,6 +8557,7 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%wc_vert_int_jno3denit(i,j) = 0.0
        cobalt%wc_vert_int_jnitrif(i,j) = 0.0
        cobalt%wc_vert_int_juptake_nh4(i,j) = 0.0
+       cobalt%wc_vert_int_jprod_nh4(i,j) = 0.0
        cobalt%wc_vert_int_juptake_no3(i,j) = 0.0
        cobalt%wc_vert_int_nfix(i,j) = 0.0
     enddo; enddo !} i,j
@@ -8587,6 +8587,10 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%wc_vert_int_juptake_nh4(i,j) = cobalt%wc_vert_int_juptake_nh4(i,j) +                     &
              (phyto(1)%juptake_nh4(i,j,k)+phyto(2)%juptake_nh4(i,j,k)+phyto(3)%juptake_nh4(i,j,k))* & 
              rho_dzt(i,j,k) * grid_tmask(i,j,k)
+
+          cobalt%wc_vert_int_jprod_nh4(i,j) = cobalt%wc_vert_int_jprod_nh4(i,j) +                     &
+             cobalt%jprod_nh4(i,j,k)*rho_dzt(i,j,k) * grid_tmask(i,j,k)
+
           cobalt%wc_vert_int_juptake_no3(i,j) = cobalt%wc_vert_int_juptake_no3(i,j) +                     &
              (phyto(1)%juptake_no3(i,j,k)+phyto(2)%juptake_no3(i,j,k)+phyto(3)%juptake_no3(i,j,k))* &
              rho_dzt(i,j,k) * grid_tmask(i,j,k)
@@ -10278,6 +10282,10 @@ write (stdlogunit, generic_COBALT_nml)
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_wc_vert_int_juptake_nh4 .gt. 0)       &
        used = g_send_data(cobalt%id_wc_vert_int_juptake_nh4,    cobalt%wc_vert_int_juptake_nh4,  &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_wc_vert_int_jprod_nh4 .gt. 0)       &
+       used = g_send_data(cobalt%id_wc_vert_int_jprod_nh4,    cobalt%wc_vert_int_jprod_nh4,  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_wc_vert_int_juptake_no3 .gt. 0)       &
@@ -12360,6 +12368,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%wc_vert_int_jno3denit(isd:ied, jsd:jed))    ; cobalt%wc_vert_int_jno3denit=0.0
     allocate(cobalt%wc_vert_int_jnitrif(isd:ied, jsd:jed))      ; cobalt%wc_vert_int_jnitrif=0.0
     allocate(cobalt%wc_vert_int_juptake_nh4(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_juptake_nh4=0.0
+    allocate(cobalt%wc_vert_int_jprod_nh4(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_jprod_nh4=0.0
     allocate(cobalt%wc_vert_int_juptake_no3(isd:ied, jsd:jed))  ; cobalt%wc_vert_int_juptake_no3=0.0
     allocate(cobalt%wc_vert_int_nfix(isd:ied, jsd:jed))         ; cobalt%wc_vert_int_nfix=0.0
 !==============================================================================================================
@@ -12849,6 +12858,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%wc_vert_int_jno3denit)
     deallocate(cobalt%wc_vert_int_jnitrif)
     deallocate(cobalt%wc_vert_int_juptake_nh4)
+    deallocate(cobalt%wc_vert_int_jprod_nh4)
     deallocate(cobalt%wc_vert_int_juptake_no3)
     deallocate(cobalt%wc_vert_int_nfix)  
 !==============================================================================================================
