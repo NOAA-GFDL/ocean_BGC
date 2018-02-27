@@ -196,8 +196,8 @@ module generic_COBALT
   real    :: phi_ldop  = 0.45
   real    :: phi_srdon = 0.075
   real    :: phi_srdop = 0.15
-  real    :: o2_min    = 0.8e-6
-  real    :: k_o2      = 8.e-6
+  real    :: o2_min_nit= 0.8e-6
+  real    :: k_o2_nit  = 8.e-6
   real    :: irr_inhibit = 0.1
   real    :: gamma_nitrif= 1. !month(-1)
   real    :: k_nh3     = 3.1e-9 !mol/kg
@@ -214,7 +214,7 @@ module generic_COBALT
 namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, scheme_nitrif, &
      k_nh4_small,k_nh4_large,k_nh4_diazo,scheme_no3_nh4_lim,k_no3_small,k_no3_large,k_no3_diazo, &
      phi_ldon,phi_ldop,phi_srdon,phi_srdop, &
-     o2_min,k_o2,irr_inhibit,k_nh3, &
+     o2_min_nit,k_o2_nit,irr_inhibit,k_nh3, &
      gamma_nitrif
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
@@ -578,6 +578,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           irr_inhibit,      &
           k_n_inhib_di,     &
           k_o2,             &
+          k_o2_nit,         &
           kappa_eppley,     &
           kappa_remin,      &
           remin_ramp_scale, &
@@ -595,6 +596,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           n_2_n_denit,      &
           k_no3_denit,      &
           o2_min,           &
+          o2_min_nit,       &
           o2_2_nfix,        & 
           o2_2_nh4,         &
           o2_2_no3,         &
@@ -5489,6 +5491,8 @@ write (stdlogunit, generic_COBALT_nml)
     !
     call g_tracer_add_param('k_o2', cobalt%k_o2, k_o2)                                     ! mol O2 kg-1
     call g_tracer_add_param('o2_min', cobalt%o2_min, o2_min )                                ! mol O2 kg-1
+    call g_tracer_add_param('k_o2_nit', cobalt%k_o2_nit, k_o2_nit)                                     ! mol O2 kg-1
+    call g_tracer_add_param('o2_min_nit', cobalt%o2_min_nit, o2_min_nit )                                ! mol O2 kg-1
     call g_tracer_add_param('kappa_remin', cobalt%kappa_remin, 0.063 )                       ! deg C-1
     call g_tracer_add_param('remin_ramp_scale', cobalt%remin_ramp_scale, 50.0 )              ! m
     call g_tracer_add_param('rpcaco3', cobalt%rpcaco3, 0.070/12.0*16.0/106.0*100.0)          ! mol N mol Ca-1
@@ -7690,17 +7694,17 @@ write (stdlogunit, generic_COBALT_nml)
        !  Nitrification
        !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
+       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min_nit) then  !{
           if (scheme_nitrif .eq. 2) then             
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * &
                   cobalt%f_nh3(i,j,k)/(cobalt%f_nh3(i,j,k)+phyto(SMALL)%k_nh3) *  &
                   (1.-cobalt%f_irr_mem(i,j,k)/(cobalt%irr_inhibit+cobalt%f_irr_mem(i,j,k))) * &
-                  cobalt%f_o2(i,j,k)/(cobalt%k_o2+cobalt%f_o2(i,j,k)) * cobalt%f_nh4(i,j,k)**2
+                  cobalt%f_o2(i,j,k)/(cobalt%k_o2_nit+cobalt%f_o2(i,j,k)) * cobalt%f_nh4(i,j,k)**2
           elseif (scheme_nitrif .eq. 1) then
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
                   phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
                   (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
-                  ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
+                  ( cobalt%k_o2_nit + cobalt%f_o2(i,j,k) )
           end if
           cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
        else
