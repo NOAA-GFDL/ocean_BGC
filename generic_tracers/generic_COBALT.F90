@@ -5489,8 +5489,8 @@ write (stdlogunit, generic_COBALT_nml)
     ! Remineralization
     !-------------------------------------------------------------------------
     !
-    call g_tracer_add_param('k_o2', cobalt%k_o2, k_o2)                                     ! mol O2 kg-1
-    call g_tracer_add_param('o2_min', cobalt%o2_min, o2_min )                                ! mol O2 kg-1
+    call g_tracer_add_param('k_o2', cobalt%k_o2, 8e-6)                                     ! mol O2 kg-1
+    call g_tracer_add_param('o2_min', cobalt%o2_min, 0.8e-6 )                                ! mol O2 kg-1
     call g_tracer_add_param('k_o2_nit', cobalt%k_o2_nit, k_o2_nit)                                     ! mol O2 kg-1
     call g_tracer_add_param('o2_min_nit', cobalt%o2_min_nit, o2_min_nit )                                ! mol O2 kg-1
     call g_tracer_add_param('kappa_remin', cobalt%kappa_remin, 0.063 )                       ! deg C-1
@@ -7695,11 +7695,15 @@ write (stdlogunit, generic_COBALT_nml)
        !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min_nit) then  !{
-          if (scheme_nitrif .eq. 2) then             
+          if (scheme_nitrif .eq. 2 .or. scheme_nitrif .eq. 3) then             
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * &
                   cobalt%f_nh3(i,j,k)/(cobalt%f_nh3(i,j,k)+phyto(SMALL)%k_nh3) *  &
                   (1.-cobalt%f_irr_mem(i,j,k)/(cobalt%irr_inhibit+cobalt%f_irr_mem(i,j,k))) * &
                   cobalt%f_o2(i,j,k)/(cobalt%k_o2_nit+cobalt%f_o2(i,j,k)) * cobalt%f_nh4(i,j,k)**2
+
+             if (scheme_nitrif .eq. 3) then
+                cobalt%jnitrif(i,j,k) = cobalt%jnitrif(i,j,k)*cobalt%expkT(i,j,k)
+             end if
           elseif (scheme_nitrif .eq. 1) then
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
                   phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
