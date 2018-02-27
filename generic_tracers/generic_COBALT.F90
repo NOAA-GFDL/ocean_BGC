@@ -178,31 +178,44 @@ module generic_COBALT
   real,parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
 
-!  real, parameter :: frac_nh3_default = 6.61e-2 
-
-
 ! Namelist Options
 
   character(len=10) ::  co2_calc = 'ocmip2'  ! other option is 'mocsy'
   logical :: do_14c             = .false.
   logical :: debug              = .false.
   logical :: do_nh3_atm_ocean_exchange = .false. 
-  logical :: use_nh3_for_nitrif = .false.
   real    :: k_nh4_small = 2.0e-8
   real    :: k_nh4_diazo = 1.0e-7
   real    :: k_nh4_large = 1.0e-7
-  real    :: k_no3_small = 2.0e-8
-  real    :: k_no3_diazo = 1.0e-7
-  real    :: k_no3_large = 1.0e-7
-  real    :: frac_nh3_default = 6.61e-2 !assumes pka of 9.3 and ocean pH of 8.15
+  real    :: k_no3_small = 5.0e-7
+  real    :: k_no3_diazo = 2.5e-6
+  real    :: k_no3_large = 2.5e-6
+
+
+  real    :: phi_ldon  = 0.525
+  real    :: phi_ldop  = 0.45
+  real    :: phi_srdon = 0.075
+  real    :: phi_srdop = 0.15
+  real    :: o2_min    = 0.8e-6
+  real    :: k_o2      = 8.e-6
+  real    :: irr_inhibit = 0.1
+  real    :: gamma_nitrif= 1. !month(-1)
+  real    :: k_nh3     = 3.1e-9 !mol/kg
 
   integer :: scheme_no3_nh4_lim = 1 !1-Frost and Franzen (1992)
                                     !2-O'Neill
 
-  real    :: I_max = 1.
+  integer :: scheme_nitrif = 1 !1-default COBALT
+                               !2-update with no temperature dependence
 
-namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, use_nh3_for_nitrif, &
-     k_nh4_small,k_nh4_large,k_nh4_diazo,frac_nh3_default,scheme_no3_nh4_lim,k_no3_small,k_no3_large,k_no3_diazo
+
+
+
+namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, scheme_nitrif, &
+     k_nh4_small,k_nh4_large,k_nh4_diazo,scheme_no3_nh4_lim,k_no3_small,k_no3_large,k_no3_diazo, &
+     phi_ldon,phi_ldop,phi_srdon,phi_srdop, &
+     o2_min,k_o2,irr_inhibit,k_nh3, &
+     gamma_nitrif
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -214,7 +227,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           k_fe_2_n,      &
           k_fed,         &
           k_nh4,         &
-          k_i_nh4,       &
+          k_nh3,         &
           k_no3,         &
           k_po4,         &
           k_sio4,        &
@@ -5185,7 +5198,13 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  1.0e-10)                 ! mol Fed kg-1
 
+    call g_tracer_add_param('k_nh3', phyto(SMALL)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
+    call g_tracer_add_param('k_nh3', phyto(LARGE)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
+    call g_tracer_add_param('k_nh3', phyto(DIAZO)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
+
+
     call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  k_nh4_large)                  ! mol NH4 kg-1
+
     call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  k_nh4_small)                  ! mol NH4 kg-1
     call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  k_nh4_diazo)                  ! mol NH4 kg-1
 
@@ -5387,24 +5406,24 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('phi_det_smz',zoo(1)%phi_det, 0.10)            ! dimensionless
     call g_tracer_add_param('phi_det_mdz',zoo(2)%phi_det, 0.20)            ! dimensionless
     call g_tracer_add_param('phi_det_lgz',zoo(3)%phi_det, 0.30)            ! dimensionless
-    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, 0.525*0.20)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, 0.525*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, 0.525*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, 0.45*0.20)     ! dimensionless
-    call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, 0.45*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, 0.45*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, 0.075*0.20)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, 0.075*0.10)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, 0.075*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, 0.15*0.20)   ! dimensionless
-    call g_tracer_add_param('phi_srdop_mdz',zoo(2)%phi_srdop, 0.15*0.10)   ! dimensionless
-    call g_tracer_add_param('phi_srdop_lgz',zoo(3)%phi_srdop, 0.15*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, 0.4*0.20)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, 0.4*0.10)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, 0.4*0.0)     ! dimensionless
-    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, 0.4*0.20)    ! dimensionless
-    call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, 0.4*0.10)    ! dimensionless
-    call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, 0.4*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, phi_ldon*0.20)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, phi_ldon*0.10)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, phi_ldon*0.0)      ! dimensionless
+    call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, phi_ldop*0.20)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, phi_ldop*0.10)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, phi_ldop*0.0)      ! dimensionless
+    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, phi_srdon*0.20)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, phi_srdon*0.10)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, phi_srdon*0.0)    ! dimensionless
+    call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, phi_srdop*0.20)   ! dimensionless
+    call g_tracer_add_param('phi_srdop_mdz',zoo(2)%phi_srdop, phi_srdop*0.10)   ! dimensionless
+    call g_tracer_add_param('phi_srdop_lgz',zoo(3)%phi_srdop, phi_srdop*0.0)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, (1.-phi_srdon-phi_ldon)*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, (1.-phi_srdon-phi_ldon)*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, (1.-phi_srdon-phi_ldon)*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, (1.-phi_srdop-phi_ldop)*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, (1.-phi_srdop-phi_ldop)*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, (1.-phi_srdop-phi_ldop)*0.0)     ! dimensionless
     call g_tracer_add_param('phi_nh4_smz',zoo(1)%phi_nh4, 0.30)            ! dimensionless
     call g_tracer_add_param('phi_nh4_mdz',zoo(2)%phi_nh4, 0.30)            ! dimensionless
     call g_tracer_add_param('phi_nh4_lgz',zoo(3)%phi_nh4, 0.30)            ! dimensionless
@@ -5416,12 +5435,12 @@ write (stdlogunit, generic_COBALT_nml)
     ! Partitioning of viral losses to various dissolved pools
     !----------------------------------------------------------------------
     !
-    call g_tracer_add_param('phi_ldon_vir',cobalt%lysis_phi_ldon, 0.525)    ! dimensionless
-    call g_tracer_add_param('phi_srdon_vir',cobalt%lysis_phi_srdon, 0.075)  ! dimensionless
-    call g_tracer_add_param('phi_sldon_vir',cobalt%lysis_phi_sldon, 0.40)  ! dimensionless
-    call g_tracer_add_param('phi_ldop_vir',cobalt%lysis_phi_ldop, 0.45)    ! dimensionless
-    call g_tracer_add_param('phi_srdop_vir',cobalt%lysis_phi_srdop, 0.15)  ! dimensionless
-    call g_tracer_add_param('phi_sldop_vir',cobalt%lysis_phi_sldop, 0.40)  ! dimensionless
+    call g_tracer_add_param('phi_ldon_vir',cobalt%lysis_phi_ldon, phi_ldon)    ! dimensionless
+    call g_tracer_add_param('phi_srdon_vir',cobalt%lysis_phi_srdon, phi_srdon)  ! dimensionless
+    call g_tracer_add_param('phi_sldon_vir',cobalt%lysis_phi_sldon, 1.-phi_ldon-phi_srdon)  ! dimensionless
+    call g_tracer_add_param('phi_ldop_vir',cobalt%lysis_phi_ldop, phi_ldop)    ! dimensionless
+    call g_tracer_add_param('phi_srdop_vir',cobalt%lysis_phi_srdop, phi_srdop)  ! dimensionless
+    call g_tracer_add_param('phi_sldop_vir',cobalt%lysis_phi_sldop, 1.-phi_ldop-phi_srdop)  ! dimensionless
     ! 
     !----------------------------------------------------------------------
     ! Parameters for unresolved higher predators
@@ -5468,8 +5487,8 @@ write (stdlogunit, generic_COBALT_nml)
     ! Remineralization
     !-------------------------------------------------------------------------
     !
-    call g_tracer_add_param('k_o2', cobalt%k_o2, 8.0e-6)                                     ! mol O2 kg-1
-    call g_tracer_add_param('o2_min', cobalt%o2_min, 0.8e-6 )                                ! mol O2 kg-1
+    call g_tracer_add_param('k_o2', cobalt%k_o2, k_o2)                                     ! mol O2 kg-1
+    call g_tracer_add_param('o2_min', cobalt%o2_min, o2_min )                                ! mol O2 kg-1
     call g_tracer_add_param('kappa_remin', cobalt%kappa_remin, 0.063 )                       ! deg C-1
     call g_tracer_add_param('remin_ramp_scale', cobalt%remin_ramp_scale, 50.0 )              ! m
     call g_tracer_add_param('rpcaco3', cobalt%rpcaco3, 0.070/12.0*16.0/106.0*100.0)          ! mol N mol Ca-1
@@ -5508,8 +5527,8 @@ write (stdlogunit, generic_COBALT_nml)
     ! Nitrification
     !-----------------------------------------------------------------------
     !
-    call g_tracer_add_param('gamma_nitrif',  cobalt%gamma_nitrif, 1.0 / (30.0 * sperd))      ! s-1
-    call g_tracer_add_param('irr_inhibit',  cobalt%irr_inhibit, 0.1)                         ! W m-2
+    call g_tracer_add_param('gamma_nitrif',  cobalt%gamma_nitrif, gamma_nitrif / (30.0 * sperd))      ! s-1
+    call g_tracer_add_param('irr_inhibit',  cobalt%irr_inhibit, irr_inhibit)                         ! W m-2
     !
     !-----------------------------------------------------------------------
     ! Miscellaneous
@@ -6441,8 +6460,7 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:), Allocatable :: pka_nh3
     real, dimension(:,:), Allocatable :: mask_nh4_tag
 
-
-    real :: tr,ltr,I_max_t,I_eff
+    real :: tr,ltr
 
     real :: imbal
     integer :: stdoutunit, imbal_flag, outunit
@@ -7673,13 +7691,12 @@ write (stdlogunit, generic_COBALT_nml)
        !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
-          if (use_nh3_for_nitrif) then
-             
-             cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh3(i,j,k)/frac_nh3_default *  &
-                  phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
-                  (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
-                  ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
-          else
+          if (scheme_nitrif .eq. 2) then             
+             cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * &
+                  cobalt%f_nh3(i,j,k)/(cobalt%f_nh3(i,j,k)+phyto(SMALL)%k_nh3) *  &
+                  (1.-cobalt%f_irr_mem(i,j,k)/(cobalt%irr_inhibit+cobalt%f_irr_mem(i,j,k))) * &
+                  cobalt%f_o2(i,j,k)/(cobalt%k_o2+cobalt%f_o2(i,j,k)) * cobalt%f_nh4(i,j,k)**2
+          elseif (scheme_nitrif .eq. 1) then
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
                   phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
                   (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
