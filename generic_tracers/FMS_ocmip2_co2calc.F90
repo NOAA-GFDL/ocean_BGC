@@ -39,19 +39,45 @@ module FMS_ocmip2_co2calc_mod  !{
 !------------------------------------------------------------------
 !
 
-use mpp_mod, only: mpp_error, WARNING, FATAL
-use mvars, only: vars
+use fm_util_mod, only: fm_util_start_namelist, fm_util_end_namelist
+use fms_mod,     only: open_namelist_file, check_nml_error, close_file
+use mpp_mod,     only: input_nml_file, mpp_error, stdout, stdlog, WARNING, FATAL
+use mocsy_vars,  only: vars
 
 implicit none
 
 private
 
+public  :: read_mocsy_namelist
 public  :: FMS_ocmip2_co2calc,  FMS_ocmip2_co2calc_old, CO2_dope_vector
 public  :: FMS_ocmip2_co2_alpha
 
-
 character(len=128) :: version = '$Id$'
 character(len=128) :: tagname = '$Name$'
+
+! Mocsy namelist options
+character(len=3) :: boron_formulation = 'l10'
+character(len=3) :: dissociation_constants = 'm10'
+character(len=2) :: hf_equilibrium_constant = 'dg'
+real :: epsln = 1.e-10
+real :: minimum_temperature = -2.
+real :: maximum_salinity = 200.
+real :: max_species_value = 4.  ! max_species_value based on pure salt (NaCl) at 200 psu
+                                !       200 (g/kg) / 58.4428 (g/mol) = 3.4 mol/kg 
+logical :: sal_floor_based_on_alk = .true.
+logical :: print_oor_warnings = .false.
+logical :: apply_epsln_floor = .true.
+logical :: apply_species_ceiling = .true.
+logical :: apply_salinity_ceiling = .true.
+logical :: apply_temperature_floor = .true.
+
+namelist /mocsy_nml/ boron_formulation, dissociation_constants, &
+                     hf_equilibrium_constant, epsln,   &
+                     print_oor_warnings, &
+                     maximum_salinity, max_species_value, &
+                     minimum_temperature, sal_floor_based_on_alk, &
+                     apply_epsln_floor, apply_species_ceiling, &
+                     apply_salinity_ceiling, apply_temperature_floor
 
 type CO2_dope_vector
   integer  :: isc, iec, jsc, jec
@@ -66,6 +92,28 @@ end type CO2_dope_vector
 !
 
 contains
+
+subroutine read_mocsy_namelist()
+
+    integer :: ioun, ierr, io_status, stdoutunit, stdlogunit
+    stdoutunit=stdout();stdlogunit=stdlog()
+
+#ifdef INTERNAL_FILE_NML
+    read (input_nml_file, nml=mocsy_nml, iostat=io_status)
+    ierr = check_nml_error(io_status,'mocsy_nml')
+#else
+    ioun = open_namelist_file()
+    read  (ioun, mocsy_nml,iostat=io_status)
+    ierr = check_nml_error(io_status,'mocsy_nml')
+    call close_file (ioun)
+#endif
+    
+    write (stdoutunit,'(/)')
+    write (stdoutunit, mocsy_nml)
+    write (stdlogunit, mocsy_nml)
+
+end subroutine read_mocsy_namelist
+
 
 !#######################################################################
 ! <SUBROUTINE NAME="FMS_ocmip2_co2calc">
@@ -98,11 +146,18 @@ contains
 !
 !       htotal     = H+ concentration (mol/kg)
 !
+!  INPUT (optional)
+!
+!       co2_calc   = carbonate formalation -- choices are 'ocmip2'(default)
+!                    or 'mocsy'
+!
 ! OUTPUT
 !       co2star    = CO2*water, or H2CO3 concentration (mol/kg)
 !       alpha      = Solubility of CO2 for air (mol/kg/atm)
 !       pco2surf   = oceanic pCO2 (ppmv)
 !       co3_ion    = Carbonate ion, or CO3-- concentration (mol/kg)
+!       omega_arag = aragonite saturation state (mol/kg ; avail. only w/ mocsy)
+!       omega_calc = aragonite saturation state (mol/kg ; avail. only w/ mocsy)
 !
 ! FILES and PROGRAMS NEEDED: drtsafe, ta_iter_1
 !
@@ -191,6 +246,8 @@ real :: tk
 real :: tk100
 real :: tk1002
 real :: logf_of_s
+real :: salinity
+
 character(len=10) :: co2_calc_method
 
 if (present(co2_calc)) then
@@ -222,20 +279,66 @@ end if
 
         if (trim(co2_calc_method) == 'mocsy') then
 
-          Patm(1)  = 1.           ! atm
-          depth(1) = zt(i,j)      ! m
-          lat(1)   = 30.          ! degrees
-          temp(1)  = t_in(i,j)    ! degC
-          sal(1)   = s_in(i,j)    ! psu
-          alk(1)   = ta_in(i,j)   ! mol/kg
-          dic(1)   = dic_in(i,j)  ! mol/kg
-          sil(1)   = sit_in(i,j)  ! mol/kg
-          phos(1)  = pt_in(i,j)   ! mol/kg
+          ! Initialize Mocsy input arrays
+          Patm  = 0. 
+          depth = 0. 
+          lat   = 0. 
+          temp  = 0. 
+          sal   = 0. 
+          alk   = 0. 
+          dic   = 0. 
+          sil   = 0. 
+          phos  = 0. 
+
+          ! Initialize salinity array
+          salinity = 0.0
+          salinity = s_in(i,j)
+
+          ! Floor for low salinity waters based on alkalinity
+          ! Molecular weight of sodium bicarbonate = 84.
+          if (sal_floor_based_on_alk) then
+            salinity = max(s_in(i,j),ta_in(i,j)*84.)   ! yields concentration in g/kg (per mil)
+          endif
+
+          ! Assign Mocsy inputs
+          Patm(1)  = 1.      ! atm
+          depth(1) = zt(i,j) ! m
+          lat(1)   = 30.     ! degrees
+          temp(1)  = t_in(i,j)   ! degC
+          sal(1)   = salinity    ! psu
+          alk(1)   = ta_in(i,j)  ! mol/kg
+          dic(1)   = dic_in(i,j) ! mol/kg
+          sil(1)   = sit_in(i,j) ! mol/kg
+          phos(1)  = pt_in(i,j)  ! mol/kg
+
+          if (apply_temperature_floor) then
+            temp(1)  = max(temp(1),minimum_temperature) ! degC
+          endif
+
+          if (apply_epsln_floor) then
+            sal(1)   = max(sal(1),epsln)  ! psu
+            alk(1)   = max(alk(1),epsln)  ! mol/kg
+            dic(1)   = max(dic(1),epsln)  ! mol/kg
+            sil(1)   = max(sil(1),epsln)  ! mol/kg
+            phos(1)  = max(phos(1),epsln) ! mol/kg
+         endif
+
+         if (apply_species_ceiling) then
+            alk(1)   = min(alk(1),max_species_value)  ! mol/kg
+            dic(1)   = min(dic(1),max_species_value)  ! mol/kg
+            sil(1)   = min(sil(1),max_species_value)  ! mol/kg
+            phos(1)  = min(phos(1),max_species_value) ! mol/kg
+         endif
+
+         if (apply_salinity_ceiling) then
+            sal(1)   = min(sal(1),maximum_salinity)  ! psu
+         endif
 
           call vars(ph, pco2, fco2, co2, hco3, co3, OmegaA, OmegaC, BetaD, rhoSW, p, tempis, &
                     temp, sal, alk, dic, sil, phos, Patm, depth, lat, 1,                     &
-                    optCON='mol/kg', optT='Tpot   ', optP='m ', optb='l10',                  &
-                    optK1K2='m10', optkf='dg', optgas='Pinsitu')
+                    optCON='mol/kg', optT='Tpot   ', optP='m ', optb=boron_formulation,      &
+                    optK1K2=dissociation_constants, optkf=hf_equilibrium_constant,           &
+                    optgas='Pinsitu',verbose=print_oor_warnings)
 
           htotal(i,j) = 10.**(-1.*ph(1))
 

@@ -39,6 +39,8 @@ module generic_tracer
   use time_manager_mod, only : time_type
   use coupler_types_mod, only : coupler_2d_bc_type
 
+  use FMS_ocmip2_co2calc_mod, only : read_mocsy_namelist
+
   use g_tracer_utils, only : g_tracer_type, g_tracer_init, g_diag_type
   use g_tracer_utils, only : g_tracer_get_common, g_tracer_set_common, g_tracer_is_prog
   use g_tracer_utils, only : g_tracer_coupler_set,g_tracer_coupler_get, g_tracer_register_diag
@@ -61,10 +63,12 @@ module generic_tracer
   use generic_CFC,    only : generic_CFC_register
   use generic_CFC,    only : generic_CFC_init, generic_CFC_update_from_source,generic_CFC_update_from_coupler
   use generic_CFC,    only : generic_CFC_set_boundary_values, generic_CFC_end, do_generic_CFC
+  use generic_CFC,    only : generic_CFC_register_diag
 
   use generic_SF6,    only : generic_SF6_register
   use generic_SF6,    only : generic_SF6_init, generic_SF6_update_from_source,generic_SF6_update_from_coupler
   use generic_SF6,    only : generic_SF6_set_boundary_values, generic_SF6_end, do_generic_SF6
+  use generic_SF6,    only : generic_SF6_register_diag
 
   use generic_ERGOM, only : generic_ERGOM_register, generic_ERGOM_register_diag
   use generic_ERGOM, only : generic_ERGOM_init, generic_ERGOM_update_from_source,generic_ERGOM_update_from_coupler
@@ -153,6 +157,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     write (stdoutunit,'(/)')
     write (stdoutunit, generic_tracer_nml)
     write (stdlogunit, generic_tracer_nml)
+
+    call read_mocsy_namelist()
 
     if(do_generic_abiotic) &
          call generic_abiotic_register(tracer_list)
@@ -315,6 +321,10 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_COBALT)  call generic_COBALT_register_diag(diag_list)
 
+    if(do_generic_SF6) call generic_SF6_register_diag(diag_list)
+    
+    if(do_generic_CFC) call generic_CFC_register_diag(diag_list)
+
   end subroutine generic_tracer_register_diag
 
   ! <SUBROUTINE NAME="generic_tracer_coupler_get">
@@ -465,8 +475,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
   ! </SUBROUTINE>
 
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
-       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,&
-       grid_ht, current_wave_stress, sosga)
+       grid_dat,model_time,nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,&
+       frunoff,grid_ht, current_wave_stress, sosga)
     real, dimension(ilb:,jlb:,:),   intent(in) :: Temp,Salt,rho_dzt,dzt
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     integer,                        intent(in) :: ilb,jlb,tau
@@ -477,6 +487,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     real, dimension(:),             intent(in) :: max_wavelength_band
     real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band
     real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: internal_heat
+    real, dimension(ilb:,jlb:),optional,  intent(in) :: frunoff 
     real, dimension(ilb:,jlb:),optional,  intent(in) :: grid_ht
     real, dimension(ilb:,jlb:),optional , intent(in) :: current_wave_stress
     real,                      optional , intent(in) :: sosga ! global avg. sea surface salinity
@@ -489,10 +501,6 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_age)  call generic_age_update_from_source(tracer_list,tau,dtts)
 
     !    if(do_generic_argon)    call generic_argon_update_from_source(tracer_list) !Nothing to do for argon
-
-    !    if(do_generic_CFC)    call generic_CFC_update_from_source(tracer_list) !Nothing to do for CFC
-
-    !    if(do_generic_SF6)    call generic_SF6_update_from_source(tracer_list) !Nothing to do for SF6
 
     if(do_generic_abiotic) call generic_abiotic_update_from_source(tracer_list,Temp,Salt,sosga,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time)
@@ -515,7 +523,13 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_COBALT)  call generic_COBALT_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
          hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
-         nbands,max_wavelength_band,sw_pen_band,opacity_band)
+         nbands,max_wavelength_band,sw_pen_band,opacity_band,internal_heat,frunoff)
+
+    if(do_generic_SF6)  call generic_SF6_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+         ilb,jlb,tau,dtts,grid_dat,model_time)
+
+    if(do_generic_CFC)  call generic_CFC_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
+         ilb,jlb,tau,dtts,grid_dat,model_time)
 
     return
 
@@ -701,7 +715,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !User must provide the calculations for these boundary values.
 
     if(do_generic_abiotic) &
-         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau,model_time)
+         call generic_abiotic_set_boundary_values(tracer_list,ST,SS,sosga,rho,ilb,jlb,tau, &
+                                                  model_time,dzt)
 
     if(do_generic_age) &
          call generic_age_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
