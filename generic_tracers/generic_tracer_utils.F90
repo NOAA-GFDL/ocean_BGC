@@ -1041,7 +1041,7 @@ contains
     if(g_tracer%flux_gas) then
        g_tracer%flux_gas_ind  = aof_set_coupler_flux(g_tracer%flux_gas_name,                  &
             flux_type         = g_tracer%flux_gas_type,                                       &
-            implementation    = g_tracer%implementation, &
+            implementation    = trim(g_tracer%implementation), &
             mol_wt            = g_tracer%flux_gas_molwt,                                      &
             param             = g_tracer%flux_gas_param,                                      &
             ice_restart_file  = g_tracer%ice_restart_file,                                    &

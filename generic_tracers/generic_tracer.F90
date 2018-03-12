@@ -743,7 +743,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
          call generic_miniBLING_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
 
     if(do_generic_COBALT) &
-         call generic_COBALT_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau,dzt,model_time)
+         call generic_COBALT_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau,dzt)
 
     !
     !Set coupler fluxes from tracer boundary values (%alpha and %csurf)

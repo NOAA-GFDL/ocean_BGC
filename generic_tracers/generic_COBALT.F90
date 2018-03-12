@@ -127,7 +127,6 @@
 module generic_COBALT
 
   use coupler_types_mod, only: coupler_2d_bc_type
-  use data_override_mod, only: data_override
   use field_manager_mod, only: fm_string_len, fm_path_name_len
   use mpp_mod,           only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_mod,           only: CLOCK_COMPONENT, CLOCK_SUBCOMPONENT, CLOCK_MODULE
@@ -177,6 +176,8 @@ module generic_COBALT
   real, parameter :: epsln=1.0e-30
   real,parameter :: missing_value1=-1.0e+10
   real, parameter :: missing_value_diag=-1.0e+10
+
+  logical :: do_nh3_diag
 
 ! Namelist Options
 
@@ -1573,6 +1574,10 @@ write (stdlogunit, generic_COBALT_nml)
     ! In that case we can force an update by setting the namelist generic_tracer_nml:force_update_fluxes=.true.
     cobalt%force_update_fluxes = force_update_fluxes
 
+    if (do_nh3_atm_ocean_exchange .or. scheme_nitrif.eq.2 .or. scheme_nitrif.eq.3) then
+       do_nh3_diag=.true.
+    end if
+
     !Specify and initialize all parameters used by this package
     call user_add_params
 
@@ -2678,11 +2683,9 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_total_filter_feeding = register_diag_field(package_name, vardesc_temp%name, axes(1:3),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-
     !
     !  Save river, depositon and bulk elemental fluxes
     !
-
 
     vardesc_temp = vardesc("dep_dry_fed","Dry Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_dry_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
@@ -3804,7 +3807,6 @@ write (stdlogunit, generic_COBALT_nml)
          cmor_field_name="no3_cmip", cmor_units="mol m-3",                          &
          cmor_standard_name="mole_concentration_of_nitrate_in_sea_water", &
          cmor_long_name="Dissolved Nitrate Concentration")
-
 
 !! same name in model and CMOR, but different units - use for now
     vardesc_temp = vardesc("nh4_raw","Dissolved Ammonium Concentration",'h','L','s','mol m-3','f')
@@ -5199,21 +5201,15 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_fed_Di', phyto(DIAZO)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  1.0e-10)                 ! mol Fed kg-1
-
     call g_tracer_add_param('k_nh3', phyto(SMALL)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
     call g_tracer_add_param('k_nh3', phyto(LARGE)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
     call g_tracer_add_param('k_nh3', phyto(DIAZO)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
-
-
     call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  k_nh4_large)                  ! mol NH4 kg-1
-
     call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  k_nh4_small)                  ! mol NH4 kg-1
     call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  k_nh4_diazo)                  ! mol NH4 kg-1
-
     call g_tracer_add_param('k_no3_Lg', phyto(LARGE)%k_no3,  k_no3_large)                  ! mol NO3 kg-1
     call g_tracer_add_param('k_no3_Sm', phyto(SMALL)%k_no3,  k_no3_small)                  ! mol NO3 kg-1
     call g_tracer_add_param('k_no3_Di', phyto(DIAZO)%k_no3,  k_no3_diazo)                  ! mol NO3 kg-1
-
     call g_tracer_add_param('k_po4_Di', phyto(DIAZO)%k_po4,  5.0e-8)                  ! mol PO4 kg-1
     call g_tracer_add_param('k_po4_Lg', phyto(LARGE)%k_po4,  5.0e-8)                  ! mol PO4 kg-1
     call g_tracer_add_param('k_po4_Sm', phyto(SMALL)%k_po4,  1.0e-8)                  ! mol PO4 kg-1
@@ -5408,24 +5404,24 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('phi_det_smz',zoo(1)%phi_det, 0.10)            ! dimensionless
     call g_tracer_add_param('phi_det_mdz',zoo(2)%phi_det, 0.20)            ! dimensionless
     call g_tracer_add_param('phi_det_lgz',zoo(3)%phi_det, 0.30)            ! dimensionless
-    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, phi_ldon*0.20)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, phi_ldon*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, phi_ldon*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, phi_ldop*0.20)     ! dimensionless
-    call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, phi_ldop*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, phi_ldop*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, phi_srdon*0.20)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, phi_srdon*0.10)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, phi_srdon*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, phi_srdop*0.20)   ! dimensionless
-    call g_tracer_add_param('phi_srdop_mdz',zoo(2)%phi_srdop, phi_srdop*0.10)   ! dimensionless
-    call g_tracer_add_param('phi_srdop_lgz',zoo(3)%phi_srdop, phi_srdop*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, (1.-phi_srdon-phi_ldon)*0.20)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, (1.-phi_srdon-phi_ldon)*0.10)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, (1.-phi_srdon-phi_ldon)*0.0)     ! dimensionless
-    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, (1.-phi_srdop-phi_ldop)*0.20)    ! dimensionless
-    call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, (1.-phi_srdop-phi_ldop)*0.10)    ! dimensionless
-    call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, (1.-phi_srdop-phi_ldop)*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, 0.525*0.20)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, 0.525*0.10)     ! dimensionless
+    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, 0.525*0.0)      ! dimensionless
+    call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, 0.45*0.20)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, 0.45*0.10)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, 0.45*0.0)      ! dimensionless
+    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, 0.075*0.20)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, 0.075*0.10)   ! dimensionless
+    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, 0.075*0.0)    ! dimensionless
+    call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, 0.15*0.20)   ! dimensionless
+    call g_tracer_add_param('phi_srdop_mdz',zoo(2)%phi_srdop, 0.15*0.10)   ! dimensionless
+    call g_tracer_add_param('phi_srdop_lgz',zoo(3)%phi_srdop, 0.15*0.0)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, 0.4*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, 0.4*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, 0.4*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, 0.4*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, 0.4*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, 0.4*0.0)     ! dimensionless
     call g_tracer_add_param('phi_nh4_smz',zoo(1)%phi_nh4, 0.30)            ! dimensionless
     call g_tracer_add_param('phi_nh4_mdz',zoo(2)%phi_nh4, 0.30)            ! dimensionless
     call g_tracer_add_param('phi_nh4_lgz',zoo(3)%phi_nh4, 0.30)            ! dimensionless
@@ -5437,12 +5433,12 @@ write (stdlogunit, generic_COBALT_nml)
     ! Partitioning of viral losses to various dissolved pools
     !----------------------------------------------------------------------
     !
-    call g_tracer_add_param('phi_ldon_vir',cobalt%lysis_phi_ldon, phi_ldon)    ! dimensionless
-    call g_tracer_add_param('phi_srdon_vir',cobalt%lysis_phi_srdon, phi_srdon)  ! dimensionless
-    call g_tracer_add_param('phi_sldon_vir',cobalt%lysis_phi_sldon, 1.-phi_ldon-phi_srdon)  ! dimensionless
-    call g_tracer_add_param('phi_ldop_vir',cobalt%lysis_phi_ldop, phi_ldop)    ! dimensionless
-    call g_tracer_add_param('phi_srdop_vir',cobalt%lysis_phi_srdop, phi_srdop)  ! dimensionless
-    call g_tracer_add_param('phi_sldop_vir',cobalt%lysis_phi_sldop, 1.-phi_ldop-phi_srdop)  ! dimensionless
+    call g_tracer_add_param('phi_ldon_vir',cobalt%lysis_phi_ldon, 0.525)    ! dimensionless
+    call g_tracer_add_param('phi_srdon_vir',cobalt%lysis_phi_srdon, 0.075)  ! dimensionless
+    call g_tracer_add_param('phi_sldon_vir',cobalt%lysis_phi_sldon, 0.40)  ! dimensionless
+    call g_tracer_add_param('phi_ldop_vir',cobalt%lysis_phi_ldop, 0.45)    ! dimensionless
+    call g_tracer_add_param('phi_srdop_vir',cobalt%lysis_phi_srdop, 0.15)  ! dimensionless
+    call g_tracer_add_param('phi_sldop_vir',cobalt%lysis_phi_sldop, 0.40)  ! dimensionless
     ! 
     !----------------------------------------------------------------------
     ! Parameters for unresolved higher predators
@@ -5489,7 +5485,7 @@ write (stdlogunit, generic_COBALT_nml)
     ! Remineralization
     !-------------------------------------------------------------------------
     !
-    call g_tracer_add_param('k_o2', cobalt%k_o2, 8e-6)                                     ! mol O2 kg-1
+    call g_tracer_add_param('k_o2', cobalt%k_o2, 8.0e-6)                                     ! mol O2 kg-1
     call g_tracer_add_param('o2_min', cobalt%o2_min, 0.8e-6 )                                ! mol O2 kg-1
     call g_tracer_add_param('k_o2_nit', cobalt%k_o2_nit, k_o2_nit)                                     ! mol O2 kg-1
     call g_tracer_add_param('o2_min_nit', cobalt%o2_min_nit, o2_min_nit )                                ! mol O2 kg-1
@@ -5647,8 +5643,7 @@ write (stdlogunit, generic_COBALT_nml)
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
          flux_bottom= .true.,                                          &
-         init_value = 0.001,                                           &
-         implementation='ocmip2')
+         init_value = 0.001)
     !
     !       Dissolved Fe (assumed to be all available to phytoplankton)
     !
@@ -5816,7 +5811,7 @@ write (stdlogunit, generic_COBALT_nml)
          prog       = .true.,            &         
          flux_wetdep= .true.,            &         
          flux_drydep= .true.,            &         
-         flux_param = (/ WTMN*1.e-3 /),  &         
+         flux_param = (/ 14.0067e-03 /), &
          flux_bottom= .true.             )  
     end if
     !
@@ -5830,7 +5825,7 @@ write (stdlogunit, generic_COBALT_nml)
          flux_runoff= .true.,            &
          flux_wetdep= .true.,            &
          flux_drydep= .true.,            &
-         flux_param = (/ WTMN*1e-03 /), &
+         flux_param = (/ 14.0067e-03 /), &
          flux_bottom= .true.             )
     !
     !       O2
@@ -5842,7 +5837,6 @@ write (stdlogunit, generic_COBALT_nml)
          prog       = .true.,                                          &
          flux_gas   = .true.,                                          &
          flux_gas_name  = 'o2_flux',                                   &
-         implementation='ocmip2',                                      &
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMO2,                                       &
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
@@ -5975,7 +5969,6 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'mol/kg',                         &
          prog       = .true.,                           &
          flux_gas       = .true.,                       &
-         implementation='ocmip2',                       &
          flux_gas_name  = 'c14o2_flux',                 &
          flux_gas_type  = 'air_sea_gas_flux',           &
          flux_gas_molwt = WTMCO2,                       &
@@ -6115,87 +6108,14 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'sec-1',         &
          prog       = .false.              )
 
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nh3',         &
-         longname   = 'NH3', &
-         units      = 'mol/kg',     &
-         prog       = .false.,       &
-         init_value = 1.e-10           )
-
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nh4_tag1',         &
-         longname   = 'NH4_tag1', &
-         units      = 'mol/kg',     &
-         prog       = .false.,       &
-         flux_gas   = .true.,            &
-         implementation='duce_vmr',   &
-         flux_gas_name  = 'nh3_tag1_flux',    &
-         flux_gas_type  = 'air_sea_gas_flux_generic', &
-         flux_gas_molwt = WTMN,                       &
-         flux_gas_param = (/ 1. /), &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
-         flux_param = (/ WTMN*1.e-3/),    &         
-         init_value = 0.001              )
-
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nh4_tag2',         &
-         longname   = 'NH4_tag2', &
-         units      = 'mol/kg',     &
-         prog       = .false.,       &
-         flux_gas   = .true.,            &
-         implementation='duce_vmr',   &
-         flux_gas_name  = 'nh3_tag2_flux',    &
-         flux_gas_type  = 'air_sea_gas_flux_generic', &
-         flux_gas_molwt = WTMN,                       &
-         flux_gas_param = (/ 1. /), &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
-         flux_param = (/ WTMN*1.e-3/),    &         
-         init_value = 0.001              )
-
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nh4_tag3',         &
-         longname   = 'NH4_tag3', &
-         units      = 'mol/kg',     &
-         prog       = .false.,       &
-         flux_gas   = .true.,            &
-         implementation='duce_vmr',   &
-         flux_gas_name  = 'nh3_tag3_flux',    &
-         flux_gas_type  = 'air_sea_gas_flux_generic', &
-         flux_gas_molwt = WTMN,                       &
-         flux_gas_param = (/ 1. /), &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
-         flux_param = (/ WTMN*1.e-3/),    &         
-         init_value = 0.001              )
-
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nh4_tag4',         &
-         longname   = 'NH4_tag4', &
-         units      = 'mol/kg',     &
-         prog       = .false.,       &
-         flux_gas   = .true.,            &
-         implementation='duce_vmr',   &
-         flux_gas_name  = 'nh3_tag4_flux',    &
-         flux_gas_type  = 'air_sea_gas_flux_generic', &
-         flux_gas_molwt = WTMN,                       &
-         flux_gas_param = (/ 1. /), &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
-         flux_param = (/ WTMN*1.e-3/),    &         
-         init_value = 0.001              )
-
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'nh4_tag5',         &
-         longname   = 'NH4_tag5', &
-         units      = 'mol/kg',     &
-         prog       = .false.,       &
-         flux_gas   = .true.,            &
-         implementation='duce_vmr',   &
-         flux_gas_name  = 'nh3_tag5_flux',    &
-         flux_gas_type  = 'air_sea_gas_flux_generic', &
-         flux_gas_molwt = WTMN,                       &
-         flux_gas_param = (/ 1. /), &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
-         flux_param = (/ WTMN*1.e-3/),    &         
-         init_value = 0.001              )
+    if (do_nh3_diag) then
+       call g_tracer_add(tracer_list,package_name,&
+            name       = 'nh3',         &
+            longname   = 'NH3', &
+            units      = 'mol/kg',     &
+            prog       = .false.,       &
+            init_value = 1.e-10           )
+    end if
 
   end subroutine user_add_tracers
 
@@ -6461,8 +6381,7 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:,:), Allocatable :: pre_totsi, post_totsi
     real, dimension(:,:,:), Allocatable :: pre_totfe, net_srcfe, post_totfe
     real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
-    real, dimension(:,:), Allocatable :: pka_nh3
-    real, dimension(:,:), Allocatable :: mask_nh4_tag
+    real, dimension(:,:),   Allocatable :: pka_nh3
 
     real :: tr,ltr
 
@@ -6476,10 +6395,6 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
 
-    allocate(pka_nh3(isd:ied,jsd:jed))
-    allocate(mask_nh4_tag(isd:ied,jsd:jed))
-    pka_nh3 = 0.
-
     call mpp_clock_begin(id_clock_carbon_calculations)
     !Get necessary fields
     call g_tracer_get_values(tracer_list,'htotal','field', cobalt%f_htotal,isd,jsd,ntau=1)
@@ -6487,7 +6402,11 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_values(tracer_list,'sio4'  ,'field', cobalt%f_sio4,isd,jsd,ntau=tau)
     call g_tracer_get_values(tracer_list,'alk'   ,'field', cobalt%f_alk,isd,jsd,ntau=tau)
     call g_tracer_get_values(tracer_list,'dic'   ,'field', cobalt%f_dic  ,isd,jsd,ntau=tau)
-    call g_tracer_get_values(tracer_list,'nh4'   ,'field', cobalt%f_nh4  ,isd,jsd,ntau=tau)
+    if (do_nh3_diag) then
+       allocate(pka_nh3(isd:ied,jsd:jed))
+       pka_nh3 = 0.
+       call g_tracer_get_values(tracer_list,'nh4'   ,'field', cobalt%f_nh4  ,isd,jsd,ntau=tau)
+    end if
 
     !---------------------------------------------------------------------
     !Calculate co3_ion
@@ -6565,7 +6484,6 @@ write (stdlogunit, generic_COBALT_nml)
 
     if (do_nh3_atm_ocean_exchange) then
        do j = jsc, jec ; do i = isc, iec 
-!          pka_nh3(i,j)   = (10.0423-0.0315536*temp(i,j,1)+0.003071*salt(i,j,1))*grid_tmask(i,j,1)
           pka_nh3(i,j)   = calc_pka_nh3(temp(i,j,1),salt(i,j,1))*grid_tmask(i,j,1)
           tr             = 298.15/(temp(i,j,1)+273.15)-1.
           ltr            = -tr+log(298.15/(temp(i,j,1)+273.15))       
@@ -6575,28 +6493,7 @@ write (stdlogunit, generic_COBALT_nml)
        enddo; enddo ; !
 
        call g_tracer_set_values(tracer_list,'nh4','alpha',cobalt%nh3_alpha    ,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4','csurf',cobalt%nh3_csurf    ,isd,jsd)    
-
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag1_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag1','alpha',cobalt%nh3_alpha,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag1','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag2_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag2','alpha',cobalt%nh3_alpha,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag2','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag3_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag3','alpha',cobalt%nh3_alpha,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag3','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag4','alpha',cobalt%nh3_alpha,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag4','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag5_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag5','alpha',cobalt%nh3_alpha,isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag5','csurf',cobalt%nh3_csurf*mask_nh4_tag    ,isd,jsd)    
+       call g_tracer_set_values(tracer_list,'nh4','csurf',cobalt%nh3_csurf    ,isd,jsd)         
     end if
 
       if (do_14c) then                                        !<<RADIOCARBON
@@ -6820,11 +6717,12 @@ write (stdlogunit, generic_COBALT_nml)
     enddo; enddo ; enddo !} i,j,k
 
     !nh3
+    if (do_nh3_diag) then
     cobalt%f_nh3(:,:,:) = 0.
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
        cobalt%f_nh3(i,j,k) = cobalt%f_nh4(i,j,k)/(1.+10**(calc_pka_nh3(temp(i,j,k),salt(i,j,k))+log10(min(max(cobalt%f_htotal(i,j,1),1e-10),1e-5)))) * grid_tmask(i,j,k)
     enddo;  enddo ; enddo !} i,j,k
-
+    end if
 
 
     !
@@ -7694,26 +7592,27 @@ write (stdlogunit, generic_COBALT_nml)
        !  Nitrification
        !
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-       if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min_nit) then  !{
-          if (scheme_nitrif .eq. 2 .or. scheme_nitrif .eq. 3) then             
+       cobalt%jnitrif(i,j,k) = 0.0
+       if (scheme_nitrif .eq. 2 .or. scheme_nitrif .eq. 3) then             
+          if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min_nit) then  !{
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * &
                   cobalt%f_nh3(i,j,k)/(cobalt%f_nh3(i,j,k)+phyto(SMALL)%k_nh3) *  &
                   (1.-cobalt%f_irr_mem(i,j,k)/(cobalt%irr_inhibit+cobalt%f_irr_mem(i,j,k))) * &
                   cobalt%f_o2(i,j,k)/(cobalt%k_o2_nit+cobalt%f_o2(i,j,k)) * cobalt%f_nh4(i,j,k)**2
-
+             
              if (scheme_nitrif .eq. 3) then
                 cobalt%jnitrif(i,j,k) = cobalt%jnitrif(i,j,k)*cobalt%expkT(i,j,k)
              end if
-          elseif (scheme_nitrif .eq. 1) then
+          end if
+       elseif (scheme_nitrif .eq. 1) then
+          if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * cobalt%expkT(i,j,k) * cobalt%f_nh4(i,j,k) * &
                   phyto(SMALL)%nh4lim(i,j,k) * (1.0 - cobalt%f_irr_mem(i,j,k) / &
                   (cobalt%irr_inhibit + cobalt%f_irr_mem(i,j,k))) * cobalt%f_o2(i,j,k) / &
-                  ( cobalt%k_o2_nit + cobalt%f_o2(i,j,k) )
+                  ( cobalt%k_o2 + cobalt%f_o2(i,j,k) )
           end if
-          cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
-       else
-          cobalt%jnitrif(i,j,k) = 0.0
-       endif !}
+       end if
+       cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k) + cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif
     enddo; enddo; enddo  !} i,j,k
 
 !
@@ -8376,7 +8275,7 @@ write (stdlogunit, generic_COBALT_nml)
     !
     call g_tracer_set_values(tracer_list,'cased',  'field',cobalt%f_cased    ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'chl',    'field',cobalt%f_chl      ,isd,jsd,ntau=1)
-    call g_tracer_set_values(tracer_list,'nh3',    'field',cobalt%f_nh3      ,isd,jsd,ntau=1)
+    if (do_nh3_diag) call g_tracer_set_values(tracer_list,'nh3',    'field',cobalt%f_nh3      ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'co3_ion','field',cobalt%f_co3_ion  ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'irr_mem' ,'field',cobalt%f_irr_mem ,isd,jsd,ntau=1)
     call g_tracer_set_values(tracer_list,'mu_mem_ndi' ,'field',phyto(DIAZO)%f_mu_mem ,isd,jsd,ntau=1)
@@ -9126,10 +9025,6 @@ write (stdlogunit, generic_COBALT_nml)
             is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     end if
     if (allocated(pka_nh3)) deallocate(pka_nh3)
-    if (allocated(mask_nh4_tag)) deallocate(mask_nh4_tag)
-    
-
-
 !
 !---------------------------------------------------------------------
 !
@@ -11638,14 +11533,12 @@ write (stdlogunit, generic_COBALT_nml)
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt,model_time)
+  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt)
     type(g_tracer_type),          pointer    :: tracer_list
     real, dimension(ilb:,jlb:),   intent(in)   :: SST, SSS
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
-
-    type(time_type),    intent(in) :: model_time
 
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: sal,ST,o2_saturation
@@ -11657,10 +11550,7 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:), ALLOCATABLE :: c14o2_alpha,c14o2_csurf
     real :: pka_nh3,tr,ltr
 
-    real, dimension(:,:), ALLOCATABLE :: mask_nh4_tag
-
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_set_boundary_values'
-
 
     !
     !
@@ -11683,9 +11573,6 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(o2_sc_no(isd:ied, jsd:jed)); o2_sc_no=0.0
     allocate(htotal_field(isd:ied,jsd:jed,nk),co3_ion_field(isd:ied,jsd:jed,nk))
     htotal_field=0.0 ; co3_ion_field=0.0
-
-    allocate(mask_nh4_tag(isd:ied, jsd:jed)); mask_nh4_tag=0.0
-
 
     !nnz: Since the generic_COBALT_update_from_source() subroutine is called by this time
     !     the following if block is not really necessary (since this calculation is already done in source).
@@ -11783,31 +11670,6 @@ write (stdlogunit, generic_COBALT_nml)
 
           call g_tracer_set_values(tracer_list,'nh4','alpha',nh3_alpha    ,isd,jsd)
           call g_tracer_set_values(tracer_list,'nh4','csurf',nh3_csurf    ,isd,jsd)
-
-          mask_nh4_tag(:,:) = 1.
-          call data_override('OCN', 'nh4_tag1_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-          call g_tracer_set_values(tracer_list,'nh4_tag1','alpha',nh3_alpha,isd,jsd)
-          call g_tracer_set_values(tracer_list,'nh4_tag1','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
-
-          mask_nh4_tag(:,:) = 1.
-          call data_override('OCN', 'nh4_tag2_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-          call g_tracer_set_values(tracer_list,'nh4_tag2','alpha',nh3_alpha,isd,jsd)
-          call g_tracer_set_values(tracer_list,'nh4_tag2','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
-
-          mask_nh4_tag(:,:) = 1.
-          call data_override('OCN', 'nh4_tag3_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-          call g_tracer_set_values(tracer_list,'nh4_tag3','alpha',nh3_alpha,isd,jsd)
-          call g_tracer_set_values(tracer_list,'nh4_tag3','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
-
-          mask_nh4_tag(:,:) = 1.
-          call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-          call g_tracer_set_values(tracer_list,'nh4_tag4','alpha',nh3_alpha,isd,jsd)
-          call g_tracer_set_values(tracer_list,'nh4_tag4','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
-
-          mask_nh4_tag(:,:) = 1.
-          call data_override('OCN', 'nh4_tag5_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-          call g_tracer_set_values(tracer_list,'nh4_tag5','alpha',nh3_alpha,isd,jsd)
-          call g_tracer_set_values(tracer_list,'nh4_tag5','csurf',nh3_csurf*mask_nh4_tag,isd,jsd)
 
        end if   
        !!nnz: If source is called uncomment the following
@@ -11949,7 +11811,7 @@ write (stdlogunit, generic_COBALT_nml)
        !f1p
        !henry's constant                                                                                          
        !from johnson 2008                                                                                         
-       nh3_sc_no(i,j) = schmidt_w(st,sal,25.)*grid_tmask(i,j,1)
+       !nh3_sc_no(i,j) = schmidt_w(st,sal,25.)*grid_tmask(i,j,1)
        nh3_csurf(i,j) = nh3_csurf(i,j)*cobalt%Rho_0
        nh3_alpha(i,j) = nh3_alpha(i,j)*cobalt%Rho_0
        end do;end do
@@ -11957,36 +11819,6 @@ write (stdlogunit, generic_COBALT_nml)
        call g_tracer_set_values(tracer_list,'nh4', 'alpha',nh3_alpha, isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4', 'csurf',nh3_csurf, isd,jsd)
        call g_tracer_set_values(tracer_list,'nh4', 'sc_no',nh3_sc_no, isd,jsd)
-
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag1_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag1', 'alpha',nh3_alpha, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag1', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag1', 'sc_no',nh3_sc_no, isd,jsd)
-
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag2_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag2', 'alpha',nh3_alpha, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag2', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag2', 'sc_no',nh3_sc_no, isd,jsd)
-
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag3_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag3', 'alpha',nh3_alpha, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag3', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag3', 'sc_no',nh3_sc_no, isd,jsd)
-
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag4_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag4', 'alpha',nh3_alpha, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag4', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag4', 'sc_no',nh3_sc_no, isd,jsd)
-
-       mask_nh4_tag(:,:) = 1.
-       call data_override('OCN', 'nh4_tag5_mask', mask_nh4_tag(isc:iec,jsc:jec), model_time)
-       call g_tracer_set_values(tracer_list,'nh4_tag5', 'alpha',nh3_alpha, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag5', 'csurf',nh3_csurf*mask_nh4_tag, isd,jsd)
-       call g_tracer_set_values(tracer_list,'nh4_tag5', 'sc_no',nh3_sc_no, isd,jsd)
 
     end if
 
@@ -12022,8 +11854,6 @@ write (stdlogunit, generic_COBALT_nml)
          c14o2_alpha,c14o2_csurf,     &
          o2_csurf,o2_sc_no, nh3_alpha,nh3_csurf,&
          nh3_sc_no)
-
-    if (allocated(mask_nh4_tag)) deallocate(mask_nh4_tag)
 
   end subroutine generic_COBALT_set_boundary_values
 
@@ -12203,7 +12033,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%co3_sol_arag(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_arag=0.0
     allocate(cobalt%co3_sol_calc(isd:ied, jsd:jed, 1:nk)) ; cobalt%co3_sol_calc=0.0
     allocate(cobalt%f_chl(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_chl=0.0
-    allocate(cobalt%f_nh3(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_nh3=0.0
+    if (do_nh3_diag) allocate(cobalt%f_nh3(isd:ied, jsd:jed, 1:nk))        ; cobalt%f_nh3=0.0
     allocate(cobalt%f_co3_ion(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_co3_ion=0.0
     allocate(cobalt%f_htotal(isd:ied, jsd:jed, 1:nk))     ; cobalt%f_htotal=0.0
     allocate(cobalt%f_irr_mem(isd:ied, jsd:jed, 1:nk))    ; cobalt%f_irr_mem=0.0
@@ -12654,7 +12484,7 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%co3_sol_arag)  
     deallocate(cobalt%co3_sol_calc)  
     deallocate(cobalt%f_chl)  
-    deallocate(cobalt%f_nh3)
+    if (allocated(cobalt%f_nh3)) deallocate(cobalt%f_nh3)
     deallocate(cobalt%f_co3_ion)  
     deallocate(cobalt%f_htotal)  
     deallocate(cobalt%f_irr_mem)  
@@ -12969,89 +12799,6 @@ write (stdlogunit, generic_COBALT_nml)
 
   end subroutine user_deallocate_arrays
 
-
-!<<<
-!following functions from Johnson 2010 (OST)
-
-  function p_sw(t,s) result(p)
-    !density of sea water                                                                                          
-    !millero and poisson (1981)                                                                                    
-    real, intent(in) :: t,s
-    real             :: p, a, b, c
-
-    a = 0.824493-(4.0899d-3*t)+(7.6438d-5*(t**2))-(8.2467d-7*(t**3))+(5.3875d-9*(t**4))
-    b = -5.72466d-3+(1.0277d-4*t)-(1.6546d-6*(t**2))
-    c = 4.8314d-4
-    ! density of pure water                                                                                        
-    p = 999.842594+(6.793952d-2*t)-(9.09529d-3*(t**2))+(1.001685d-4*(t**3))-(1.120083d-6*(t**4))+(6.536332d-9*(t**5))
-    !salinity correction      
-    p = (p+(a*s)+(b*(s**(1.5)))+(c*s))
-  end function p_sw
-
-  function n_sw(t,s) result(n)
-    !dynamic viscosity                                                                                            
-    !laliberte 2007                                                                                               
-    real :: n
-    real, intent(in) :: t,s !temperature (c) and salinity                                                       
-    !salt in the order nacl,kcl,cacl2,mgcl2,mgso4                                                                 
-    real, parameter :: mass_fraction(5) = (/ 0.798,0.022,0.033,0.047,0.1 /)
-    real, parameter :: v1(5) = (/ 16.22 , 6.4883, 32.028, 24.032, 72.269/)
-    real, parameter :: v2(5) = (/ 1.3229 , 1.3175, 0.78792, 2.2694, 2.2238/)
-    real, parameter :: v3(5) = (/ 1.4849 , -0.7785, -1.1495,  3.7108, 6.6037/)
-    real, parameter :: v4(5) = (/ 0.0074691 , 0.09272, 0.0026995,  0.021853, 0.0079004/)
-    real, parameter :: v5(5) = (/ 30.78 , -1.3, 780860., -1.1236, 3340.1/)
-    real, parameter :: v6(5) = (/ 2.0583 , 2.0811, 5.8442,0.14474, 6.1304/)
-    real :: n_0,ln_n_m,w_i_ln_n_i_tot,ni,w_i_tot,w_i
-    integer :: i
-
-    w_i_tot=0.
-    w_i_ln_n_i_tot=0.
-    do i=1,5
-       w_i = mass_fraction(i)*s/1000.
-       w_i_tot = w_i+w_i_tot
-    enddo
-    do i=1,5
-       w_i = mass_fraction(i)*s/1000.
-       ni = (exp(((v1(i)*w_i_tot**v2(i))+v3(i))/((v4(i)*t) + 1.)))/((v5(i)*(w_i_tot**v6(i)))+1.)
-       w_i_ln_n_i_tot = w_i_ln_n_i_tot + (w_i*log(ni))
-    enddo
-    n_0 = (t+246.)/(137.37+(5.2842*t)+(0.05594*(t**2)))
-    ln_n_m = (1-w_i_tot)*log(n_0)+w_i_ln_n_i_tot
-    n = exp(ln_n_m)
-  end function n_sw
-
-
-  function d_hm(t,s,vb) result(d)
-    real, intent(in) :: t,s,vb
-    real             :: d, epsilonstar
-    ! hayduk 1982                                                                                                 
-    epsilonstar = (9.58/vb)-1.12
-    d=1.25d-8*(vb**(-0.19)-0.292)*((t+273.15)**(1.52))*((n_sw(t,s))**epsilonstar)
-  end function d_hm
-
-  function d_wc(t,s,vb) result(d)
-    real, intent(in) :: t,s,vb
-    real             :: d
-    real, parameter  :: phi = 2.6
-    !wilkie and chang 1955                                                                                        
-    d = ((t+273.15)*7.4d-8*(phi*18.01)**0.5)/((n_sw(t,s))*(vb**0.6))
-  end function d_wc
-
-  function v_sw(t,s) result(v)
-    real, intent(in) :: t,s
-    real             :: n,p,v
-    n=n_sw(t,s)*1d-3
-    p=p_sw(t,s)
-    v = 1d4*n/p
-  end function  v_sw
-
-  function schmidt_w(t,s,vb) result(sc)
-    !schmidt number of the gas in the water                                                                       
-    real, intent(in) :: t,s,vb
-    real             :: sc
-    sc=2.*v_sw(t,s)/(d_hm(t,s,vb)+d_wc(t,s,vb))
-  end function schmidt_w
-
  function calc_pka_nh3(tc,salt) result(pka)
     !temperature, salinity
     real, intent(in) :: tc,salt
@@ -13080,7 +12827,6 @@ write (stdlogunit, generic_COBALT_nml)
 
   end function calc_pka_nh3
 
-!>>>
 
 
 end module generic_COBALT
