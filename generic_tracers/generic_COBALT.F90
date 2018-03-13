@@ -1576,6 +1576,8 @@ write (stdlogunit, generic_COBALT_nml)
 
     if (do_nh3_atm_ocean_exchange .or. scheme_nitrif.eq.2 .or. scheme_nitrif.eq.3) then
        do_nh3_diag=.true.
+    else
+       do_nh3_diag=.false.
     end if
 
     !Specify and initialize all parameters used by this package
@@ -6108,7 +6110,7 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'sec-1',         &
          prog       = .false.              )
 
-    if (do_nh3_diag) then
+    if (do_nh3_atm_ocean_exchange .or. scheme_nitrif.eq.2 .or. scheme_nitrif.eq.3) then
        call g_tracer_add(tracer_list,package_name,&
             name       = 'nh3',         &
             longname   = 'NH3', &
