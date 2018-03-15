@@ -191,31 +191,22 @@ module generic_COBALT
   real    :: k_no3_small = 5.0e-7
   real    :: k_no3_diazo = 2.5e-6
   real    :: k_no3_large = 2.5e-6
-
-
-  real    :: phi_ldon  = 0.525
-  real    :: phi_ldop  = 0.45
-  real    :: phi_srdon = 0.075
-  real    :: phi_srdop = 0.15
   real    :: o2_min_nit= 0.8e-6
   real    :: k_o2_nit  = 8.e-6
   real    :: irr_inhibit = 0.1
   real    :: gamma_nitrif= 1. !month(-1)
-  real    :: k_nh3     = 3.1e-9 !mol/kg
+  real    :: k_nh3_nitrif= 3.1e-9 !mol/kg
 
   integer :: scheme_no3_nh4_lim = 1 !1-Frost and Franzen (1992)
                                     !2-O'Neill
 
   integer :: scheme_nitrif = 1 !1-default COBALT
                                !2-update with no temperature dependence
-
-
-
+                               !3-update with temperature dependence
 
 namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, scheme_nitrif, &
      k_nh4_small,k_nh4_large,k_nh4_diazo,scheme_no3_nh4_lim,k_no3_small,k_no3_large,k_no3_diazo, &
-     phi_ldon,phi_ldop,phi_srdon,phi_srdop, &
-     o2_min_nit,k_o2_nit,irr_inhibit,k_nh3, &
+     o2_min_nit,k_o2_nit,irr_inhibit,k_nh3_nitrif, &
      gamma_nitrif
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
@@ -228,7 +219,6 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           k_fe_2_n,      &
           k_fed,         &
           k_nh4,         &
-          k_nh3,         &
           k_no3,         &
           k_po4,         &
           k_sio4,        &
@@ -570,6 +560,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           gamma_mu_mem,     &
           gamma_ndet,       &
           gamma_nitrif,     &
+          k_nh3_nitrif,     &
           gamma_sidet,      &
           gamma_srdon,      &
           gamma_srdop,      &
@@ -596,6 +587,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           alk_2_n_denit,    &
           n_2_n_denit,      &
           k_no3_denit,      &
+          z_burial,         & 
           o2_min,           &
           o2_min_nit,       &
           o2_2_nfix,        & 
@@ -865,6 +857,10 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           flithdet_100, &
           btm_temp,     &
           btm_o2,       &
+          btm_htotal,   &
+          btm_co3_ion,  &
+          btm_co3_sol_arag, &
+          btm_co3_sol_calc, &
           cased_2d,     &
           o2min, & 
           z_o2min, & 
@@ -1149,6 +1145,10 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           id_sfc_temp      = -1,       &
           id_btm_temp      = -1,       &
           id_btm_o2        = -1,       &
+          id_btm_htotal    = -1,       &
+          id_btm_co3_sol_arag = -1,    &
+          id_btm_co3_sol_calc = -1,    &
+          id_btm_co3_ion      = -1,    &
           id_cased_2d      = -1,       &
           id_sfc_co3_ion   = -1,       &
           id_sfc_co3_sol_arag = -1,    &
@@ -2834,11 +2834,11 @@ write (stdlogunit, generic_COBALT_nml)
     !
 
     vardesc_temp = vardesc("fcadet_arag_btm","CaCO3 sinking flux at bottom",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_fcadet_arag_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_fcadet_arag_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("fcadet_calc_btm","CaCO3 sinking flux at bottom",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_fcadet_calc_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_fcadet_calc_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("fcased_burial","CaCO3 permanent burial flux",'h','1','s','mol m-2 s-1','f')
@@ -2850,7 +2850,7 @@ write (stdlogunit, generic_COBALT_nml)
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("ffedet_btm","fedet sinking flux burial",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_ffedet_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_ffedet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("ffe_sed","Sediment iron efflux",'h','1','s','mol m-2 s-1','f')
@@ -2866,11 +2866,11 @@ write (stdlogunit, generic_COBALT_nml)
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("flithdet_btm","Lithogenic detrital sinking flux burial",'h','1','s','g m-2 s-1','f')
-    cobalt%id_flithdet_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_flithdet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("fndet_btm","ndet sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_fndet_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_fndet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("fnfeso4red_sed","Sediment Ndet Fe and SO4 reduction flux",'h','1','s','mol m-2 s-1','f')
@@ -2886,11 +2886,11 @@ write (stdlogunit, generic_COBALT_nml)
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("fpdet_btm","pdet sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_fpdet_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_fpdet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("fsidet_btm","sidet sinking flux to bottom",'h','1','s','mol m-2 s-1','f')
-    cobalt%id_fsidet_btm = register_diag_field(package_name, vardesc_temp%name, axesTi(1:1),&
+    cobalt%id_fsidet_btm = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("frac_burial","fraction of organic matter buried",'h','1','s','dimensionless','f')
@@ -2995,6 +2995,22 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("btm_o2","Bottom Oxygen",'h','1','s','mol kg-1','f')
     cobalt%id_btm_o2 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("btm_htotal","Bottom Htotal",'h','1','s','mol kg-1','f')
+    cobalt%id_btm_htotal = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("btm_co3_ion","Bottom Carbonate Ion",'h','1','s','mol kg-1','f')
+    cobalt%id_btm_co3_ion = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("btm_co3_sol_arag","Bottom Aragonite Solubility",'h','1','s','mol kg-1','f')
+    cobalt%id_btm_co3_sol_arag = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("btm_co3_sol_calc","Bottom Calcite Solubility",'h','1','s','mol kg-1','f')
+    cobalt%id_btm_co3_sol_calc = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("cased_2d","calcium carbonite in sediment",'h','1','s','mol m-3','f')
@@ -3378,7 +3394,7 @@ write (stdlogunit, generic_COBALT_nml)
     cobalt%id_wc_vert_int_juptake_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
-    vardesc_temp = vardesc("wc_vert_int_jprod_nh4"," Water column ammonia based NPP vertical integral",'h','1','s','mol m-2 s-1','f')
+    vardesc_temp = vardesc("wc_vert_int_jprod_nh4"," Water column ammonia production vertical integral",'h','1','s','mol m-2 s-1','f')
     cobalt%id_wc_vert_int_jprod_nh4 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
@@ -5203,9 +5219,6 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_fed_Di', phyto(DIAZO)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Lg', phyto(LARGE)%k_fed, 5.0e-10)                   ! mol Fed kg-1
     call g_tracer_add_param('k_fed_Sm', phyto(SMALL)%k_fed,  1.0e-10)                 ! mol Fed kg-1
-    call g_tracer_add_param('k_nh3', phyto(SMALL)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
-    call g_tracer_add_param('k_nh3', phyto(LARGE)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
-    call g_tracer_add_param('k_nh3', phyto(DIAZO)%k_nh3,  k_nh3)                  ! mol NH3 kg-1
     call g_tracer_add_param('k_nh4_Lg', phyto(LARGE)%k_nh4,  k_nh4_large)                  ! mol NH4 kg-1
     call g_tracer_add_param('k_nh4_Sm', phyto(SMALL)%k_nh4,  k_nh4_small)                  ! mol NH4 kg-1
     call g_tracer_add_param('k_nh4_Di', phyto(DIAZO)%k_nh4,  k_nh4_diazo)                  ! mol NH4 kg-1
@@ -5232,7 +5245,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('alpha_Lg', phyto(LARGE)%alpha,  0.8e-5 * 2.77e18 / 6.022e17)  ! g C g Chl-1 m2 J-1 
     call g_tracer_add_param('alpha_Sm', phyto(SMALL)%alpha,  2.4e-5*2.77e18/6.022e17)      ! g C g Chl-1 m-2 J-1
     call g_tracer_add_param('kappa_eppley', cobalt%kappa_eppley, 0.063)                    ! deg C-1
-    call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.50/sperd)                ! s-1
+    call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.40/sperd)                ! s-1
     ! Uncomment for "no mass change" check
     ! call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.01/sperd)              ! s-1
     call g_tracer_add_param('P_C_max_Lg', phyto(LARGE)%P_C_max, 1.25/sperd)                ! s-1
@@ -5240,9 +5253,9 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('thetamax_Di', phyto(DIAZO)%thetamax, 0.03)                    ! g Chl g C-1
     call g_tracer_add_param('thetamax_Lg', phyto(LARGE)%thetamax, 0.05)                    ! g Chl g C-1
     call g_tracer_add_param('thetamax_Sm', phyto(SMALL)%thetamax, 0.03)                    ! g Chl g C-1
-    call g_tracer_add_param('bresp_Di', phyto(DIAZO)%bresp,0.06/sperd)                     ! sec-1 
-    call g_tracer_add_param('bresp_Lg', phyto(LARGE)%bresp,0.06/sperd)                     ! sec-1 
-    call g_tracer_add_param('bresp_Sm', phyto(SMALL)%bresp,0.02/sperd)                     ! sec-1 
+    call g_tracer_add_param('bresp_Di', phyto(DIAZO)%bresp,0.05/sperd)                     ! sec-1 
+    call g_tracer_add_param('bresp_Lg', phyto(LARGE)%bresp,0.05/sperd)                     ! sec-1 
+    call g_tracer_add_param('bresp_Sm', phyto(SMALL)%bresp,0.03/sperd)                     ! sec-1 
     call g_tracer_add_param('thetamin', cobalt%thetamin, 0.002)                            ! g Chl g C-1
     call g_tracer_add_param('thetamin_nolim', cobalt%thetamin_nolim, 0.0)                  ! g Chl g C-1
     call g_tracer_add_param('zeta', cobalt%zeta, 0.05)                                     ! dimensionless
@@ -5264,20 +5277,20 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('p_2_n_static', cobalt%p_2_n_static, .true. )
     call g_tracer_add_param('c_2_n', cobalt%c_2_n, 106.0 / 16.0)
     call g_tracer_add_param('alk_2_n_denit', cobalt%alk_2_n_denit, 552.0/472.0)             ! eq. alk mol NO3-1
-    call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static,1.0/40.0 )         ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static,1.0/16.0 )         ! mol P mol N-1
-    call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static,1.0/25.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static,1.0/30.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static,1.0/12.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static,1.0/20.0 )         ! mol P mol N-1
     call g_tracer_add_param('si_2_n_static_Lg', phyto(LARGE)%si_2_n_static, 2.0)            ! mol Si mol N-1
     call g_tracer_add_param('si_2_n_max_Lg', phyto(LARGE)%si_2_n_max, 3.0)                  ! mol Si mol N-1
-    call g_tracer_add_param('ca_2_n_arag', cobalt%ca_2_n_arag, 0.020 * 106.0 / 16.0)        ! mol Ca mol N-1
-    call g_tracer_add_param('ca_2_n_calc', cobalt%ca_2_n_calc, 0.010 * 106.0 / 16.0)        ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_arag', cobalt%ca_2_n_arag, 0.030 * 106.0 / 16.0)        ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_calc', cobalt%ca_2_n_calc, 0.013 * 106.0 / 16.0)        ! mol Ca mol N-1
     call g_tracer_add_param('caco3_sat_max', cobalt%caco3_sat_max,10.0)                     ! dimensionless
     !
     !-----------------------------------------------------------------------
     ! Zooplankton Stoichiometry - presently static
     !-----------------------------------------------------------------------
     !
-    call g_tracer_add_param('q_p_2_n_smz',zoo(1)%q_p_2_n, 1.0/23.0)          ! mol P mol N-1 
+    call g_tracer_add_param('q_p_2_n_smz',zoo(1)%q_p_2_n, 1.0/18.0)          ! mol P mol N-1 
     call g_tracer_add_param('q_p_2_n_mdz',zoo(2)%q_p_2_n, 1.0/16.0)          ! mol P mol N-1 
     call g_tracer_add_param('q_p_2_n_lgz',zoo(3)%q_p_2_n, 1.0/16.0)          ! mol P mol N-1 
     !
@@ -5406,24 +5419,24 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('phi_det_smz',zoo(1)%phi_det, 0.10)            ! dimensionless
     call g_tracer_add_param('phi_det_mdz',zoo(2)%phi_det, 0.20)            ! dimensionless
     call g_tracer_add_param('phi_det_lgz',zoo(3)%phi_det, 0.30)            ! dimensionless
-    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, 0.525*0.20)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, 0.525*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, 0.525*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, 0.45*0.20)     ! dimensionless
-    call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, 0.45*0.10)     ! dimensionless
-    call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, 0.45*0.0)      ! dimensionless
-    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, 0.075*0.20)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, 0.075*0.10)   ! dimensionless
-    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, 0.075*0.0)    ! dimensionless
+    call g_tracer_add_param('phi_ldon_smz',zoo(1)%phi_ldon, 0.7*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_ldon_mdz',zoo(2)%phi_ldon, 0.7*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_ldon_lgz',zoo(3)%phi_ldon, 0.7*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_smz',zoo(1)%phi_ldop, 0.65*0.20)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_mdz',zoo(2)%phi_ldop, 0.65*0.10)     ! dimensionless
+    call g_tracer_add_param('phi_ldop_lgz',zoo(3)%phi_ldop, 0.65*0.0)      ! dimensionless
+    call g_tracer_add_param('phi_srdon_smz',zoo(1)%phi_srdon, 0.1*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_srdon_mdz',zoo(2)%phi_srdon, 0.1*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_srdon_lgz',zoo(3)%phi_srdon, 0.1*0.0)     ! dimensionless
     call g_tracer_add_param('phi_srdop_smz',zoo(1)%phi_srdop, 0.15*0.20)   ! dimensionless
     call g_tracer_add_param('phi_srdop_mdz',zoo(2)%phi_srdop, 0.15*0.10)   ! dimensionless
     call g_tracer_add_param('phi_srdop_lgz',zoo(3)%phi_srdop, 0.15*0.0)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, 0.4*0.20)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, 0.4*0.10)    ! dimensionless
-    call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, 0.4*0.0)     ! dimensionless
-    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, 0.4*0.20)    ! dimensionless
-    call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, 0.4*0.10)    ! dimensionless
-    call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, 0.4*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_sldon_smz',zoo(1)%phi_sldon, 0.2*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_mdz',zoo(2)%phi_sldon, 0.2*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_sldon_lgz',zoo(3)%phi_sldon, 0.2*0.0)     ! dimensionless
+    call g_tracer_add_param('phi_sldop_smz',zoo(1)%phi_sldop, 0.2*0.20)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_mdz',zoo(2)%phi_sldop, 0.2*0.10)    ! dimensionless
+    call g_tracer_add_param('phi_sldop_lgz',zoo(3)%phi_sldop, 0.2*0.0)     ! dimensionless
     call g_tracer_add_param('phi_nh4_smz',zoo(1)%phi_nh4, 0.30)            ! dimensionless
     call g_tracer_add_param('phi_nh4_mdz',zoo(2)%phi_nh4, 0.30)            ! dimensionless
     call g_tracer_add_param('phi_nh4_lgz',zoo(3)%phi_nh4, 0.30)            ! dimensionless
@@ -5435,12 +5448,12 @@ write (stdlogunit, generic_COBALT_nml)
     ! Partitioning of viral losses to various dissolved pools
     !----------------------------------------------------------------------
     !
-    call g_tracer_add_param('phi_ldon_vir',cobalt%lysis_phi_ldon, 0.525)    ! dimensionless
-    call g_tracer_add_param('phi_srdon_vir',cobalt%lysis_phi_srdon, 0.075)  ! dimensionless
-    call g_tracer_add_param('phi_sldon_vir',cobalt%lysis_phi_sldon, 0.40)  ! dimensionless
-    call g_tracer_add_param('phi_ldop_vir',cobalt%lysis_phi_ldop, 0.45)    ! dimensionless
+    call g_tracer_add_param('phi_ldon_vir',cobalt%lysis_phi_ldon, 0.7)    ! dimensionless
+    call g_tracer_add_param('phi_srdon_vir',cobalt%lysis_phi_srdon, 0.1)  ! dimensionless
+    call g_tracer_add_param('phi_sldon_vir',cobalt%lysis_phi_sldon, 0.2)  ! dimensionless
+    call g_tracer_add_param('phi_ldop_vir',cobalt%lysis_phi_ldop, 0.65)    ! dimensionless
     call g_tracer_add_param('phi_srdop_vir',cobalt%lysis_phi_srdop, 0.15)  ! dimensionless
-    call g_tracer_add_param('phi_sldop_vir',cobalt%lysis_phi_sldop, 0.40)  ! dimensionless
+    call g_tracer_add_param('phi_sldop_vir',cobalt%lysis_phi_sldop, 0.20)  ! dimensionless
     ! 
     !----------------------------------------------------------------------
     ! Parameters for unresolved higher predators
@@ -5505,12 +5518,13 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_lith',  cobalt%k_lith, 0.5/spery )                            ! s-1
     call g_tracer_add_param('z_sed',  cobalt%z_sed, 0.1 )                                    ! m
     call g_tracer_add_param('k_no3_denit',cobalt%k_no3_denit,1.0e-6)                        ! mol NO3 kg-1
+    call g_tracer_add_param('z_burial',cobalt%z_burial,50.0)                                 ! m
     !
     !-----------------------------------------------------------------------
     ! Dissolved Organic Material
     !-----------------------------------------------------------------------
     !
-    call g_tracer_add_param('gamma_srdon',  cobalt%gamma_srdon, 1.0 / (18.0 * spery))          ! s-1
+    call g_tracer_add_param('gamma_srdon',  cobalt%gamma_srdon, 1.0 / (10.0 * spery))          ! s-1
     call g_tracer_add_param('gamma_srdop',  cobalt%gamma_srdop, 1.0 / (4.0 * spery))           ! s-1
     call g_tracer_add_param('gamma_sldon',  cobalt%gamma_sldon, 1.0 / (90 * sperd))           ! s-1
     call g_tracer_add_param('gamma_sldop',  cobalt%gamma_sldop, 1.0 / (90 * sperd))           ! s-1
@@ -5530,6 +5544,7 @@ write (stdlogunit, generic_COBALT_nml)
     !-----------------------------------------------------------------------
     !
     call g_tracer_add_param('gamma_nitrif',  cobalt%gamma_nitrif, gamma_nitrif / (30.0 * sperd))      ! s-1
+    call g_tracer_add_param('gamma_nitrif',  cobalt%k_nh3_nitrif, k_nh3_nitrif )                     ! moles kg-1
     call g_tracer_add_param('irr_inhibit',  cobalt%irr_inhibit, irr_inhibit)                         ! W m-2
     !
     !-----------------------------------------------------------------------
@@ -6389,7 +6404,6 @@ write (stdlogunit, generic_COBALT_nml)
 
     real :: imbal
     integer :: stdoutunit, imbal_flag, outunit
-    integer :: i_array 
 
 
     r_dt = 1.0 / dt
@@ -7489,10 +7503,12 @@ write (stdlogunit, generic_COBALT_nml)
     !
 
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec   !{
-        cobalt%jprod_cadet_arag(i,j,k) = (zoo(2)%jzloss_n(i,j,k) + zoo(3)%jzloss_n(i,j,k) + &
-                       zoo(2)%jhploss_n(i,j,k) + zoo(3)%jhploss_n(i,j,k))*cobalt%ca_2_n_arag* &
-                       min(cobalt%caco3_sat_max, max(0.0,cobalt%omega_arag(i,j,k) - 1.0)) + epsln
-        cobalt%jprod_cadet_calc(i,j,k) = (zoo(1)%jzloss_n(i,j,k) + phyto(SMALL)%jaggloss_n(i,j,k))*cobalt%ca_2_n_calc* &
+        cobalt%jprod_cadet_arag(i,j,k) = (zoo(2)%jzloss_n(i,j,k)*zoo(3)%phi_det + &
+                       (zoo(2)%jhploss_n(i,j,k) + zoo(3)%jhploss_n(i,j,k))*cobalt%hp_phi_det)* &
+                       cobalt%ca_2_n_arag*min(cobalt%caco3_sat_max, max(0.0,cobalt%omega_arag(i,j,k) - 1.0)) + epsln 
+        cobalt%jprod_cadet_calc(i,j,k) = (zoo(1)%jzloss_n(i,j,k)*zoo(2)%phi_det + & 
+                       phyto(SMALL)%jzloss_n(i,j,k)*zoo(1)%phi_det + phyto(LARGE)%jzloss_n(i,j,k)*zoo(3)%phi_det + &  
+                       phyto(SMALL)%jaggloss_n(i,j,k) + phyto(LARGE)%jaggloss_n(i,j,k))*cobalt%ca_2_n_calc* &
                        min(cobalt%caco3_sat_max, max(0.0, cobalt%omega_calc(i,j,k) - 1.0)) + epsln
     enddo; enddo ; enddo !} i,j,k
 
@@ -7598,7 +7614,7 @@ write (stdlogunit, generic_COBALT_nml)
        if (scheme_nitrif .eq. 2 .or. scheme_nitrif .eq. 3) then             
           if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min_nit) then  !{
              cobalt%jnitrif(i,j,k) = cobalt%gamma_nitrif * &
-                  cobalt%f_nh3(i,j,k)/(cobalt%f_nh3(i,j,k)+phyto(SMALL)%k_nh3) *  &
+                  cobalt%f_nh3(i,j,k)/(cobalt%f_nh3(i,j,k)+cobalt%k_nh3_nitrif) *  &
                   (1.-cobalt%f_irr_mem(i,j,k)/(cobalt%irr_inhibit+cobalt%f_irr_mem(i,j,k))) * &
                   cobalt%f_o2(i,j,k)/(cobalt%k_o2_nit+cobalt%f_o2(i,j,k)) * cobalt%f_nh4(i,j,k)**2
              
@@ -7682,7 +7698,8 @@ write (stdlogunit, generic_COBALT_nml)
              ! fpoc_bottom in mmoles C m-2 day-1 for burial relationship
              fpoc_btm = cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*sperd*1000.0
              !cobalt%frac_burial(i,j) = (0.013 + 0.53*fpoc_btm**2.0)/((7.0+fpoc_btm)**2.0)
-             cobalt%frac_burial(i,j) = 0.013 + 0.53*fpoc_btm**2.0/((7.0+fpoc_btm)**2.0)
+             cobalt%frac_burial(i,j) = 0.013 + 0.53*fpoc_btm**2.0/((7.0+fpoc_btm)**2.0) * &
+                  cobalt%zt(i,j,k) / (cobalt%z_burial + cobalt%zt(i,j,k))
              ! uncomment for "no mass change" test
              !cobalt%frac_burial(i,j) = 0.0
              cobalt%fndet_burial(i,j) = cobalt%frac_burial(i,j)*cobalt%f_ndet_btf(i,j,1)
@@ -7693,7 +7710,8 @@ write (stdlogunit, generic_COBALT_nml)
              cobalt%fno3denit_sed(i,j) = min(cobalt%f_no3(i,j,k)*cobalt%Rho_0*r_dt,  &      
                   min((cobalt%f_ndet_btf(i,j,1)-cobalt%fndet_burial(i,j))*cobalt%n_2_n_denit, & 
                   10.0**(-0.9543+0.7662*log_fpoc_btm - 0.235*log_fpoc_btm**2.0)/(cobalt%c_2_n*sperd*100.0)* &
-                  cobalt%n_2_n_denit*cobalt%f_no3(i,j,k)/(cobalt%k_no3_denit + cobalt%f_no3(i,j,k))))
+                  cobalt%n_2_n_denit*cobalt%f_no3(i,j,k)/(cobalt%k_no3_denit + cobalt%f_no3(i,j,k)))) * &
+                  cobalt%zt(i,j,k) / (cobalt%z_burial + cobalt%zt(i,j,k))
              ! uncomment "no mass change" test 
              !cobalt%fno3denit_sed(i,j) = 0.0             
              if (cobalt%f_o2(i,j,k) .gt. cobalt%o2_min) then  !{
@@ -8166,12 +8184,15 @@ write (stdlogunit, generic_COBALT_nml)
     do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
        !
        ! Alkalinity
+       ! CAS: remove o2 removal via nitrification from the total o2 respired 
+       !      to isolate the change in alkalinity due to organic matter remineralization
        !
        cobalt%jalk(i,j,k) = 2.0 * (cobalt%jdiss_cadet_arag(i,j,k) +        &
           cobalt%jdiss_cadet_calc(i,j,k) - cobalt%jprod_cadet_arag(i,j,k) - &
           cobalt%jprod_cadet_calc(i,j,k)) + phyto(DIAZO)%juptake_no3(i,j,k) + &
           phyto(LARGE)%juptake_no3(i,j,k) + phyto(SMALL)%juptake_no3(i,j,k) + &
-          cobalt%jo2resp_wc(i,j,k)/cobalt%o2_2_nh4 + cobalt%alk_2_n_denit*cobalt%jno3denit_wc(i,j,k) - & 
+          (cobalt%jo2resp_wc(i,j,k)-cobalt%jnitrif(i,j,k)*cobalt%o2_2_nitrif)/cobalt%o2_2_nh4 + &
+          cobalt%alk_2_n_denit*cobalt%jno3denit_wc(i,j,k) - & 
           phyto(DIAZO)%juptake_nh4(i,j,k) - phyto(LARGE)%juptake_nh4(i,j,k) - &  
           phyto(SMALL)%juptake_nh4(i,j,k) - 2.0 * cobalt%jnitrif(i,j,k)
 
@@ -8941,6 +8962,10 @@ write (stdlogunit, generic_COBALT_nml)
       if (grid_kmt(i,j) .gt. 0) then !{
          cobalt%btm_temp(i,j) = TEMP(i,j,grid_kmt(i,j))
          cobalt%btm_o2(i,j) = cobalt%f_o2(i,j,grid_kmt(i,j))
+         cobalt%btm_htotal(i,j) = cobalt%f_htotal(i,j,grid_kmt(i,j))
+         cobalt%btm_co3_sol_arag(i,j) = cobalt%co3_sol_arag(i,j,grid_kmt(i,j))
+         cobalt%btm_co3_sol_calc(i,j) = cobalt%co3_sol_calc(i,j,grid_kmt(i,j))
+         cobalt%btm_co3_ion(i,j) = cobalt%f_co3_ion(i,j,grid_kmt(i,j))
          cobalt%cased_2d(i,j) = cobalt%f_cased(i,j,1)      
       endif
     enddo; enddo  !} i, j
@@ -9770,6 +9795,10 @@ write (stdlogunit, generic_COBALT_nml)
        used = g_send_data(cobalt%id_btm_o2,      cobalt%btm_o2,                &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_btm_htotal .gt. 0)            &
+       used = g_send_data(cobalt%id_btm_htotal,      cobalt%btm_htotal,        &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_cased_2d .gt. 0)            &
        used = g_send_data(cobalt%id_cased_2d,      cobalt%cased_2d,                &
        model_time, rmask = grid_tmask(:,:,1),&
@@ -9784,6 +9813,18 @@ write (stdlogunit, generic_COBALT_nml)
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
    if (cobalt%id_sfc_co3_sol_calc .gt. 0)            &
        used = g_send_data(cobalt%id_sfc_co3_sol_calc, cobalt%co3_sol_calc(:,:,1),  &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_btm_co3_ion .gt. 0)            &
+       used = g_send_data(cobalt%id_btm_co3_ion, cobalt%btm_co3_ion,            &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_btm_co3_sol_arag .gt. 0)            &
+       used = g_send_data(cobalt%id_btm_co3_sol_arag, cobalt%btm_co3_sol_arag,  &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+   if (cobalt%id_btm_co3_sol_calc .gt. 0)            &
+       used = g_send_data(cobalt%id_btm_co3_sol_calc, cobalt%btm_co3_sol_calc,  &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -12299,6 +12340,10 @@ write (stdlogunit, generic_COBALT_nml)
 
    allocate(cobalt%btm_temp(isd:ied,jsd:jed))              ; cobalt%btm_temp = 0.0
    allocate(cobalt%btm_o2(isd:ied,jsd:jed))                ; cobalt%btm_o2 = 0.0
+   allocate(cobalt%btm_htotal(isd:ied,jsd:jed))                ; cobalt%btm_htotal = 0.0
+   allocate(cobalt%btm_co3_ion(isd:ied,jsd:jed))           ; cobalt%btm_co3_ion = 0.0
+   allocate(cobalt%btm_co3_sol_arag(isd:ied,jsd:jed))      ; cobalt%btm_co3_sol_arag = 0.0
+   allocate(cobalt%btm_co3_sol_calc(isd:ied,jsd:jed))      ; cobalt%btm_co3_sol_calc = 0.0
    allocate(cobalt%cased_2d(isd:ied,jsd:jed))              ; cobalt%cased_2d = 0.0
 
    allocate(cobalt%o2min(isd:ied, jsd:jed))                ; cobalt%o2min=0.0
@@ -12676,6 +12721,10 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%flithdet_100)
     deallocate(cobalt%btm_temp)
     deallocate(cobalt%btm_o2)
+    deallocate(cobalt%btm_htotal)
+    deallocate(cobalt%btm_co3_ion)
+    deallocate(cobalt%btm_co3_sol_arag)
+    deallocate(cobalt%btm_co3_sol_calc)
     deallocate(cobalt%cased_2d)
     deallocate(cobalt%o2min)
     deallocate(cobalt%z_o2min)
