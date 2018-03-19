@@ -5815,7 +5815,7 @@ write (stdlogunit, generic_COBALT_nml)
             flux_gas_name  = 'nh3_flux',    &
             flux_gas_type  = 'air_sea_gas_flux_generic', &
             flux_gas_molwt = WTMN,                       &
-            flux_gas_param = (/ 1. /), &
+            flux_gas_param = (/ 17. /), &
             flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
             flux_param = (/ WTMN*1.e-3/),    &         
             flux_bottom= .true.,            &
