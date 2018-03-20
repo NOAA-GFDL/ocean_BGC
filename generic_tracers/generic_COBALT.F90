@@ -134,7 +134,7 @@ module generic_COBALT
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
   use constants_mod,     only: WTMCO2, WTMO2,WTMN
-  use fms_mod,           only: write_version_number, FATAL, WARNING, stdout, stdlog
+  use fms_mod,           only: write_version_number, FATAL, WARNING, stdout, stdlog,mpp_pe,mpp_root_pe
   use fms_mod,           only: open_namelist_file, check_nml_error, close_file
 
   use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
@@ -5803,6 +5803,9 @@ write (stdlogunit, generic_COBALT_nml)
     !       NH4
     !
     if (do_nh3_atm_ocean_exchange) then
+       if (mpp_root_pe().eq.mpp_pe()) then
+          write(*,*) 'setting up nh3 tracer (ocean)'
+       end if
        call g_tracer_add(tracer_list,package_name,&
             name       = 'nh4',             &
             longname   = 'Ammonia',         &
@@ -5811,16 +5814,21 @@ write (stdlogunit, generic_COBALT_nml)
             flux_wetdep= .true.,            &
             flux_drydep= .true.,            &
             flux_gas   = .true.,            &
-            implementation='duce_vmr',   &
+!            implementation='duce',   &
+            implementation='johnson',   &
             flux_gas_name  = 'nh3_flux',    &
             flux_gas_type  = 'air_sea_gas_flux_generic', &
             flux_gas_molwt = WTMN,                       &
-            flux_gas_param = (/ 17. /), &
+            flux_gas_param = (/ 17.,25. /), &
             flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
             flux_param = (/ WTMN*1.e-3/),    &         
             flux_bottom= .true.,            &
             init_value = 0.001              )
     else
+       if (mpp_root_pe().eq.mpp_pe()) then
+          write(*,*) 'setting up nh3 tracer (ocean - no exchange)'
+       end if
+
        call g_tracer_add(tracer_list,package_name,&                                 
          name       = 'nh4',             &         
          longname   = 'Ammonia',         &         
@@ -11845,7 +11853,6 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_set_values(tracer_list,'o2', 'sc_no',o2_sc_no, isd,jsd)
 
     if (do_nh3_atm_ocean_exchange) then
-
        call g_tracer_get_values(tracer_list,'nh4','alpha', nh3_alpha ,isd,jsd)
        call g_tracer_get_values(tracer_list,'nh4','csurf', nh3_csurf ,isd,jsd)
 
