@@ -489,7 +489,7 @@ contains
          standard_name="surface_downward_mass_flux_of_carbon_dioxide_abiotic_analogue_expressed_as_carbon")
 
     vardesc_temp = vardesc("fg14co2abio","Surface Downward Abiotic 14CO2 Flux",'h','1','s','kg m-2 s-1','f')
-    abiotic%id_fgco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    abiotic%id_fg14co2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          standard_name="surface_downward_mass_flux_of_carbon14_dioxide_abiotic_analogue_expressed_as_carbon")
 
