@@ -167,7 +167,7 @@ module g_tracer_utils
      real :: flux_gas_molwt
 
      ! Tracer flux names recognized by component models (OCN, LND, ICE, ATM) 
-     character(len=fm_string_len) :: flux_gas_name, flux_gas_type, flux_runoff_name, flux_wetdep_name, flux_drydep_name
+     character(len=fm_string_len) :: flux_gas_name, flux_gas_type, flux_runoff_name, flux_wetdep_name, flux_drydep_name,implementation
      real, _ALLOCATABLE, dimension(:) :: flux_param, flux_gas_param
 
      ! IN and OUT (restart) files
@@ -749,7 +749,7 @@ contains
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
        flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, &
-       flux_gas_type,requires_src_info,standard_name,diag_name,diag_field_units,diag_field_scaling_factor) 
+       flux_gas_type,requires_src_info,standard_name,diag_name,diag_field_units,diag_field_scaling_factor,implementation) 
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -769,6 +769,7 @@ contains
     real, dimension(:), intent(in), optional :: flux_gas_param
     real, dimension(:), intent(in), optional :: flux_param
     character(len=*),   intent(in), optional :: flux_gas_name
+    character(len=*),   intent(in), optional :: implementation
     character(len=*),   intent(in), optional :: flux_gas_type
     character(len=*),   intent(in), optional :: flux_gas_restart_file
     logical,            intent(in), optional :: requires_src_info
@@ -862,6 +863,12 @@ contains
     !
     !Determine the fluxes 
     !
+
+    if (present(implementation)) then
+       g_tracer%implementation=implementation
+    else
+       g_tracer%implementation='ocmip2'
+    end if
 
     if(present(flux_gas_molwt)) then
        g_tracer%flux_gas_molwt=flux_gas_molwt
@@ -1029,10 +1036,12 @@ contains
     !For each kind of flux allocate the appropriate arrays only if that flux 
     !indicated to exist for the tracer.
 
+!            implementation    = 'ocmip2',                                                     &
+
     if(g_tracer%flux_gas) then
        g_tracer%flux_gas_ind  = aof_set_coupler_flux(g_tracer%flux_gas_name,                  &
             flux_type         = g_tracer%flux_gas_type,                                       &
-            implementation    = 'ocmip2',                                                     &
+            implementation    = trim(g_tracer%implementation), &
             mol_wt            = g_tracer%flux_gas_molwt,                                      &
             param             = g_tracer%flux_gas_param,                                      &
             ice_restart_file  = g_tracer%ice_restart_file,                                    &
@@ -1171,7 +1180,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Total flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
+         'Total flux of ' // trim(g_tracer%alias) // ' into Ocean Surface', &
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+20)
 
@@ -1180,7 +1189,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Gas exchange flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
+         'Gas exchange flux of ' // trim(g_tracer%alias) // ' into Ocean Surface', &
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+20)
 
@@ -1189,7 +1198,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Auxilliary Gas exchange flux of ') // trim(g_tracer%alias) // trim(' into Ocean Surface'), &
+         'Auxilliary Gas exchange flux of ' // trim(g_tracer%alias) // ' into Ocean Surface', &
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+20)
 
@@ -1198,7 +1207,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Ocn minus Atm pressure of ') // trim(g_tracer%alias), &
+         'Ocn minus Atm pressure of ' // trim(g_tracer%alias), &
          trim('uatm'),                 &
          missing_value = -1.0e+20)
 
@@ -1207,7 +1216,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Gas Exchange piston velocity for ') // trim(g_tracer%alias), &
+         'Gas Exchange piston velocity for ' // trim(g_tracer%alias), &
          trim('m/sec'),                &
          missing_value = -1.0e+20)
 
@@ -1216,7 +1225,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Total flux of ') // trim(g_tracer%alias) // trim(' into Ocean Bottom'), &
+         'Total flux of ' // trim(g_tracer%alias) // trim(' into Ocean Bottom'), &
          trim('mole/m^2/sec'),         &
          missing_value = -1.0e+20)
 
@@ -1225,7 +1234,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Bottom reservoir of ') // trim(g_tracer%alias), &
+         'Bottom reservoir of ' // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+20)
 
@@ -1234,7 +1243,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('River concentration of ') // trim(g_tracer%alias), &
+         'River concentration of ' // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+20)
 
@@ -1243,7 +1252,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Atmospheric saturation for ') // trim(g_tracer%alias), &
+         'Atmospheric saturation for ' // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+20)
 
@@ -1252,7 +1261,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Ocean surface gas concentration of ') // trim(g_tracer%alias), &
+         'Ocean surface gas concentration of ' // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+20)
 
@@ -1261,7 +1270,7 @@ contains
          trim(string),                 &
          g_tracer_com%axes(1:2),       &
          g_tracer_com%init_time,       &
-         trim('Ocean surface Schmidt Number for ') // trim(g_tracer%alias), &
+         'Ocean surface Schmidt Number for ' // trim(g_tracer%alias), &
          trim(g_tracer%units),         &
          missing_value = -1.0e+20)
 
