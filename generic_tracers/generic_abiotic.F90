@@ -489,7 +489,7 @@ contains
          standard_name="surface_downward_mass_flux_of_carbon_dioxide_abiotic_analogue_expressed_as_carbon")
 
     vardesc_temp = vardesc("fg14co2abio","Surface Downward Abiotic 14CO2 Flux",'h','1','s','kg m-2 s-1','f')
-    abiotic%id_fg14co2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+    abiotic%id_fgco2abio = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          standard_name="surface_downward_mass_flux_of_carbon14_dioxide_abiotic_analogue_expressed_as_carbon")
 
@@ -906,12 +906,12 @@ contains
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (abiotic%id_phabio .gt. 0) &
-         used = g_send_data(abiotic%id_phabio, log10(abiotic%f_htotal(:,:,:))*-1.,      &
+         used = g_send_data(abiotic%id_phabio, log10(abiotic%f_htotal(:,:,:))*(-1.),      &
          model_time, rmask = grid_tmask(:,:,:),                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (abiotic%id_phabioos .gt. 0) &
-         used = g_send_data(abiotic%id_phabioos, log10(abiotic%f_htotal(:,:,1))*-1.,    &
+         used = g_send_data(abiotic%id_phabioos, log10(abiotic%f_htotal(:,:,1))*(-1.),    &
          model_time, rmask = grid_tmask(:,:,1),                                         & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
