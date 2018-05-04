@@ -933,6 +933,8 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_requires_src_info",g_tracer%requires_src_info , .true.) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_requires_restart", g_tracer%requires_restart , .true.) 
     
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
