@@ -199,10 +199,10 @@ module generic_COBALT
   real    :: gamma_nitrif= 1. !month(-1)
   real    :: k_nh3_nitrif= 3.1e-9 !mol/kg
 
-  integer :: scheme_no3_nh4_lim = 1 !1-Frost and Franzen (1992)
+  integer :: scheme_no3_nh4_lim = 2 !1-Frost and Franzen (1992)
                                     !2-O'Neill
 
-  integer :: scheme_nitrif = 1 !1-default COBALT
+  integer :: scheme_nitrif = 3 !1-default COBALT
                                !2-update with no temperature dependence
                                !3-update with temperature dependence
 
@@ -539,6 +539,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
                                                !    when update_from_source is not called every coupling timesteps
                                                !    as is the case with MOM6  THERMO_SPANS_COUPLING option
           p_2_n_static,     &                  ! If P:N is fixed in phytoplankton
+          cased_steady,     &                  ! steady state approximation for cased
           tracer_debug
 
      real  ::          &
@@ -589,7 +590,13 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           alk_2_n_denit,    &
           n_2_n_denit,      &
           k_no3_denit,      &
-          z_burial,         & 
+          z_burial,         &
+          phi_surfresp_cased, & 
+          phi_deepresp_cased, &
+          alpha_cased,      &
+          beta_cased,       &
+          gamma_cased,      &
+          Co_cased,         &
           o2_min,           &
           o2_min_nit,       &
           o2_2_nfix,        & 
@@ -825,6 +832,9 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           fsidet_btm,&      
           fcased_burial,&
           fcased_redis,&
+          fcased_redis_surfresp,&
+          cased_redis_coef,&
+          cased_redis_delz,&
           ffe_sed,&
           ffe_geotherm,&
           ffe_iceberg,&
@@ -1114,6 +1124,9 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           id_fsidet_btm    = -1,       &
           id_fcased_burial = -1,       &
           id_fcased_redis  = -1,       &
+          id_fcased_redis_surfresp  = -1, &
+          id_cased_redis_coef  = -1,   &
+          id_cased_redis_delz  = -1,   &
           id_ffe_sed       = -1,       &
           id_ffe_geotherm  = -1,       &
           id_ffe_iceberg = -1,         &
@@ -2849,6 +2862,18 @@ write (stdlogunit, generic_COBALT_nml)
 
     vardesc_temp = vardesc("fcased_redis","CaCO3 redissolution from sediments",'h','1','s','mol m-2 s-1','f')
     cobalt%id_fcased_redis = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("fcased_redis_surfresp","CaCO3 redissolution rom sediments, surfresp",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_fcased_redis_surfresp = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("cased_redis_coef","CaCO3 redissolution from sediments, deepresp coefficient, ",'h','1','s','s-1','f')
+    cobalt%id_cased_redis_coef = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("cased_redis_delz","CaCO3 redissolution from sediments, effective depth",'h','1','s','none (0-1)','f')
+    cobalt%id_cased_redis_delz = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("ffedet_btm","fedet sinking flux burial",'h','1','s','mol m-2 s-1','f')
@@ -5247,7 +5272,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('alpha_Lg', phyto(LARGE)%alpha,  0.8e-5 * 2.77e18 / 6.022e17)  ! g C g Chl-1 m2 J-1 
     call g_tracer_add_param('alpha_Sm', phyto(SMALL)%alpha,  2.4e-5*2.77e18/6.022e17)      ! g C g Chl-1 m-2 J-1
     call g_tracer_add_param('kappa_eppley', cobalt%kappa_eppley, 0.063)                    ! deg C-1
-    call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.40/sperd)                ! s-1
+    call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.50/sperd)                ! s-1
     ! Uncomment for "no mass change" check
     ! call g_tracer_add_param('P_C_max_Di', phyto(DIAZO)%P_C_max, 0.01/sperd)              ! s-1
     call g_tracer_add_param('P_C_max_Lg', phyto(LARGE)%P_C_max, 1.25/sperd)                ! s-1
@@ -5486,7 +5511,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('fe_2_n_sed', cobalt%fe_2_n_sed, 100.0e-5 * 106 / 16)            ! mol Fe mol N-1
     call g_tracer_add_param('ffe_sed_max', cobalt%ffe_sed_max, 170.0/1.0e6/sperd)            ! mol Fe m-2 s-1 
     call g_tracer_add_param('ffe_geotherm_ratio', cobalt%ffe_geotherm_ratio,2.0e-12)         ! mol Fe m-2 s-1 (watt m-2)-1
-    call g_tracer_add_param('ffe_iceberg_ratio', cobalt%ffe_iceberg_ratio,5.0e-7)            ! mol Fe kg-1 ice melt
+    call g_tracer_add_param('ffe_iceberg_ratio', cobalt%ffe_iceberg_ratio,1.0e-7)            ! mol Fe kg-1 ice melt
     call g_tracer_add_param('fe_coast', cobalt%fe_coast,0.0 )                                ! mol Fe m kg-1 s-1
     call g_tracer_add_param('alpha_fescav',cobalt%alpha_fescav, 0.0/spery)                   ! sec-1
     call g_tracer_add_param('beta_fescav',cobalt%beta_fescav, 2.5e9/spery )                  ! sec-1 (mole ndet kg-1)-1
@@ -5504,8 +5529,8 @@ write (stdlogunit, generic_COBALT_nml)
     !
     call g_tracer_add_param('k_o2', cobalt%k_o2, 8.0e-6)                                     ! mol O2 kg-1
     call g_tracer_add_param('o2_min', cobalt%o2_min, 0.8e-6 )                                ! mol O2 kg-1
-    call g_tracer_add_param('k_o2_nit', cobalt%k_o2_nit, k_o2_nit)                                     ! mol O2 kg-1
-    call g_tracer_add_param('o2_min_nit', cobalt%o2_min_nit, o2_min_nit )                                ! mol O2 kg-1
+    call g_tracer_add_param('k_o2_nit', cobalt%k_o2_nit, k_o2_nit)                           ! mol O2 kg-1
+    call g_tracer_add_param('o2_min_nit', cobalt%o2_min_nit, o2_min_nit )                    ! mol O2 kg-1
     call g_tracer_add_param('kappa_remin', cobalt%kappa_remin, 0.063 )                       ! deg C-1
     call g_tracer_add_param('remin_ramp_scale', cobalt%remin_ramp_scale, 50.0 )              ! m
     call g_tracer_add_param('rpcaco3', cobalt%rpcaco3, 0.070/12.0*16.0/106.0*100.0)          ! mol N mol Ca-1
@@ -5519,8 +5544,20 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('phi_lith' ,  cobalt%phi_lith, 0.002)                            ! dimensionless 
     call g_tracer_add_param('k_lith',  cobalt%k_lith, 0.5/spery )                            ! s-1
     call g_tracer_add_param('z_sed',  cobalt%z_sed, 0.1 )                                    ! m
-    call g_tracer_add_param('k_no3_denit',cobalt%k_no3_denit,1.0e-6)                        ! mol NO3 kg-1
+    call g_tracer_add_param('k_no3_denit',cobalt%k_no3_denit,1.0e-6)                         ! mol NO3 kg-1
     call g_tracer_add_param('z_burial',cobalt%z_burial,50.0)                                 ! m
+    !
+    !-----------------------------------------------------------------------
+    ! Calcium carbonate in sediments (see Dunne et al., 2012, GBC, 26)
+    !-----------------------------------------------------------------------
+    !
+    call g_tracer_add_param('cased_steady', cobalt%cased_steady, .false. )
+    call g_tracer_add_param('phi_surfresp_cased',cobalt%phi_surfresp_cased,0.14307)      ! none 
+    call g_tracer_add_param('phi_deepresp_cased',cobalt%phi_deepresp_cased,4.1228)       ! none
+    call g_tracer_add_param('alpha_cased',cobalt%alpha_cased,2.7488)                     ! none
+    call g_tracer_add_param('beta_cased',cobalt%beta_cased,-2.2185)                      ! none
+    call g_tracer_add_param('gamma_cased',cobalt%gamma_cased,0.03607/spery)              ! sec-1
+    call g_tracer_add_param('Co_cased',cobalt%Co_cased,8.1e3)                            ! moles m-3 
     !
     !-----------------------------------------------------------------------
     ! Dissolved Organic Material
@@ -5545,7 +5582,7 @@ write (stdlogunit, generic_COBALT_nml)
     ! Nitrification
     !-----------------------------------------------------------------------
     !
-    call g_tracer_add_param('gamma_nitrif',  cobalt%gamma_nitrif, gamma_nitrif / (30.0 * sperd))      ! s-1
+    call g_tracer_add_param('gamma_nitrif',  cobalt%gamma_nitrif, gamma_nitrif / (30.0 * sperd))     ! s-1
     call g_tracer_add_param('gamma_nitrif',  cobalt%k_nh3_nitrif, k_nh3_nitrif )                     ! moles kg-1
     call g_tracer_add_param('irr_inhibit',  cobalt%irr_inhibit, irr_inhibit)                         ! W m-2
     !
@@ -5658,11 +5695,11 @@ write (stdlogunit, generic_COBALT_nml)
          flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
          ! Uncomment for "no mass change" check
          ! flux_gas_param = (/ 0.0, 0.0 /),                            &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',   &
          flux_runoff= .true.,                                          &
          flux_param = (/12.011e-03  /),                                &
          flux_bottom= .true.,                                          &
-         init_value = 0.001)
+         init_value = 0.001                                            )
     !
     !       Dissolved Fe (assumed to be all available to phytoplankton)
     !
@@ -7508,8 +7545,8 @@ write (stdlogunit, generic_COBALT_nml)
       else if (trim(co2_calc) == "mocsy") then
          cobalt%omega_arag(i,j,k) = cobalt%omegaa(i,j,k)  ! from Mocsy
          cobalt%omega_calc(i,j,k) = cobalt%omegac(i,j,k)  ! from Mocsy
-         cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_arag(i,j,k)
-         cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / cobalt%omega_calc(i,j,k)
+         cobalt%co3_sol_arag(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(cobalt%omega_arag(i,j,k),epsln)
+         cobalt%co3_sol_calc(i,j,k) = cobalt%f_co3_ion(i,j,k) / max(cobalt%omega_calc(i,j,k),epsln)
       else
         call mpp_error(FATAL,"Unable to compute aragonite and calcite saturation states")
       endif
@@ -7767,18 +7804,64 @@ write (stdlogunit, generic_COBALT_nml)
           !
           ! Calcium carbonate flux and burial
           ! 2015/11/18 JGJ: fix from JPD to cap the absolute cased dissolution rate to 10 mmol m-2 d-1
+          ! Calcite cycling in the sediments is based on the model of   Dunne et al., 2012.
           !
-          cobalt%fcased_redis(i,j) = max(0.0, min(0.01/sperd,min(0.5 * cobalt%f_cased(i,j,1) * r_dt, min(0.5 *       &                          
-             cobalt%f_cadet_calc_btf(i,j,1), 0.14307 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n) +        &
-             0.03607 / spery * max(0.0, 1.0 - cobalt%omega_calc(i,j,k) +   &
-             4.1228 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n * spery)**(2.7488) *                        &
-             max(1.0, cobalt%f_lithdet_btf(i,j,1) * spery + cobalt%f_cadet_calc_btf(i,j,1) * 100.0 *  &
-             spery)**(-2.2185) * cobalt%f_cased(i,j,1))))*grid_tmask(i,j,k) 
-          cobalt%fcased_burial(i,j) = max(0.0, cobalt%f_cadet_calc_btf(i,j,1) * cobalt%f_cased(i,j,1) /&
-             8.1e3)
-          cobalt%f_cased(i,j,1) = cobalt%f_cased(i,j,1) + (cobalt%f_cadet_calc_btf(i,j,1) -            &
-             cobalt%fcased_redis(i,j) - cobalt%fcased_burial(i,j)) / cobalt%z_sed * dt *               &
-             grid_tmask(i,j,k)
+          ! phi_surfresp_cased = 0.14307   ! const for enhanced diss., surf sed respiration (dimensionless)
+          ! phi_deepresp_cased = 4.1228    ! const for enhanced diss., deep sed respiration (dimensionless)
+          ! alpha_cased = 2.7488 ! exponent controlling non-linearity of deep dissolution           
+          ! beta_cased = -2.2185 ! exponent controlling non-linearity of effective thickness
+          ! gamma_cased = 0.03607/spery   ! dissolution rate constant
+          ! Co_cased = 8.1e3        ! moles CaCo3 m-3 for pure calcite sediment with porosity = 0.7
+          !
+          ! if cased_steady is true, burial is calculated from Dunne's eq. (2) assuming dcased/dt = 0.
+          ! This ensures that all the calcite bottom flux is partitioned between burial and redissolution.     
+          ! The steady state cased value of cased is calculated to reflect the changing bottom conditions.
+          ! This influences the the partitioning of burial and redissolution over time, but there are
+          ! no alkalinity changes/drifts associated with the long-term evolution of cased
+          ! 
+          ! If cased_steady is false, calcite is partitioned between dissolution, burial and evolving
+          ! cased as described in Dunne et al. (2012).  The multi-century scale evolution of cased
+          ! impacts alkalinity, but care must to ensure that cased starts in equilibrium with the 
+          ! mean ocean state to avoid unrealistic drifts. 
+
+          ! Enhanced dissolution by fast respiration near the sediment surface, proportional 
+          ! to organic flux, moles Ca m-2 s-1, limited to a max 1/2 the instantaneous calcite flux
+          cobalt%fcased_redis_surfresp(i,j)=min(0.5*cobalt%f_cadet_calc_btf(i,j,1), &
+            cobalt%phi_surfresp_cased*cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n)
+          ! Ca-specific dissolution coeficient, depends on calcite saturation state and is enhanced by
+          ! respiration deep in the sediment (s-1), non-linearity controlled by alpha_cased
+          cobalt%cased_redis_coef(i,j) = cobalt%gamma_cased*max(0.0,1.0-cobalt%omega_calc(i,j,k)+ &
+            cobalt%phi_deepresp_cased*cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*spery)**cobalt%alpha_cased
+          ! Effective thickness term that enhances burial of calcite when total sediment accumulation is high
+          ! dimensionless value between 0 and 1
+          cobalt%cased_redis_delz(i,j) = max(1.0, &
+            cobalt%f_lithdet_btf(i,j,1)*spery+cobalt%f_cadet_calc_btf(i,j,1)*100.0*spery)**cobalt%beta_cased  
+          ! calculate the sediment redissolution rate (moles Ca m-2 sec-1). This calculation is subject to
+          ! three limiters: a) a maximum of 1/2 of the total cased over one time step; b) a maximum of 0.01
+          ! moles Ca per day; and c) a minimum of 0.0
+          cobalt%fcased_redis(i,j) = max(0.0, min(0.01/sperd, min(0.5*cobalt%f_cased(i,j,1)*r_dt,  &
+            cobalt%fcased_redis_surfresp(i,j)+cobalt%cased_redis_coef(i,j)*cobalt%cased_redis_delz(i,j)*cobalt%f_cased(i,j,1))) ) 
+          !
+          ! Old expression
+          !
+          !cobalt%fcased_redis(i,j) = max(0.0, min(0.01/sperd,min(0.5 * cobalt%f_cased(i,j,1) * r_dt, min(0.5 *       &                          
+          !   cobalt%f_cadet_calc_btf(i,j,1), 0.14307 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n) +        &
+          !   0.03607 / spery * max(0.0, 1.0 - cobalt%omega_calc(i,j,k) +   &
+          !   4.1228 * cobalt%f_ndet_btf(i,j,1) * cobalt%c_2_n * spery)**(2.7488) *                        &
+          !   max(1.0, cobalt%f_lithdet_btf(i,j,1) * spery + cobalt%f_cadet_calc_btf(i,j,1) * 100.0 *  &
+          !   spery)**(-2.2185) * cobalt%f_cased(i,j,1))))*grid_tmask(i,j,k)
+
+          if (cobalt%cased_steady) then
+            cobalt%fcased_burial(i,j) = cobalt%f_cadet_calc_btf(i,j,1) - cobalt%fcased_redis(i,j)
+            cobalt%f_cased(i,j,1) = cobalt%fcased_burial(i,j)*cobalt%Co_cased/cobalt%f_cadet_calc_btf(i,j,1)
+          else
+            cobalt%fcased_burial(i,j) = max(0.0, cobalt%f_cadet_calc_btf(i,j,1) * cobalt%f_cased(i,j,1) / &
+              cobalt%Co_cased)
+            cobalt%f_cased(i,j,1) = cobalt%f_cased(i,j,1) + (cobalt%f_cadet_calc_btf(i,j,1) -            &
+              cobalt%fcased_redis(i,j) - cobalt%fcased_burial(i,j)) / cobalt%z_sed * dt *                &
+              grid_tmask(i,j,k)
+          endif
+
           ! uncomment for "no mass change" test (next 3 lines)
           !cobalt%fcased_redis(i,j) = cobalt%f_cadet_calc_btf(i,j,1)
           !cobalt%fcased_burial(i,j) = 0.0
@@ -9585,6 +9668,18 @@ write (stdlogunit, generic_COBALT_nml)
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_fcased_redis .gt. 0)         &
          used = g_send_data(cobalt%id_fcased_redis,  cobalt%fcased_redis,          &
+         model_time, rmask = grid_tmask(:,:,1),&
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_fcased_redis_surfresp .gt. 0)         &
+         used = g_send_data(cobalt%id_fcased_redis_surfresp,cobalt%fcased_redis_surfresp, &
+         model_time, rmask = grid_tmask(:,:,1),&
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_cased_redis_coef .gt. 0)         &
+         used = g_send_data(cobalt%id_cased_redis_coef,  cobalt%cased_redis_coef, &
+         model_time, rmask = grid_tmask(:,:,1),&
+         is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
+    if (cobalt%id_cased_redis_delz .gt. 0)         &
+         used = g_send_data(cobalt%id_cased_redis_delz,  cobalt%cased_redis_delz, &
          model_time, rmask = grid_tmask(:,:,1),&
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
     if (cobalt%id_ffe_sed .gt. 0)              &
@@ -11678,8 +11773,8 @@ write (stdlogunit, generic_COBALT_nml)
             htotal_field(:,:,1),                           &
                                 !Optional In
             co2_calc=trim(co2_calc),                       & 
-                                !! jgj 2017/08/11
-                                !!zt=cobalt%zt(:,:,1),                           & 
+            !! jgj 2017/08/11
+            !!zt=cobalt%zt(:,:,1),                           & 
             zt=dzt(:,:,1),                                 & 
                                 !OUT
             co2star=co2_csurf(:,:), alpha=co2_alpha(:,:),  &
@@ -12233,7 +12328,10 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%fndet_btm(isd:ied, jsd:jed))          ; cobalt%fndet_btm=0.0
     allocate(cobalt%fsidet_btm(isd:ied, jsd:jed))         ; cobalt%fsidet_btm=0.0
     allocate(cobalt%fcased_burial(isd:ied, jsd:jed))      ; cobalt%fcased_burial=0.0
-    allocate(cobalt%fcased_redis(isd:ied, jsd:jed))       ; cobalt%fcased_redis=0.0
+    allocate(cobalt%fcased_redis(isd:ied, jsd:jed))       ; cobalt%fcased_redis=0.0  
+    allocate(cobalt%fcased_redis_surfresp(isd:ied, jsd:jed)) ; cobalt%fcased_redis_surfresp=0.0
+    allocate(cobalt%cased_redis_coef(isd:ied, jsd:jed))   ; cobalt%cased_redis_coef=0.0
+    allocate(cobalt%cased_redis_delz(isd:ied, jsd:jed))   ; cobalt%cased_redis_delz=0.0
     allocate(cobalt%ffe_sed(isd:ied, jsd:jed))            ; cobalt%ffe_sed=0.0
     allocate(cobalt%ffe_geotherm(isd:ied, jsd:jed))       ; cobalt%ffe_geotherm=0.0
     allocate(cobalt%ffe_iceberg(isd:ied, jsd:jed))        ; cobalt%ffe_iceberg=0.0
@@ -12702,7 +12800,10 @@ write (stdlogunit, generic_COBALT_nml)
     deallocate(cobalt%fndet_btm)  
     deallocate(cobalt%fsidet_btm)  
     deallocate(cobalt%fcased_burial)  
-    deallocate(cobalt%fcased_redis)  
+    deallocate(cobalt%fcased_redis)
+    deallocate(cobalt%fcased_redis_surfresp)
+    deallocate(cobalt%cased_redis_coef)
+    deallocate(cobalt%cased_redis_delz)  
     deallocate(cobalt%ffe_sed)
     deallocate(cobalt%ffe_geotherm)
     deallocate(cobalt%ffe_iceberg)  
