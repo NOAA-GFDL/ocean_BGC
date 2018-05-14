@@ -187,16 +187,16 @@ module generic_COBALT
   logical :: do_14c             = .false.
   logical :: debug              = .false.
   logical :: do_nh3_atm_ocean_exchange = .false. 
-  real    :: k_nh4_small = 2.0e-8
-  real    :: k_nh4_diazo = 1.0e-7
-  real    :: k_nh4_large = 1.0e-7
-  real    :: k_no3_small = 5.0e-7
+  real    :: k_nh4_small = 1.8e-8
+  real    :: k_nh4_diazo = 5.e-8
+  real    :: k_nh4_large = 5.e-8
+  real    :: k_no3_small = 5.e-7
   real    :: k_no3_diazo = 2.5e-6
   real    :: k_no3_large = 2.5e-6
-  real    :: o2_min_nit= 0.8e-6
-  real    :: k_o2_nit  = 8.e-6
-  real    :: irr_inhibit = 0.1
-  real    :: gamma_nitrif= 1. !month(-1)
+  real    :: o2_min_nit= 0.01e-6
+  real    :: k_o2_nit  = 3.9e-6
+  real    :: irr_inhibit = 10.
+  real    :: gamma_nitrif= 3.5e6 !month(-1)
   real    :: k_nh3_nitrif= 3.1e-9 !mol/kg
 
   integer :: scheme_no3_nh4_lim = 2 !1-Frost and Franzen (1992)
