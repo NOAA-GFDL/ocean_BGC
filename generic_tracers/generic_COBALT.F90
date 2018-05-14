@@ -187,7 +187,7 @@ module generic_COBALT
   logical :: do_14c             = .false.
   logical :: debug              = .false.
   logical :: do_nh3_atm_ocean_exchange = .false. 
-  real    :: k_nh4_small = 1.8e-8
+  real    :: k_nh4_small = 1.e-8
   real    :: k_nh4_diazo = 5.e-8
   real    :: k_nh4_large = 5.e-8
   real    :: k_no3_small = 5.e-7
