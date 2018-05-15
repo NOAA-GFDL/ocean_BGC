@@ -5304,7 +5304,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('p_2_n_static', cobalt%p_2_n_static, .true. )
     call g_tracer_add_param('c_2_n', cobalt%c_2_n, 106.0 / 16.0)
     call g_tracer_add_param('alk_2_n_denit', cobalt%alk_2_n_denit, 552.0/472.0)             ! eq. alk mol NO3-1
-    call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static,1.0/30.0 )         ! mol P mol N-1
+    call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static,1.0/40.0 )         ! mol P mol N-1
     call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static,1.0/12.0 )         ! mol P mol N-1
     call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static,1.0/20.0 )         ! mol P mol N-1
     call g_tracer_add_param('si_2_n_static_Lg', phyto(LARGE)%si_2_n_static, 2.0)            ! mol Si mol N-1
