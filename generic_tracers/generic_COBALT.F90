@@ -188,10 +188,10 @@ module generic_COBALT
   logical :: debug              = .false.
   logical :: do_nh3_atm_ocean_exchange = .false. 
   real    :: k_nh4_small = 1.e-8
-  real    :: k_nh4_diazo = 5.e-8
+  real    :: k_nh4_diazo = 1.e-7
   real    :: k_nh4_large = 5.e-8
   real    :: k_no3_small = 5.e-7
-  real    :: k_no3_diazo = 2.5e-6
+  real    :: k_no3_diazo = 5.0e-6
   real    :: k_no3_large = 2.5e-6
   real    :: o2_min_nit= 0.01e-6
   real    :: k_o2_nit  = 3.9e-6
@@ -5256,7 +5256,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('k_po4_Lg', phyto(LARGE)%k_po4,  5.0e-8)                  ! mol PO4 kg-1
     call g_tracer_add_param('k_po4_Sm', phyto(SMALL)%k_po4,  1.0e-8)                  ! mol PO4 kg-1
     call g_tracer_add_param('k_sio4_Lg',phyto(LARGE)%k_sio4, 2.0e-6)                        ! mol SiO4 kg-1
-    call g_tracer_add_param('k_fe_2_n_Di', phyto(DIAZO)%k_fe_2_n, 25.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
+    call g_tracer_add_param('k_fe_2_n_Di', phyto(DIAZO)%k_fe_2_n, 12.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
     call g_tracer_add_param('k_fe_2_n_Lg', phyto(LARGE)%k_fe_2_n, 6.0e-6 * 106.0 / 16.0)   ! mol Fe mol N-1
     call g_tracer_add_param('k_fe_2_n_Sm',phyto(SMALL)%k_fe_2_n, 3.0e-6*106.0/16.0)        ! mol Fe mol N-1
     call g_tracer_add_param('fe_2_n_max_Sm',phyto(SMALL)%fe_2_n_max, 50.e-6*106.0/16.0)     ! mol Fe mol N-1
