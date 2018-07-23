@@ -15,8 +15,8 @@
 !----------------------------------------------------------------
 
 
-#include <fms_platform.h>
 module g_tracer_utils
+#include <fms_platform.h>
 
   use coupler_types_mod, only: coupler_2d_bc_type, ind_flux, ind_deltap, ind_kw
   use coupler_types_mod, only: ind_alpha, ind_csurf, ind_sc_no
