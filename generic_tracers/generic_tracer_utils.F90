@@ -918,6 +918,8 @@ contains
 
     if(present(sink_rate)) g_tracer%sink_rate = sink_rate
 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_requires_src_info",g_tracer%requires_src_info , .false.)
+
     if(present(requires_src_info)) then
        g_tracer%requires_src_info = requires_src_info 
     elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' .or. &
@@ -933,7 +935,6 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_src_var_gridspec", g_tracer%src_var_gridspec ,'NULL') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
-    call  g_tracer_add_param(trim(g_tracer%name)//"_requires_src_info",g_tracer%requires_src_info , .true.) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_requires_restart", g_tracer%requires_restart , .true.) 
     
     !===================================================================
