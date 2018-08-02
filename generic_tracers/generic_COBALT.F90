@@ -244,7 +244,11 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           f_n_100,          &
           juptake_fe_100,   &
           juptake_po4_100,  &
-          juptake_sio4_100
+          juptake_sio4_100, &
+          nlim_bw_100,      &
+          plim_bw_100,      &
+          def_fe_bw_100,    &
+          irrlim_bw_100        
      real, ALLOCATABLE, dimension(:,:,:)  :: &
           def_fe      , & 
           def_p       , & 
@@ -1404,6 +1408,10 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           id_limfediaz          = -1, &
           id_limfepico          = -1, &
           id_limfemisc          = -1, &
+          id_limpdiat           = -1, &
+          id_limpdiaz           = -1, &
+          id_limppico           = -1, &
+          id_limpmisc           = -1, &
           id_intpp              = -1, &
           id_intppnitrate       = -1, &
           id_intppdiat          = -1, &
@@ -4249,90 +4257,120 @@ write (stdlogunit, generic_COBALT_nml)
 
 !------------------------------------------------------------------------------------------------------------------
 ! 3-D Limitation terms
+! 2018/07/18 limitation terms are now 2-D
 
-    vardesc_temp = vardesc("limndiat_raw","Nitrogen Limitation of Diatoms",'h','L','s','1','f')
-    cobalt%id_limndiat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limndiat_raw","Nitrogen Limitation of Diatoms",'h','1','s','1','f')
+    cobalt%id_limndiat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limndiat", cmor_units="1",                          &
          cmor_standard_name="nitrogen_growth_limitation_of_diatoms", &
          cmor_long_name="Nitrogen Limitation of Diatoms")
 
-    vardesc_temp = vardesc("limndiaz_raw","Nitrogen Limitation of Diazotrophs",'h','L','s','1','f')
-    cobalt%id_limndiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limndiaz_raw","Nitrogen Limitation of Diazotrophs",'h','1','s','1','f')
+    cobalt%id_limndiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limndiaz", cmor_units="1",                          &
          cmor_standard_name="nitrogen_growth_limitation_of_diazotrophs", &
          cmor_long_name="Nitrogen Limitation of Diazotrophs")
 
-    vardesc_temp = vardesc("limnpico_raw","Nitrogen Limitation of Picophytoplankton",'h','L','s','1','f')
-    cobalt%id_limnpico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limnpico_raw","Nitrogen Limitation of Picophytoplankton",'h','1','s','1','f')
+    cobalt%id_limnpico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limnpico", cmor_units="1",                          &
          cmor_standard_name="nitrogen_growth_limitation_of_picophytoplankton", &
          cmor_long_name="Nitrogen Limitation of Picophytoplankton")
 
-    vardesc_temp = vardesc("limnmisc_raw","Nitrogen Limitation of Other Phytoplankton",'h','L','s','1','f')
-    cobalt%id_limnmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limnmisc_raw","Nitrogen Limitation of Other Phytoplankton",'h','1','s','1','f')
+    cobalt%id_limnmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limnmisc", cmor_units="1",                          &
          cmor_standard_name="nitrogen_growth_limitation_of_miscellaneous_phytoplankton", &
          cmor_long_name="Nitrogen Limitation of Other Phytoplankton")
 
-    vardesc_temp = vardesc("limirrdiat_raw","Irradiance Limitation of Diatoms",'h','L','s','1','f')
-    cobalt%id_limirrdiat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limirrdiat_raw","Irradiance Limitation of Diatoms",'h','1','s','1','f')
+    cobalt%id_limirrdiat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrdiat", cmor_units="1",                          &
          cmor_standard_name="growth_limitation_of_diatoms_due_to_solar_irradiance", &
          cmor_long_name="Irradiance Limitation of Diatoms")
 
-    vardesc_temp = vardesc("limirrdiaz_raw","Irradiance Limitation of Diazotrophs",'h','L','s','1','f')
-    cobalt%id_limirrdiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limirrdiaz_raw","Irradiance Limitation of Diazotrophs",'h','1','s','1','f')
+    cobalt%id_limirrdiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrdiaz", cmor_units="1",                          &
          cmor_standard_name="growth_limitation_of_diazotrophs_due_to_solar_irradiance", &
          cmor_long_name="Irradiance Limitation of Diazotrophs")
 
-    vardesc_temp = vardesc("limirrpico_raw","Irradiance Limitation of Picophytoplankton",'h','L','s','1','f')
-    cobalt%id_limirrpico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limirrpico_raw","Irradiance Limitation of Picophytoplankton",'h','1','s','1','f')
+    cobalt%id_limirrpico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrpico", cmor_units="1",                          &
          cmor_standard_name="growth_limitation_of_picophytoplankton_due_to_solar_irradiance", &
          cmor_long_name="Irradiance Limitation of Picophytoplankton")
 
-    vardesc_temp = vardesc("limirrmisc_raw","Irradiance Limitation of Other Phytoplankton",'h','L','s','1','f')
-    cobalt%id_limirrmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limirrmisc_raw","Irradiance Limitation of Other Phytoplankton",'h','1','s','1','f')
+    cobalt%id_limirrmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limirrmisc", cmor_units="1",                          &
          cmor_standard_name="growth_limitation_of_miscellaneous_phytoplankton_due_to_solar_irradiance", &
          cmor_long_name="Irradiance Limitation of Other Phytoplankton")
 
-    vardesc_temp = vardesc("limfediat_raw","Iron Limitation of Diatoms",'h','L','s','1','f')
-    cobalt%id_limfediat = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limfediat_raw","Iron Limitation of Diatoms",'h','1','s','1','f')
+    cobalt%id_limfediat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfediat", cmor_units="1",                          &
          cmor_standard_name="iron_growth_limitation_of_diatoms", &
          cmor_long_name="Iron Limitation of Diatoms")
 
-    vardesc_temp = vardesc("limfediaz_raw","Iron Limitation of Diazotrophs",'h','L','s','1','f')
-    cobalt%id_limfediaz = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limfediaz_raw","Iron Limitation of Diazotrophs",'h','1','s','1','f')
+    cobalt%id_limfediaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfediaz", cmor_units="1",                          &
          cmor_standard_name="iron_growth_limitation_of_diazotrophs", &
          cmor_long_name="Iron Limitation of Diazotrophs")
 
-    vardesc_temp = vardesc("limfepico_raw","Iron Limitation of Picophytoplankton",'h','L','s','1','f')
-    cobalt%id_limfepico = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limfepico_raw","Iron Limitation of Picophytoplankton",'h','1','s','1','f')
+    cobalt%id_limfepico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfepico", cmor_units="1",                          &
          cmor_standard_name="iron_growth_limitation_of_picophytoplankton", &
          cmor_long_name="Iron Limitation of Picophytoplankton")
 
-    vardesc_temp = vardesc("limfemisc_raw","Iron Limitation of Other Phytoplankton",'h','L','s','1','f')
-    cobalt%id_limfemisc = register_diag_field(package_name, vardesc_temp%name, axes(1:3), &
+    vardesc_temp = vardesc("limfemisc_raw","Iron Limitation of Other Phytoplankton",'h','1','s','1','f')
+    cobalt%id_limfemisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          cmor_field_name="limfemisc", cmor_units="1",                          &
          cmor_standard_name="iron_growth_limitation_of_miscellaneous_phytoplankton", &
          cmor_long_name="Iron Limitation of Other Phytoplankton")
+
+!-- added by JGJ - not requested by CMIP6/OMIP
+    vardesc_temp = vardesc("limpdiat_raw","Phosphorus Limitation of Diatoms",'h','1','s','1','f')
+    cobalt%id_limpdiat = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="limpdiat", cmor_units="1",                          &
+         cmor_standard_name="phosphorus_growth_limitation_of_diatoms", &
+         cmor_long_name="Phosphorus Limitation of Diatoms")
+
+    vardesc_temp = vardesc("limpdiaz_raw","Phosphorus Limitation of Diazotrophs",'h','1','s','1','f')
+    cobalt%id_limpdiaz = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="limpdiaz", cmor_units="1",                          &
+         cmor_standard_name="phosphorus_growth_limitation_of_diazotrophs", &
+         cmor_long_name="Phosphorus Limitation of Diazotrophs")
+
+    vardesc_temp = vardesc("limppico_raw","Phosphorus Limitation of Picophytoplankton",'h','1','s','1','f')
+    cobalt%id_limppico = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="limppico", cmor_units="1",                          &
+         cmor_standard_name="phosphorus_growth_limitation_of_picophytoplankton", &
+         cmor_long_name="Phosphorus Limitation of Picophytoplankton")
+
+    vardesc_temp = vardesc("limpmisc_raw","Phosphorus Limitation of Other Phytoplankton",'h','1','s','1','f')
+    cobalt%id_limpmisc = register_diag_field(package_name, vardesc_temp%name, axes(1:2), &
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
+         cmor_field_name="limpmisc", cmor_units="1",                          &
+         cmor_standard_name="phosphorus_growth_limitation_of_miscellaneous_phytoplankton", &
+         cmor_long_name="Phosphorus Limitation of Other Phytoplankton")
 
 !------------------------------------------------------------------------------------------------------------------
 ! 2-D fields
@@ -6439,6 +6477,7 @@ write (stdlogunit, generic_COBALT_nml)
     real :: bact_uptake_ratio, vmax_bact, growth_ratio
     real :: fpoc_btm, log_fpoc_btm
     real :: fe_salt
+    real :: sal,tt,tkb,ts,ts2,ts3,ts4,ts5
 
     real, dimension(:,:,:), Allocatable :: pre_totn, net_srcn, post_totn
     real, dimension(:,:,:), Allocatable :: pre_totp, post_totp
@@ -8522,6 +8561,24 @@ write (stdlogunit, generic_COBALT_nml)
       endif !}
     enddo; enddo ; enddo  !} i,j,k
 
+    ! O2 saturation
+    do k = 1, nk  ; do j = jsc, jec ; do i = isc, iec
+       sal = min(42.0,max(0.0,Salt(i,j,k)))
+       tt = 298.15 - min(40.0,max(0.0,Temp(i,j,k)))
+       tkb = 273.15 + min(40.0,max(0.0,Temp(i,j,k)))
+       ts = log(tt / tkb)
+       ts2 = ts  * ts
+       ts3 = ts2 * ts
+       ts4 = ts3 * ts
+       ts5 = ts4 * ts
+
+       !The atmospheric code needs solubilities in units of mol/m3/atm
+       cobalt%o2sat(i,j,k) = (1000.0/22391.6) * grid_tmask(i,j,1) *  & !convert from ml/l to mol m-3
+            exp( cobalt%a_0 + cobalt%a_1*ts + cobalt%a_2*ts2 + cobalt%a_3*ts3 + cobalt%a_4*ts4 + cobalt%a_5*ts5 + &
+            (cobalt%b_0 + cobalt%b_1*ts + cobalt%b_2*ts2 + cobalt%b_3*ts3 + cobalt%c_0*sal)*sal)
+
+    enddo; enddo ; enddo  !} i,j,k
+
     !
     !---------------------------------------------------------------------
     ! Calculate total carbon  = Dissolved Inorganic Carbon + Phytoplankton Carbon
@@ -9057,6 +9114,61 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%jprod_allphytos_100(i,j) = phyto(SMALL)%jprod_n_100(i,j) + phyto(LARGE)%jprod_n_100(i,j) + &
           phyto(DIAZO)%jprod_n_100(i,j) 
     enddo ; enddo  !} i,j
+
+    !
+    ! Calculate biomass-weighted nutrient and light limitation terms for CMIP6  
+    ! Note: these need to be done after other 100m integrals because the biomass
+    ! weighting requires the pre-calculated 100m biomass
+    !
+    do j = jsc, jec ; do i = isc, iec !{
+       rho_dzt_100(i,j) = rho_dzt(i,j,1)
+       do n = 1,NUM_PHYTO
+          phyto(n)%nlim_bw_100(i,j) = (phyto(n)%no3lim(i,j,1)+phyto(n)%nh4lim(i,j,1))* &
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+          phyto(n)%plim_bw_100(i,j) = phyto(n)%po4lim(i,j,1)* &
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+          phyto(n)%def_fe_bw_100(i,j) = phyto(n)%def_fe(i,j,1)* &
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+          phyto(n)%irrlim_bw_100(i,j) = phyto(n)%irrlim(i,j,1)* &
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+       enddo   !} n
+    enddo; enddo  !} i, j
+
+    do j = jsc, jec ; do i = isc, iec ; !{
+       k_100 = 1
+       do k = 2, grid_kmt(i,j)  !{
+          if (rho_dzt_100(i,j) .lt. cobalt%Rho_0 * 100.0) then 
+             k_100 = k
+             rho_dzt_100(i,j) = rho_dzt_100(i,j) + rho_dzt(i,j,k)
+             do n = 1,NUM_PHYTO
+                phyto(n)%nlim_bw_100(i,j) = phyto(n)%nlim_bw_100(i,j) + & 
+                   (phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k))* &
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                phyto(n)%plim_bw_100(i,j) = phyto(n)%plim_bw_100(i,j) + phyto(n)%po4lim(i,j,k)* &
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                phyto(n)%def_fe_bw_100(i,j) = phyto(n)%def_fe_bw_100(i,j) + phyto(n)%def_fe(i,j,k)* &
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                phyto(n)%irrlim_bw_100(i,j) = phyto(n)%irrlim_bw_100(i,j) + phyto(n)%irrlim(i,j,k)* &
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+             enddo
+          endif
+       enddo  !} k
+
+       if (k_100 .gt. 1 .and. k_100 .lt. grid_kmt(i,j)) then
+          drho_dzt = cobalt%Rho_0 * 100.0 - rho_dzt_100(i,j)
+          do n = 1,NUM_PHYTO
+             phyto(n)%nlim_bw_100(i,j) = phyto(n)%nlim_bw_100(i,j) + &
+                (phyto(n)%no3lim(i,j,k_100)+phyto(n)%nh4lim(i,j,k_100))* &
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+             phyto(n)%plim_bw_100(i,j) = phyto(n)%plim_bw_100(i,j) + phyto(n)%po4lim(i,j,k_100)* &
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+             phyto(n)%def_fe_bw_100(i,j) = phyto(n)%def_fe_bw_100(i,j) + phyto(n)%def_fe(i,j,k_100)* &
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+             phyto(n)%irrlim_bw_100(i,j) = phyto(n)%irrlim_bw_100(i,j) + phyto(n)%irrlim(i,j,k_100)* &
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+          enddo
+        endif
+    enddo; enddo  !} i, j
     deallocate(rho_dzt_100)
 
     do j = jsc, jec ; do i = isc, iec ; !{
@@ -10474,8 +10586,7 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK3:
     ! CAS comment on spreadsheet implies that this is the explicitly represented
-    ! pool and seems to suggest that we shouldn't add the background
-    !add background of 42 uM (as in other parts of cobalt)- may need to change to 3.8e-5 per JPD
+    ! pool and suggests that we shouldn't add the background
     cobalt%dissoc(:,:,:) = cobalt%doc_background +                                                     &
         cobalt%c_2_n * (cobalt%p_ldon(:,:,:,tau) + cobalt%p_sldon(:,:,:,tau) + cobalt%p_srdon(:,:,:,tau) )
 
@@ -10559,19 +10670,19 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK3: this is using ntau=1
     if (cobalt%id_ph .gt. 0)            &
-        used = g_send_data(cobalt%id_ph,  log10(cobalt%f_htotal) * (-1.0),       &
+        used = g_send_data(cobalt%id_ph,  log10(cobalt%f_htotal+epsln) * (-1.0),       &
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! PENDING:
 !    if (cobalt%id_phnat .gt. 0)            &
-!        used = g_send_data(cobalt%id_phnat,  log10(cobalt%f_htotal) * -1.0,       &
+!        used = g_send_data(cobalt%id_phnat,  log10(cobalt%f_htotal+epsln) * -1.0,       &
 !        model_time, rmask = grid_tmask,&
 !        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
 ! PENDING: 
 !    if (cobalt%id_phabio .gt. 0)            &
-!        used = g_send_data(cobalt%id_phabio,  log10(cobalt%f_htotal) * -1.0,       &
+!        used = g_send_data(cobalt%id_phabio,  log10(cobalt%f_htotal+epsln) * -1.0,       &
 !        model_time, rmask = grid_tmask,&
 !        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
@@ -10580,11 +10691,10 @@ write (stdlogunit, generic_COBALT_nml)
         model_time, rmask = grid_tmask,&
         is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
-! PENDING:
-!    if (cobalt%id_o2sat .gt. 0)            &
-!        used = g_send_data(cobalt%id_o2sat,  cobalt%o2sat 
-!        model_time, rmask = grid_tmask,&
-!        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+    if (cobalt%id_o2sat .gt. 0)            &
+        used = g_send_data(cobalt%id_o2sat,  cobalt%o2sat, & 
+        model_time, rmask = grid_tmask,&
+        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (cobalt%id_no3_cmip.gt. 0)            &
         used = g_send_data(cobalt%id_no3_cmip,  cobalt%p_no3(:,:,:,tau) * cobalt%Rho_0,   &
@@ -10933,8 +11043,6 @@ write (stdlogunit, generic_COBALT_nml)
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! CHECK3:
-    !see above - added background of 42 uM (as in other parts of cobalt)- may need to change to 3.8e-5 per JPD
     if (cobalt%id_dissocos .gt. 0)            &
         used = g_send_data(cobalt%id_dissocos,  cobalt%dissoc(:,:,1) * cobalt%Rho_0,       &
         model_time, rmask = grid_tmask(:,:,1),&
@@ -11015,19 +11123,19 @@ write (stdlogunit, generic_COBALT_nml)
 
 ! CHECK3: this is using ntau=1
     if (cobalt%id_phos .gt. 0)            &
-        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)) * (-1.0),       &
+        used = g_send_data(cobalt%id_phos,  log10(cobalt%f_htotal(:,:,1)+epsln) * (-1.0),       &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING: 
 !    if (cobalt%id_phnatos .gt. 0)            &
-!        used = g_send_data(cobalt%id_phnatos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+!        used = g_send_data(cobalt%id_phnatos,  log10(cobalt%f_htotal(:,:,1)+epsln) * -1.0,       &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 ! PENDING: 
 !    if (cobalt%id_phabioos .gt. 0)            &
-!        used = g_send_data(cobalt%id_phabioos,  log10(cobalt%f_htotal(:,:,1)) * -1.0,       &
+!        used = g_send_data(cobalt%id_phabioos,  log10(cobalt%f_htotal(:,:,1)+epsln) * -1.0,       &
 !        model_time, rmask = grid_tmask(:,:,1),&
 !        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
@@ -11036,11 +11144,10 @@ write (stdlogunit, generic_COBALT_nml)
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! PENDING:
-!    if (cobalt%id_o2satos .gt. 0)            &
-!        used = g_send_data(cobalt%id_o2satos,  cobalt%o2sat (:,:,1)
-!        model_time, rmask = grid_tmask(:,:,1),&
-!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_o2satos .gt. 0)            &
+        used = g_send_data(cobalt%id_o2satos,  cobalt%o2sat(:,:,1), &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_no3os .gt. 0)            &
         used = g_send_data(cobalt%id_no3os,  cobalt%p_no3(:,:,1,tau) * cobalt%Rho_0,   &
@@ -11170,72 +11277,90 @@ write (stdlogunit, generic_COBALT_nml)
 !==============================================================================================================
 ! JGJ 2016/08/08 CMIP6 OcnBgchem Omon: 3-D Marine Biogeochemical 3-D Fields  
 ! Tracers and rates above
-! Limitation terms below
+! Limitation terms below 
+! 2018/07/18 changed to 2d terms
 !
     if (cobalt%id_limndiat .gt. 0)            &
-        used = g_send_data(cobalt%id_limndiat,  phyto(LARGE)%no3lim + phyto(LARGE)%nh4lim, &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limndiat,  phyto(LARGE)%nlim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! CHECK3:
-! 2017/08/04 jgj added limndiaz - check if we have this term and correct as needed 
+! CAS, JGJ: not outputting/serving limndiaz because diazotrophs are not N limited
 !    if (cobalt%id_limndiaz .gt. 0)            &
-!        used = g_send_data(cobalt%id_limndiaz,  phyto(DIAZ)%no3lim + phyto(LARGE)%nh4lim, &
-!        model_time, rmask = grid_tmask,&
-!        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+!        used = g_send_data(cobalt%id_limndiaz,  phyto(DIAZO)%nlim_bw_100, &
+!        model_time, rmask = grid_tmask(:,:,1),&
+!        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limnpico .gt. 0)            &
-        used = g_send_data(cobalt%id_limnpico,  phyto(SMALL)%no3lim + phyto(SMALL)%nh4lim, &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limnpico,  phyto(SMALL)%nlim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! same as limndiat 
     if (cobalt%id_limnmisc .gt. 0)            &
-        used = g_send_data(cobalt%id_limnmisc,  phyto(LARGE)%no3lim + phyto(LARGE)%nh4lim, &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limnmisc,  phyto(LARGE)%nlim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limirrdiat .gt. 0)            &
-        used = g_send_data(cobalt%id_limirrdiat,  phyto(LARGE)%irrlim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limirrdiat,  phyto(LARGE)%irrlim_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limirrdiaz .gt. 0)            &
-        used = g_send_data(cobalt%id_limirrdiaz,  phyto(DIAZO)%irrlim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limirrdiaz,  phyto(DIAZO)%irrlim_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limirrpico .gt. 0)            &
-        used = g_send_data(cobalt%id_limirrpico,  phyto(SMALL)%irrlim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limirrpico,  phyto(SMALL)%irrlim_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! same as limirrdiat
     if (cobalt%id_limirrmisc .gt. 0)            &
-        used = g_send_data(cobalt%id_limirrmisc,  phyto(LARGE)%irrlim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limirrmisc,  phyto(LARGE)%irrlim_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limfediat .gt. 0)            &
-        used = g_send_data(cobalt%id_limfediat,  phyto(LARGE)%felim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limfediat,  phyto(LARGE)%def_fe_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limfediaz .gt. 0)            &
-        used = g_send_data(cobalt%id_limfediaz,  phyto(DIAZO)%felim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limfediaz,  phyto(DIAZO)%def_fe_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     if (cobalt%id_limfepico .gt. 0)            &
-        used = g_send_data(cobalt%id_limfepico,  phyto(SMALL)%felim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limfepico,  phyto(SMALL)%def_fe_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! same as limfediat
     if (cobalt%id_limfemisc .gt. 0)            &
-        used = g_send_data(cobalt%id_limfemisc,  phyto(LARGE)%felim,  &
-        model_time, rmask = grid_tmask,&
-        is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
+        used = g_send_data(cobalt%id_limfemisc,  phyto(LARGE)%def_fe_bw_100,  &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+! added by JGJ, not requested for CMIP6
+    if (cobalt%id_limpdiat .gt. 0)            &
+        used = g_send_data(cobalt%id_limpdiat,  phyto(LARGE)%plim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (cobalt%id_limpdiaz .gt. 0)            &
+        used = g_send_data(cobalt%id_limpdiaz,  phyto(DIAZO)%plim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (cobalt%id_limppico .gt. 0)            &
+        used = g_send_data(cobalt%id_limppico,  phyto(SMALL)%plim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (cobalt%id_limpmisc .gt. 0)            &
+        used = g_send_data(cobalt%id_limpmisc,  phyto(LARGE)%plim_bw_100, &
+        model_time, rmask = grid_tmask(:,:,1),&
+        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
 !==============================================================================================================
 ! JGJ 2016/08/08 CMIP6 OcnBgchem Omon: Marine Biogeochemical 2-D Fields  
@@ -11439,9 +11564,9 @@ write (stdlogunit, generic_COBALT_nml)
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-! CAS: I think this should be fcased_burial
+! CAS: Updated based on 7/19 e-mails with jpd and jgj
     if (cobalt%id_fric .gt. 0)            &
-        used = g_send_data(cobalt%id_fric,  cobalt%fcased_burial,  &
+        used = g_send_data(cobalt%id_fric,  cobalt%fcadet_calc_btm -  cobalt%fcased_redis,  &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
@@ -11915,10 +12040,6 @@ write (stdlogunit, generic_COBALT_nml)
        o2_saturation = (1000.0/22391.6) * grid_tmask(i,j,1) *  & !convert from ml/l to mol m-3
             exp( cobalt%a_0 + cobalt%a_1*ts + cobalt%a_2*ts2 + cobalt%a_3*ts3 + cobalt%a_4*ts4 + cobalt%a_5*ts5 + &
             (cobalt%b_0 + cobalt%b_1*ts + cobalt%b_2*ts2 + cobalt%b_3*ts3 + cobalt%c_0*sal)*sal)
-
-! CHECK3
-! 2017/08/04 added for CMIP6 - but need 3-D field
-!!       o2sat(i,j,1) = o2_saturation
 
        !---------------------------------------------------------------------
        !  Compute the Schmidt number of O2 in seawater using the
@@ -12394,6 +12515,11 @@ write (stdlogunit, generic_COBALT_nml)
        allocate(phyto(n)%f_n_100(isd:ied,jsd:jed))          ; phyto(n)%f_n_100  = 0.0
        allocate(phyto(n)%juptake_fe_100(isd:ied,jsd:jed))   ; phyto(n)%juptake_fe_100  = 0.0
        allocate(phyto(n)%juptake_po4_100(isd:ied,jsd:jed))  ; phyto(n)%juptake_po4_100  = 0.0
+       ! Biomass-weighted limitation terms (for cmip)
+       allocate(phyto(n)%nlim_bw_100(isd:ied,jsd:jed)) ; phyto(n)%nlim_bw_100 = 0.0
+       allocate(phyto(n)%plim_bw_100(isd:ied,jsd:jed)) ; phyto(n)%plim_bw_100 = 0.0
+       allocate(phyto(n)%irrlim_bw_100(isd:ied,jsd:jed)) ; phyto(n)%irrlim_bw_100 = 0.0
+       allocate(phyto(n)%def_fe_bw_100(isd:ied,jsd:jed)) ; phyto(n)%def_fe_bw_100 = 0.0
     enddo
     allocate(phyto(DIAZO)%jprod_n_n2_100(isd:ied,jsd:jed)); phyto(DIAZO)%jprod_n_n2_100 = 0.0
     allocate(phyto(SMALL)%jvirloss_n_100(isd:ied,jsd:jed))  ; phyto(SMALL)%jvirloss_n_100 = 0.0
@@ -12403,7 +12529,7 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(cobalt%jprod_diat_100(isd:ied,jsd:jed))   ; cobalt%jprod_diat_100 = 0.0
     allocate(phyto(LARGE)%juptake_sio4_100(isd:ied,jsd:jed)) ; phyto(LARGE)%juptake_sio4_100 = 0.0
 
-   do n = 1, NUM_ZOO
+    do n = 1, NUM_ZOO
        allocate(zoo(n)%jprod_n_100(isd:ied,jsd:jed))      ; zoo(n)%jprod_n_100      = 0.0
        allocate(zoo(n)%jingest_n_100(isd:ied,jsd:jed))    ; zoo(n)%jingest_n_100    = 0.0
        allocate(zoo(n)%jremin_n_100(isd:ied,jsd:jed))     ; zoo(n)%jremin_n_100     = 0.0
@@ -12564,6 +12690,10 @@ write (stdlogunit, generic_COBALT_nml)
        deallocate(phyto(n)%juptake_po4_100)
        deallocate(phyto(n)%nh4lim)
        deallocate(phyto(n)%no3lim)
+       deallocate(phyto(n)%nlim_bw_100)
+       deallocate(phyto(n)%plim_bw_100)
+       deallocate(phyto(n)%irrlim_bw_100)
+       deallocate(phyto(n)%def_fe_bw_100)
     enddo
     deallocate(phyto(DIAZO)%juptake_n2)
     deallocate(phyto(DIAZO)%o2lim)
