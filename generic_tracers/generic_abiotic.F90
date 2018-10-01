@@ -906,12 +906,12 @@ contains
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (abiotic%id_phabio .gt. 0) &
-         used = g_send_data(abiotic%id_phabio, -1. * log(abiotic%p_htotal(:,:,:,tau)),      &
+         used = g_send_data(abiotic%id_phabio, log10(abiotic%f_htotal(:,:,:))*(-1.),      &
          model_time, rmask = grid_tmask(:,:,:),                                         & 
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
 
     if (abiotic%id_phabioos .gt. 0) &
-         used = g_send_data(abiotic%id_phabioos, -1. * log(abiotic%p_htotal(:,:,1,tau)),      &
+         used = g_send_data(abiotic%id_phabioos, log10(abiotic%f_htotal(:,:,1))*(-1.),    &
          model_time, rmask = grid_tmask(:,:,1),                                         & 
          is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
