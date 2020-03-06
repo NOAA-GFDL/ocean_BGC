@@ -134,6 +134,7 @@ module generic_COBALT
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
   use constants_mod,     only: WTMCO2, WTMO2,WTMN,rdgas,wtmair
+  use data_override_mod, only: data_override
   use fms_mod,           only: write_version_number, FATAL, WARNING, stdout, stdlog,mpp_pe,mpp_root_pe
   use fms_mod,           only: open_namelist_file, check_nml_error, close_file
 
@@ -6479,12 +6480,14 @@ write (stdlogunit, generic_COBALT_nml)
     real :: fe_salt
     real :: sal,tt,tkb,ts,ts2,ts3,ts4,ts5
 
+    logical ::  phos_nh3_override
+
     real, dimension(:,:,:), Allocatable :: pre_totn, net_srcn, post_totn
     real, dimension(:,:,:), Allocatable :: pre_totp, post_totp
     real, dimension(:,:,:), Allocatable :: pre_totsi, post_totsi
     real, dimension(:,:,:), Allocatable :: pre_totfe, net_srcfe, post_totfe
     real, dimension(:,:,:), Allocatable :: pre_totc, net_srcc, post_totc
-    real, dimension(:,:),   Allocatable :: pka_nh3
+    real, dimension(:,:),   Allocatable :: pka_nh3,phos_nh3_exchange
 
     real :: tr,ltr
 
@@ -6509,6 +6512,7 @@ write (stdlogunit, generic_COBALT_nml)
        pka_nh3 = 0.
        call g_tracer_get_values(tracer_list,'nh4'   ,'field', cobalt%f_nh4  ,isd,jsd,ntau=tau)
     end if
+    allocate(phos_nh3_exchange(isd:ied,jsd:jed))
 
     !---------------------------------------------------------------------
     !Calculate co3_ion
@@ -6585,6 +6589,9 @@ write (stdlogunit, generic_COBALT_nml)
     call mpp_clock_end(id_clock_carbon_calculations)
 
     if (do_nh3_atm_ocean_exchange) then
+       !to override pH used for ocean nh3 exchange
+       call data_override('OCN', 'phos_nh3_exchange', phos_nh3_exchange(isc:iec,jsc:jec), model_time,override=phos_nh3_override)       
+
        do j = jsc, jec ; do i = isc, iec 
           pka_nh3(i,j)   = calc_pka_nh3(temp(i,j,1),salt(i,j,1))*grid_tmask(i,j,1)
           tr             = 298.15/(temp(i,j,1)+273.15)-1.
@@ -6598,7 +6605,11 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%nh3_alpha(i,j)   =  5.76e1*exp(13.79*tr-5.39*ltr)*997. 
           !apply salinity correction
           cobalt%nh3_alpha(i,j)   =  cobalt%nh3_alpha(i,j)/saltout_correction(101325./(1.e-3*rdgas*wtmair*(temp(i,j,1)+273.15)*cobalt%nh3_alpha(i,j)),vb_nh3,salt(i,j,1))* 1./cobalt%Rho_0 !mol/kg/atm  
-          cobalt%nh3_csurf(i,j)   =  cobalt%f_nh4(i,j,1)/(1.+10**(pka_nh3(i,j)+log10(min(max(cobalt%f_htotal(i,j,1),1e-11),1e-3)))) !in mol/kg
+          if (phos_nh3_override) then
+             cobalt%nh3_csurf(i,j)   =  cobalt%f_nh4(i,j,1)/(1.+10**(pka_nh3(i,j)-max(min(phos_nh3_exchange(i,j),11.),3.))) !in mol/kg
+          else
+             cobalt%nh3_csurf(i,j)   =  cobalt%f_nh4(i,j,1)/(1.+10**(pka_nh3(i,j)+log10(min(max(cobalt%f_htotal(i,j,1),1e-11),1e-3)))) !in mol/kg
+          end if
           cobalt%pnh3_csurf(i,j)  =  cobalt%nh3_csurf(i,j)/cobalt%nh3_alpha(i,j)*1.e6 !in uatm
        enddo; enddo ; !
 
@@ -9265,6 +9276,7 @@ write (stdlogunit, generic_COBALT_nml)
             is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     end if
     if (allocated(pka_nh3)) deallocate(pka_nh3)
+    deallocate(phos_nh3_exchange)
 !
 !---------------------------------------------------------------------
 !
@@ -11814,22 +11826,24 @@ write (stdlogunit, generic_COBALT_nml)
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt)
+  subroutine generic_COBALT_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau,dzt,model_time)
     type(g_tracer_type),          pointer    :: tracer_list
     real, dimension(ilb:,jlb:),   intent(in)   :: SST, SSS
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
     integer,                        intent(in) :: ilb,jlb,tau
     real, dimension(ilb:,jlb:,:), optional, intent(in) :: dzt
-
+    type(time_type),                intent(in) :: model_time
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: sal,ST,o2_saturation
     real    :: tt,tk,ts,ts2,ts3,ts4,ts5
     real, dimension(:,:,:)  ,pointer  :: grid_tmask
     real, dimension(:,:,:,:), pointer :: o2_field,dic_field,po4_field,sio4_field,alk_field,di14c_field,nh4_field
     real, dimension(:,:,:), ALLOCATABLE :: htotal_field,co3_ion_field
-    real, dimension(:,:), ALLOCATABLE :: co2_alpha,co2_csurf,co2_sc_no,o2_alpha,o2_csurf,o2_sc_no,nh3_alpha,nh3_csurf,nh3_sc_no
+    real, dimension(:,:), ALLOCATABLE :: co2_alpha,co2_csurf,co2_sc_no,o2_alpha,o2_csurf,o2_sc_no,nh3_alpha,nh3_csurf,nh3_sc_no,phos_nh3_exchange
     real, dimension(:,:), ALLOCATABLE :: c14o2_alpha,c14o2_csurf
     real :: pka_nh3,tr,ltr
+
+    logical :: phos_nh3_override
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_set_boundary_values'
 
@@ -11847,6 +11861,8 @@ write (stdlogunit, generic_COBALT_nml)
     allocate(nh3_alpha(isd:ied, jsd:jed)); nh3_alpha=0.0
     allocate(nh3_csurf(isd:ied, jsd:jed)); nh3_csurf=0.0
     allocate(nh3_sc_no(isd:ied, jsd:jed)); nh3_sc_no=0.0
+    !for nh3 ph emission override
+    allocate(phos_nh3_exchange(isd:ied, jsd:jed)); phos_nh3_exchange=0.0
     allocate(c14o2_alpha(isd:ied, jsd:jed)); c14o2_alpha=0.0
     allocate(c14o2_csurf(isd:ied, jsd:jed)); c14o2_csurf=0.0
     allocate(o2_alpha(isd:ied, jsd:jed)); o2_alpha=0.0
@@ -11936,6 +11952,9 @@ write (stdlogunit, generic_COBALT_nml)
 
        if (do_nh3_atm_ocean_exchange) then
           !          write(*,*) 'min htot ',minval(htotal_field(:,:,1))
+
+          call data_override('OCN', 'phos_nh3_exchange', phos_nh3_exchange(isc:iec,jsc:jec), model_time,override=phos_nh3_override)       
+
           do j = jsc, jec ; do i = isc, iec  !{
              !nh3
              pka_nh3        = calc_pka_nh3(SST(i,j),SSS(i,j))
@@ -11945,7 +11964,11 @@ write (stdlogunit, generic_COBALT_nml)
              !997/1035 is to convert pure water to salt water
              nh3_alpha(i,j) = 5.76e1*exp(13.79*tr-5.39*ltr)*997. !in mol/kg(water)/atm -> mol/m3/atm
              nh3_alpha(i,j) = nh3_alpha(i,j)/saltout_correction(101325./(1e-3*rdgas*wtmair*(SST(i,j)+273.15)*nh3_alpha(i,j)),vb_nh3,SSS(i,j)) * 1./cobalt%Rho_0 !mol/kg/atm
-             nh3_csurf(i,j) = nh4_field(i,j,1,tau)/(1.+10**(pka_nh3+log10(min(max(1e-11,htotal_field(i,j,1)),1e-3))))
+             if (phos_nh3_override) then
+                nh3_csurf(i,j) = nh4_field(i,j,1,tau)/(1.+10**(pka_nh3-(max(min(11.,phos_nh3_exchange(i,j)),3.))))
+             else
+                nh3_csurf(i,j) = nh4_field(i,j,1,tau)/(1.+10**(pka_nh3+log10(min(max(1e-11,htotal_field(i,j,1)),1e-3))))
+             end if
              cobalt%pnh3_csurf(i,j)  =  cobalt%nh3_csurf(i,j)/nh3_alpha(i,j)*1.e6 !in uatm
           enddo;enddo
 
@@ -12127,7 +12150,7 @@ write (stdlogunit, generic_COBALT_nml)
          co2_sc_no,o2_alpha,          &
          c14o2_alpha,c14o2_csurf,     &
          o2_csurf,o2_sc_no, nh3_alpha,nh3_csurf,&
-         nh3_sc_no)
+         nh3_sc_no,phos_nh3_exchange)
 
   end subroutine generic_COBALT_set_boundary_values
 
