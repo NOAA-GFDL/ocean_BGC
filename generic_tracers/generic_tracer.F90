@@ -127,6 +127,7 @@ module generic_tracer
   type(g_diag_type), save, pointer :: diag_list => NULL()
 
   logical :: do_generic_tracer = .false.
+  logical :: generic_tracer_register_called = .false.
   logical :: force_update_fluxes = .false.
 
   namelist /generic_tracer_nml/ do_generic_tracer, do_generic_abiotic, do_generic_age, do_generic_argon, do_generic_CFC, &
@@ -136,11 +137,15 @@ module generic_tracer
 contains
 
 
-  subroutine generic_tracer_register
+  subroutine generic_tracer_register(verbosity)
+    integer, optional, intent(in) :: verbosity  !< A 0-9 integer indicating a level of verbosity.
 
     integer :: ioun, io_status, ierr
     integer :: stdoutunit,stdlogunit
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_register'
+
+    ! generic_tracer_register may be called more than once, but it should only be executed once.
+    if (generic_tracer_register_called) return
 
     stdoutunit=stdout();stdlogunit=stdlog()
     ! provide for namelist over-ride of defaults 
@@ -190,7 +195,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_COBALT) &
          call generic_COBALT_register(tracer_list)
     
-    call g_tracer_print_info(tracer_list)
+    call g_tracer_print_info(tracer_list, verbosity)
+
+    generic_tracer_register_called = .true.
 
   end subroutine generic_tracer_register
 
