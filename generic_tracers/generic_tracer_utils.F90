@@ -267,6 +267,7 @@ module g_tracer_utils
      logical :: requires_restart = .true.
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
+     character(len=fm_string_len) :: obc_src_file_name,obc_src_field_name
      integer :: src_var_record
      logical :: requires_src_info = .false.
      real    :: src_var_unit_conversion = 1.0 !This factor depends on the tracer. Ask  Jasmin
@@ -372,6 +373,7 @@ module g_tracer_utils
   public :: g_tracer_get_src_info
   public :: g_register_diag_field
   public :: g_send_data
+  public :: g_tracer_get_obc_segment_props
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
   !   Add a new parameter for the generic tracer package
@@ -936,6 +938,8 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_requires_restart", g_tracer%requires_restart , .true.) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_file_name",g_tracer%obc_src_file_name ,  'obgc_obc.nc') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_field_name",g_tracer%obc_src_field_name,trim(g_tracer%name)) 
     
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
@@ -3741,6 +3745,25 @@ contains
     src_var_valid_max = g_tracer%src_var_valid_max
 
   end subroutine g_tracer_get_src_info
+
+  subroutine g_tracer_get_obc_segment_props(g_tracer_list, name, src_file, src_var_name)
+    type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
+    character(len=*),         intent(in) :: name
+    character(len=*),         intent(out):: src_file, src_var_name
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_obc_segment_props'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+    !Find the node which has name=name
+    call g_tracer_find(g_tracer,name)
+    if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list with name="//trim(name))
+
+    src_file = g_tracer%obc_src_file_name
+    src_var_name = g_tracer%obc_src_field_name
+  end subroutine g_tracer_get_obc_segment_props
 
   function g_register_diag_field(module_name, field_name, axes, init_time,         &
        long_name, units, missing_value, range, mask_variant, standard_name,      &
