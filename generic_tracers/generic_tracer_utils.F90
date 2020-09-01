@@ -268,6 +268,7 @@ module g_tracer_utils
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
      character(len=fm_string_len) :: obc_src_file_name,obc_src_field_name
+     logical :: obc_has = .true.
      integer :: src_var_record
      logical :: requires_src_info = .false.
      real    :: src_var_unit_conversion = 1.0 !This factor depends on the tracer. Ask  Jasmin
@@ -938,6 +939,7 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_requires_restart", g_tracer%requires_restart , .true.) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_has",g_tracer%obc_has , .true.) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_file_name",g_tracer%obc_src_file_name ,  'obgc_obc.nc') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_field_name",g_tracer%obc_src_field_name,trim(g_tracer%name)) 
     
@@ -3746,10 +3748,11 @@ contains
 
   end subroutine g_tracer_get_src_info
 
-  subroutine g_tracer_get_obc_segment_props(g_tracer_list, name, src_file, src_var_name)
+  subroutine g_tracer_get_obc_segment_props(g_tracer_list, name, obc_has, src_file, src_var_name)
     type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
     character(len=*),         intent(in) :: name
-    character(len=*),         intent(out):: src_file, src_var_name
+    logical,                  intent(out):: obc_has                !<.true. if This tracer has OBC  
+    character(len=*),optional,intent(out):: src_file, src_var_name !<OBC source file and variable in file
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_obc_segment_props'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
@@ -3763,6 +3766,7 @@ contains
 
     src_file = g_tracer%obc_src_file_name
     src_var_name = g_tracer%obc_src_field_name
+    obc_has = g_tracer%obc_has
   end subroutine g_tracer_get_obc_segment_props
 
   function g_register_diag_field(module_name, field_name, axes, init_time,         &
