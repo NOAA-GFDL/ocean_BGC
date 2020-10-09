@@ -9135,13 +9135,13 @@ write (stdlogunit, generic_COBALT_nml)
        rho_dzt_100(i,j) = rho_dzt(i,j,1)
        do n = 1,NUM_PHYTO
           phyto(n)%nlim_bw_100(i,j) = (phyto(n)%no3lim(i,j,1)+phyto(n)%nh4lim(i,j,1))* &
-                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/(phyto(n)%f_n_100(i,j)+epsln)
           phyto(n)%plim_bw_100(i,j) = phyto(n)%po4lim(i,j,1)* &
-                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/(phyto(n)%f_n_100(i,j)+epsln)
           phyto(n)%def_fe_bw_100(i,j) = phyto(n)%def_fe(i,j,1)* &
-                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/(phyto(n)%f_n_100(i,j)+epsln)
           phyto(n)%irrlim_bw_100(i,j) = phyto(n)%irrlim(i,j,1)* &
-                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,1)*rho_dzt(i,j,1)/(phyto(n)%f_n_100(i,j)+epsln)
        enddo   !} n
     enddo; enddo  !} i, j
 
@@ -9647,7 +9647,7 @@ write (stdlogunit, generic_COBALT_nml)
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_kfe_eq_lig .gt. 0)            &
-         used = g_send_data(cobalt%id_kfe_eq_lig, log10(cobalt%kfe_eq_lig),         &
+         used = g_send_data(cobalt%id_kfe_eq_lig, log10(cobalt%kfe_eq_lig+epsln),         &
          model_time, rmask = grid_tmask,&
          is_in=isc, js_in=jsc, ks_in=1,ie_in=iec, je_in=jec, ke_in=nk)
     if (cobalt%id_feprime .gt. 0)            &
