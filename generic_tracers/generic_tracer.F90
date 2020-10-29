@@ -56,9 +56,9 @@ module generic_tracer
   use generic_age,    only : generic_age_init, generic_age_update_from_source,generic_age_update_from_coupler
   use generic_age,    only : generic_age_set_boundary_values, generic_age_end, do_generic_age
 
-  use generic_mlres, only : generic_mlres_register
-  use generic_mlres, only : generic_mlres_init, generic_mlres_update_from_source,generic_mlres_update_from_coupler
-  use generic_mlres, only : generic_mlres_set_boundary_values, generic_mlres_end, do_generic_mlres
+  use generic_blres, only : generic_blres_register
+  use generic_blres, only : generic_blres_init, generic_blres_update_from_source,generic_blres_update_from_coupler
+  use generic_blres, only : generic_blres_set_boundary_values, generic_blres_end, do_generic_blres
 
   use generic_argon,    only : generic_argon_register
   use generic_argon,    only : generic_argon_init, generic_argon_update_from_source,generic_argon_update_from_coupler
@@ -136,7 +136,7 @@ module generic_tracer
 
   namelist /generic_tracer_nml/ do_generic_tracer, do_generic_abiotic, do_generic_age, do_generic_argon, do_generic_CFC, &
       do_generic_SF6, do_generic_TOPAZ,do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, &
-      force_update_fluxes, do_generic_mlres
+      force_update_fluxes, do_generic_blres
 
 contains
 
@@ -175,8 +175,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_age) &
          call generic_age_register(tracer_list)
 
-    if(do_generic_mlres) &
-         call generic_mlres_register(tracer_list)
+    if(do_generic_blres) &
+         call generic_blres_register(tracer_list)
 
     if(do_generic_argon) &
          call generic_argon_register(tracer_list)
@@ -251,7 +251,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !Allocate and initialize all registered generic tracers
     !JGJ 2013/05/31  merged COBALT into siena_201303
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_mlres) then
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
        g_tracer => tracer_list        
        !Go through the list of tracers 
        do  
@@ -272,8 +272,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_age) &
          call generic_age_init(tracer_list)
 
-    if(do_generic_mlres) &
-         call generic_mlres_init(tracer_list)
+    if(do_generic_blres) &
+         call generic_blres_init(tracer_list)
 
     if(do_generic_argon) &
          call generic_argon_init(tracer_list)
@@ -309,7 +309,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !JGJ 2013/05/31  merged COBALT into siena_201303
 
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_mlres) then
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -371,9 +371,9 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     call g_tracer_coupler_get(tracer_list,IOB_struc)
 
     !Specific tracers
-    !    if(do_generic_mlres)  call generic_age_update_from_coupler(tracer_list) !Nothing to do for mixed layer tracer
+    !    if(do_generic_blres)  call generic_age_update_from_coupler(tracer_list) !Nothing to do for mixed layer tracer
 
-    !    if(do_generic_age)    call generic_mlres_update_from_coupler(tracer_list) !Nothing to do for age
+    !    if(do_generic_age)    call generic_blres_update_from_coupler(tracer_list) !Nothing to do for age
 
     !    if(do_generic_argon)    call generic_argon_update_from_coupler(tracer_list) !Nothing to do for argon
 
@@ -518,7 +518,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     if(do_generic_age)   call generic_age_update_from_source(tracer_list,tau,dtts)
 
-    if(do_generic_mlres) call generic_mlres_update_from_source(tracer_list,tau,dtts,hblt_depth,dzt,ilb,jlb)
+    if(do_generic_blres) call generic_blres_update_from_source(tracer_list,tau,dtts,hblt_depth,dzt,ilb,jlb)
 
     !    if(do_generic_argon)    call generic_argon_update_from_source(tracer_list) !Nothing to do for argon
 
@@ -580,7 +580,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_bottom'
 
-    !    if(do_generic_mlres)  call generic_mlres_update_from_bottom(tracer_list)!Nothing to do for mixed layer tracer 
+    !    if(do_generic_blres)  call generic_blres_update_from_bottom(tracer_list)!Nothing to do for mixed layer tracer 
 
     !    if(do_generic_age)    call generic_age_update_from_bottom(tracer_list)!Nothing to do for age 
 
@@ -630,7 +630,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_mlres) then
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -671,7 +671,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
     if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM &
-       .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_mlres) then
+       .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -743,8 +743,8 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     if(do_generic_age) &
          call generic_age_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
 
-    if(do_generic_mlres) &
-         call generic_mlres_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
+    if(do_generic_blres) &
+         call generic_blres_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
 
     if(do_generic_argon) &
          call generic_argon_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau)
@@ -776,7 +776,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     !JGJ 2013/05/31  merged COBALT into siena_201303
     !
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-      .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_mlres) &
+      .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) &
        call g_tracer_coupler_set(tracer_list,IOB_struc)
 
   end subroutine generic_tracer_coupler_set
@@ -813,7 +813,7 @@ ierr = check_nml_error(io_status,'generic_tracer_nml')
     character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_end'
     if(do_generic_abiotic) call generic_abiotic_end
     if(do_generic_age) call generic_age_end
-    if(do_generic_mlres) call generic_mlres_end
+    if(do_generic_blres) call generic_blres_end
     if(do_generic_argon) call generic_argon_end
     if(do_generic_CFC) call generic_CFC_end
     if(do_generic_SF6) call generic_SF6_end

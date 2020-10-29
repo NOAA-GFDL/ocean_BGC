@@ -17,7 +17,7 @@
 !
 !----------------------------------------------------------------
 
-module generic_mlres
+module generic_blres
 
   use coupler_types_mod, only: coupler_2d_bc_type
   use field_manager_mod, only: fm_string_len
@@ -36,26 +36,26 @@ module generic_mlres
 
   implicit none ; private
 
-  character(len=fm_string_len), parameter :: mod_name       = 'generic_mlres'
-  character(len=fm_string_len), parameter :: package_name   = 'generic_mlres'
+  character(len=fm_string_len), parameter :: mod_name       = 'generic_blres'
+  character(len=fm_string_len), parameter :: package_name   = 'generic_blres'
 
-  public do_generic_mlres
-  public generic_mlres_register
-  public generic_mlres_init
-  public generic_mlres_update_from_coupler
-  public generic_mlres_update_from_source
-  public generic_mlres_set_boundary_values
-  public generic_mlres_end
+  public do_generic_blres
+  public generic_blres_register
+  public generic_blres_init
+  public generic_blres_update_from_coupler
+  public generic_blres_update_from_source
+  public generic_blres_set_boundary_values
+  public generic_blres_end
 
   !The following logical for using this module is overwritten 
   ! by generic_tracer_nml namelist
-  logical, save :: do_generic_mlres = .false.
+  logical, save :: do_generic_blres = .false.
 
   real, parameter :: epsln=1.0e-30
 
   real :: reset_time=1.0
 
-  namelist /generic_mlres_nml/ reset_time
+  namelist /generic_blres_nml/ reset_time
   !
   !This type contains all the parameters and arrays used in this module.
   !
@@ -64,18 +64,18 @@ module generic_mlres
   !It suffices for varables to be a declared at the top of the module. 
   !nnz: Find out about the timing overhead for using type%x rather than x
 
-  type generic_mlres_params
+  type generic_blres_params
       real :: Rho_0
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
-  end type generic_mlres_params
+  end type generic_blres_params
 
 
-  type(generic_mlres_params) :: param
+  type(generic_blres_params) :: param
 
 contains
 
-  subroutine generic_mlres_register(tracer_list)
+  subroutine generic_blres_register(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
 
 integer                                                 :: ioun
@@ -84,7 +84,7 @@ integer                                                 :: io_status
 character(len=fm_string_len)                            :: name
 integer                                                 :: stdoutunit,stdlogunit
 
-    character(len=fm_string_len), parameter :: sub_name = 'generic_mlres_register'
+    character(len=fm_string_len), parameter :: sub_name = 'generic_blres_register'
 
 ! provide for namelist over-ride
 ! This needs to go before the add_tracers in order to allow the namelist 
@@ -93,26 +93,26 @@ integer                                                 :: stdoutunit,stdlogunit
 stdoutunit=stdout();stdlogunit=stdlog()
 
 #ifdef INTERNAL_FILE_NML
-read (input_nml_file, nml=generic_mlres_nml, iostat=io_status)
-ierr = check_nml_error(io_status,'generic_mlres_nml')
+read (input_nml_file, nml=generic_blres_nml, iostat=io_status)
+ierr = check_nml_error(io_status,'generic_blres_nml')
 #else
 ioun = open_namelist_file()
 read  (ioun, generic_bling_nml,iostat=io_status)
-ierr = check_nml_error(io_status,'generic_mlres_nml')
+ierr = check_nml_error(io_status,'generic_blres_nml')
 call close_file (ioun)
 #endif
 
 write (stdoutunit,'(/)')
-write (stdoutunit, generic_mlres_nml)
-write (stdlogunit, generic_mlres_nml)
+write (stdoutunit, generic_blres_nml)
+write (stdlogunit, generic_blres_nml)
 
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
     
     
-  end subroutine generic_mlres_register
+  end subroutine generic_blres_register
 
-  ! <SUBROUTINE NAME="generic_mlres_init">
+  ! <SUBROUTINE NAME="generic_blres_init">
   !  <OVERVIEW>
   !   Initialize the generic mixed layer residence tracer
   !  </OVERVIEW>
@@ -123,17 +123,17 @@ write (stdlogunit, generic_mlres_nml)
   !       Allocates all work arrays used in the module. 
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_mlres_init(tracer_list)
+  !   call generic_blres_init(tracer_list)
   !  </TEMPLATE>
   !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
   !   Pointer to the head of generic tracer list.
   !  </IN>
   ! </SUBROUTINE>
 
-  subroutine generic_mlres_init(tracer_list)
+  subroutine generic_blres_init(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
 
-    character(len=fm_string_len), parameter :: sub_name = 'generic_mlres_init'
+    character(len=fm_string_len), parameter :: sub_name = 'generic_blres_init'
 
     !Specify and initialize all parameters used by this package
     call user_add_params
@@ -141,7 +141,7 @@ write (stdlogunit, generic_mlres_nml)
     !Allocate and initiate all the private work arrays used by this module.
     !call user_allocate_arrays 
 
-  end subroutine generic_mlres_init
+  end subroutine generic_blres_init
 
   subroutine user_allocate_arrays
 
@@ -164,7 +164,7 @@ write (stdlogunit, generic_mlres_nml)
     !Specify all parameters used in this modules.
     !==============================================================
     !User adds one call for each parameter below!
-    !User also adds the definition of each parameter in generic_mlres_params type
+    !User also adds the definition of each parameter in generic_blres_params type
     !==============================================================    
 
     !=============
@@ -199,8 +199,8 @@ write (stdlogunit, generic_mlres_nml)
     character(len=fm_string_len), parameter :: sub_name = 'user_add_tracers'
 
     call g_tracer_start_param_list(package_name)!nnz: Does this append?
-    call g_tracer_add_param('ice_restart_file'   , param%ice_restart_file   , 'ice_ocmip_mlres.res.nc')
-    call g_tracer_add_param('ocean_restart_file' , param%ocean_restart_file , 'ocmip_mlres.res.nc' )
+    call g_tracer_add_param('ice_restart_file'   , param%ice_restart_file   , 'ice_ocmip_blres.res.nc')
+    call g_tracer_add_param('ocean_restart_file' , param%ocean_restart_file , 'ocmip_blres.res.nc' )
     call g_tracer_add_param('IC_file'       , param%IC_file       , '')
     call g_tracer_end_param_list(package_name)
 
@@ -216,19 +216,19 @@ write (stdlogunit, generic_mlres_nml)
     !and provide the corresponding parameters array
     !methods: flux_gas,flux_runoff,flux_wetdep,flux_drydep  
     !
-    !prog_tracers: mlres
+    !prog_tracers: blres
     !diag_tracers: none
     !
     !age
     call g_tracer_add(tracer_list,package_name,               &
-         name          = 'mlres',                             &
+         name          = 'blres',                             &
          longname      = 'residence time inside mixed layer', &
          units         = 'years',                             &
          init_value    = 0.0,                                 &
          prog          = .true.)
 
     call g_tracer_add(tracer_list,package_name,                &
-         name          = 'mlres_inv',                          &
+         name          = 'blres_inv',                          &
          longname      = 'residence time outside mixed layer', &
          units         = 'years',                              &
          init_value    = 0.0,                                  &
@@ -237,7 +237,7 @@ write (stdlogunit, generic_mlres_nml)
 
   end subroutine user_add_tracers
 
-  ! <SUBROUTINE NAME="generic_mlres_update_from_coupler">
+  ! <SUBROUTINE NAME="generic_blres_update_from_coupler">
   !  <OVERVIEW>
   !   Modify the values obtained from the coupler if necessary.
   !  </OVERVIEW>
@@ -247,22 +247,22 @@ write (stdlogunit, generic_mlres_nml)
   !   This subroutine is the place for specific tracer manipulations.
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_mlres_update_from_coupler(tracer_list) 
+  !   call generic_blres_update_from_coupler(tracer_list) 
   !  </TEMPLATE>
   !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
   !   Pointer to the head of generic tracer list.
   !  </IN>
   ! </SUBROUTINE>
-  subroutine generic_mlres_update_from_coupler(tracer_list)
+  subroutine generic_blres_update_from_coupler(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
-    character(len=fm_string_len), parameter :: sub_name = 'generic_mlres_update_from_coupler'
+    character(len=fm_string_len), parameter :: sub_name = 'generic_blres_update_from_coupler'
     !
     !Nothing specific to be done for mixed layer residence tracers
     !
     return
-  end subroutine generic_mlres_update_from_coupler
+  end subroutine generic_blres_update_from_coupler
 
-  ! <SUBROUTINE NAME="generic_mlres_update_from_source">
+  ! <SUBROUTINE NAME="generic_blres_update_from_source">
   !  <OVERVIEW>
   !   Update tracer concentration fields due to the source/sink contributions.
   !  </OVERVIEW>
@@ -270,7 +270,7 @@ write (stdlogunit, generic_mlres_nml)
   !   Sets age to zero in uppermost level and increments it by the time step elsewhere
   !  </DESCRIPTION>
   ! </SUBROUTINE>
-  subroutine generic_mlres_update_from_source( tracer_list,tau,dt,       &
+  subroutine generic_blres_update_from_source( tracer_list,tau,dt,       &
                                                hblt_depth,dzt,ilb,jlb  )
 
     type(g_tracer_type),            pointer    :: tracer_list
@@ -279,11 +279,11 @@ write (stdlogunit, generic_mlres_nml)
     real, dimension(ilb:,jlb:),     intent(in) :: hblt_depth
     real, dimension(ilb:,jlb:,:),   intent(in) :: dzt
 
-    character(len=fm_string_len), parameter :: sub_name = 'generic_mlres_update_from_source'
+    character(len=fm_string_len), parameter :: sub_name = 'generic_blres_update_from_source'
     integer                                 :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,i,j,k
     real, parameter                         :: secs_in_year_r = 1.0 / (86400.0 * 365.25)
     real, dimension(:,:,:)  , pointer       :: grid_tmask
-    real, dimension(:,:,:,:), pointer       :: p_mlres_field, p_mlres_inv_field
+    real, dimension(:,:,:,:), pointer       :: p_blres_field, p_blres_inv_field
 
     real, dimension(:,:,:), allocatable :: zt
 
@@ -291,8 +291,8 @@ write (stdlogunit, generic_mlres_nml)
 
     allocate( zt(isd:ied,jsd:jed,nk) ); zt=0.0
 
-    call g_tracer_get_pointer(tracer_list, 'mlres'    , 'field', p_mlres_field    )
-    call g_tracer_get_pointer(tracer_list, 'mlres_inv', 'field', p_mlres_inv_field)
+    call g_tracer_get_pointer(tracer_list, 'blres'    , 'field', p_blres_field    )
+    call g_tracer_get_pointer(tracer_list, 'blres_inv', 'field', p_blres_inv_field)
 
     ! Compute depth of the bottom of the cell
     zt = 0.0
@@ -306,16 +306,16 @@ write (stdlogunit, generic_mlres_nml)
     do k = 1, nk; do j = jsc, jec ; do i = isc, iec
 
       if (zt(i,j,k) .le. hblt_depth(i,j) ) then
-        !if ( p_mlres_inv_field(i,j,k,tau) .gt. 1 ) then
-        if ( p_mlres_inv_field(i,j,k,tau) .gt. reset_time ) then
+        !if ( p_blres_inv_field(i,j,k,tau) .gt. 1 ) then
+        if ( p_blres_inv_field(i,j,k,tau) .gt. reset_time ) then
           ! Reset tracers
-          p_mlres_field    (i,j,k,tau) = 0.0
-          p_mlres_inv_field(i,j,k,tau) = 0.0
+          p_blres_field    (i,j,k,tau) = 0.0
+          p_blres_inv_field(i,j,k,tau) = 0.0
         else
-          p_mlres_field(i,j,k,tau) = p_mlres_field(i,j,k,tau) + dt*secs_in_year_r*grid_tmask(i,j,k)
+          p_blres_field(i,j,k,tau) = p_blres_field(i,j,k,tau) + dt*secs_in_year_r*grid_tmask(i,j,k)
         endif
       else
-        p_mlres_inv_field(i,j,k,tau) = p_mlres_inv_field(i,j,k,tau) + dt*secs_in_year_r*grid_tmask(i,j,k)
+        p_blres_inv_field(i,j,k,tau) = p_blres_inv_field(i,j,k,tau) + dt*secs_in_year_r*grid_tmask(i,j,k)
       endif
 
     enddo; enddo; enddo !} i,j,k
@@ -323,9 +323,9 @@ write (stdlogunit, generic_mlres_nml)
     deallocate (zt)
 
     return
-  end subroutine generic_mlres_update_from_source
+  end subroutine generic_blres_update_from_source
 
-  ! <SUBROUTINE NAME="generic_mlres_set_boundary_values">
+  ! <SUBROUTINE NAME="generic_blres_set_boundary_values">
   !  <OVERVIEW>
   !   Calculate and set coupler values at the surface / bottom
   !  </OVERVIEW>
@@ -333,7 +333,7 @@ write (stdlogunit, generic_mlres_nml)
   !   
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_mlres_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau)
+  !   call generic_blres_set_boundary_values(tracer_list,SST,SSS,rho,ilb,jlb,tau)
   !  </TEMPLATE>
   !  <IN NAME="tracer_list" TYPE="type(g_tracer_type), pointer">
   !   Pointer to the head of generic tracer list.
@@ -356,7 +356,7 @@ write (stdlogunit, generic_mlres_nml)
   ! </SUBROUTINE>
 
   !User must provide the calculations for these boundary values.
-  subroutine generic_mlres_set_boundary_values(tracer_list,ST,SSS,rho,ilb,jlb,taum1)
+  subroutine generic_blres_set_boundary_values(tracer_list,ST,SSS,rho,ilb,jlb,taum1)
     type(g_tracer_type),          pointer    :: tracer_list
     real, dimension(ilb:,jlb:),     intent(in) :: ST, SSS 
     real, dimension(ilb:,jlb:,:,:), intent(in) :: rho
@@ -365,16 +365,16 @@ write (stdlogunit, generic_mlres_nml)
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau , i, j
     real    :: conv_fac,sal,ta,SST,alpha,sc
     real, dimension(:,:,:)  ,pointer  :: grid_tmask
-    real, dimension(:,:,:,:), pointer :: g_mlres_field
-    real, dimension(:,:), ALLOCATABLE :: g_mlres_alpha,g_mlres_csurf
+    real, dimension(:,:,:,:), pointer :: g_blres_field
+    real, dimension(:,:), ALLOCATABLE :: g_blres_alpha,g_blres_csurf
     real, dimension(:,:), ALLOCATABLE :: sc_no
 
-    character(len=fm_string_len), parameter :: sub_name = 'generic_mlres_set_boundary_values'
+    character(len=fm_string_len), parameter :: sub_name = 'generic_blres_set_boundary_values'
 
     return
-  end subroutine generic_mlres_set_boundary_values
+  end subroutine generic_blres_set_boundary_values
 
-  ! <SUBROUTINE NAME="generic_mlres_end">
+  ! <SUBROUTINE NAME="generic_blres_end">
   !  <OVERVIEW>
   !   End the module.
   !  </OVERVIEW>
@@ -382,14 +382,14 @@ write (stdlogunit, generic_mlres_nml)
   !   Deallocate all work arrays
   !  </DESCRIPTION>
   !  <TEMPLATE>
-  !   call generic_mlres_end
+  !   call generic_blres_end
   !  </TEMPLATE>
   ! </SUBROUTINE>
 
-  subroutine generic_mlres_end
-    character(len=fm_string_len), parameter :: sub_name = 'generic_mlres_end'
+  subroutine generic_blres_end
+    character(len=fm_string_len), parameter :: sub_name = 'generic_blres_end'
     !call user_deallocate_arrays
 
-  end subroutine generic_mlres_end
+  end subroutine generic_blres_end
 
-end module generic_mlres
+end module generic_blres
