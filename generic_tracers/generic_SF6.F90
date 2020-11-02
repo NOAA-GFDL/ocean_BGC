@@ -108,9 +108,17 @@ module generic_SF6
 
   type generic_SF6_type
     integer :: &
-      id_fgsf6      = -1
+      id_fgsf6 = -1, &
+      id_wc_vert_int_sf6 = -1
+
+    real, dimension(:,:), ALLOCATABLE :: &
+      wc_vert_int_sf6
+
     real, dimension (:,:), pointer :: &
       stf_gas_sf6
+
+    real, dimension(:,:,:,:), pointer :: &
+      p_sf6
 
   end type generic_SF6_type
 
@@ -157,7 +165,7 @@ contains
     call user_add_params
 
     !Allocate and initiate all the private work arrays used by this module.
-    !    call user_allocate_arrays !None for SF6 module currently
+    call user_allocate_arrays !None for SF6 module currently
 
   end subroutine generic_SF6_init
 
@@ -192,13 +200,26 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          standard_name="surface_downward_mole_flux_of_sf6")
 
+    vardesc_temp = vardesc("wc_vert_int_sf6","Total SF6 vertical integral",'h','1','s','mol m-2','f')
+    sf6%id_wc_vert_int_sf6 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
   end subroutine generic_SF6_register_diag
 
 
   subroutine user_allocate_arrays
-    !Allocate all the private arrays.
-    !None for SF6 module currently
+    integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,n
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau) 
+
+    allocate(sf6%wc_vert_int_sf6(isd:ied, jsd:jed))  ; sf6%wc_vert_int_sf6=0.0
+
   end subroutine user_allocate_arrays
+
+  subroutine user_deallocate_arrays
+
+    deallocate(sf6%wc_vert_int_sf6)
+
+  end subroutine user_deallocate_arrays
 
   !
   !   This is an internal sub, not a public interface.
@@ -387,6 +408,7 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_SF6_update_from_source'
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau 
+    integer :: i,j,k
     real, dimension(:,:,:) ,pointer :: grid_tmask
     integer, dimension(:,:),pointer :: mask_coast, grid_kmt
 
@@ -395,12 +417,27 @@ contains
     call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,&
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
 
-    call g_tracer_get_pointer(tracer_list,'sf6','stf_gas',sf6%stf_gas_sf6)
- 
+    call g_tracer_get_pointer(tracer_list,'sf6', 'stf_gas', sf6%stf_gas_sf6)
+    call g_tracer_get_pointer(tracer_list,'sf6', 'field',   sf6%p_sf6)
+
+    !-- calculate water column vertical integrals
+    do j = jsc, jec ; do i = isc, iec !{
+       sf6%wc_vert_int_sf6(i,j) = 0.0
+    enddo; enddo !} i,j
+
+    do j = jsc, jec ; do i = isc, iec ; do k = 1, nk  !{
+       sf6%wc_vert_int_sf6(i,j) = sf6%wc_vert_int_sf6(i,j) + (sf6%p_sf6(i,j,k,tau) * rho_dzt(i,j,k))
+    enddo; enddo; enddo  !} i,j,k
+
     if (sf6%id_fgsf6 .gt. 0)            &
         used = g_send_data(sf6%id_fgsf6,  sf6%stf_gas_sf6,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (sf6%id_wc_vert_int_sf6 .gt. 0)       &
+       used = g_send_data(sf6%id_wc_vert_int_sf6, sf6%wc_vert_int_sf6, &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     return
   end subroutine generic_SF6_update_from_source
@@ -467,6 +504,7 @@ contains
     allocate(g_sf6_alpha(isd:ied, jsd:jed)); g_sf6_alpha=0.0
     allocate(g_sf6_csurf(isd:ied, jsd:jed)); g_sf6_csurf=0.0
     allocate(sc_no(isd:ied, jsd:jed))
+
 
     !The atmospheric code needs soluabilities in units of mol/m3/atm
     !
@@ -549,6 +587,8 @@ contains
 
   subroutine generic_SF6_end
     character(len=fm_string_len), parameter :: sub_name = 'generic_SF6_end'
+
+    call user_deallocate_arrays
 
   end subroutine generic_SF6_end
 
