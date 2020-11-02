@@ -74,16 +74,6 @@
 !! ab_htotal_valid_min = 3.981E-09
 !! ab_htotal_valid_max = 1.259E-08
 !! #
-!! ab_htotal14c_src_file = INPUT/init_ocean_cobalt.res.nc
-!! ab_htotal14c_src_var_name = htotal
-!! ab_htotal14c_src_var_unit = none
-!! ab_htotal14c_dest_var_name =  ab_htotal14c
-!! ab_htotal14c_dest_var_unit = mol kg-1
-!! ab_htotal14c_src_var_record = 1
-!! ab_htotal14c_src_var_gridspec = NONE
-!! ab_htotal14c_valid_min = 3.981E-09
-!! ab_htotal14c_valid_max = 1.259E-08
-!! #
 !! ## divide by 1e6 to convert from umol/kg to mol/kg
 !! dissicabio_src_file = INPUT/Preind_DIC.nc
 !! dissicabio_src_var_name = Preind_DIC
@@ -155,20 +145,17 @@
 !! #-- Non-CMIP Tracer Fields
 !! "generic_abiotic",   "ab_alk",               "ab_alk",               "ocean_abiotic","all",.true.,"none", 2
 !! "generic_abiotic",   "ab_htotal",            "ab_htotal",            "ocean_abiotic","all",.true.,"none", 2
-!! "generic_abiotic",   "ab_htotal14c",         "ab_htotal14c",         "ocean_abiotic","all",.true.,"none", 2
 !! "generic_abiotic",   "ab_po4",               "ab_po4",               "ocean_abiotic","all",.true.,"none", 2
 !! "generic_abiotic",   "ab_sio4",              "ab_sio4",              "ocean_abiotic","all",.true.,"none", 2
 !! "generic_abiotic",   "jdecay_di14c",         "jdecay_di14c",         "ocean_abiotic","all",.true.,"none", 2
 !! "generic_abiotic_z", "ab_alk",               "ab_alk",               "ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z", "ab_htotal",            "ab_htotal",            "ocean_abiotic_z","all",.true.,"none",2
-!! "generic_abiotic_z", "ab_htotal14c",         "ab_htotal14c",         "ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z", "ab_po4",               "ab_po4",               "ocean_abiotic_z","all",.true.,"none",2
 !! "generic_abiotic_z", "ab_sio4",              "ab_sio4",              "ocean_abiotic_z","all",.true.,"none",2
 
 !! #-- Non-CMIP Surface Fields
 !! "generic_abiotic",   "sfc_ab_alk",           "sfc_ab_alk",           "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic",   "sfc_ab_htotal",        "sfc_ab_htotal",        "ocean_abiotic","all",.true.,"none",2
-!! "generic_abiotic",   "sfc_ab_htotal14c",     "sfc_ab_htotal14c",     "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic",   "sfc_ab_po4",           "sfc_ab_po4",           "ocean_abiotic","all",.true.,"none",2
 !! "generic_abiotic",   "sfc_ab_sio4",          "sfc_ab_sio4",          "ocean_abiotic","all",.true.,"none",2
 !! 
@@ -269,7 +256,7 @@ namelist /generic_abiotic_nml/ co2_calc
 
      ! Diagnostic Output IDs
      integer :: id_dissicabioos=-1, id_dissi14cabioos=-1
-     integer :: id_sfc_ab_htotal=-1, id_sfc_ab_htotal14c=-1
+     integer :: id_sfc_ab_htotal=-1
      integer :: id_ab_alk=-1, id_ab_po4=-1, id_ab_sio4=-1
      integer :: id_sfc_ab_alk=-1, id_sfc_ab_po4=-1, id_sfc_ab_sio4=-1
      integer :: id_ab_pco2surf=-1, id_ab_p14co2surf=-1
@@ -321,7 +308,7 @@ namelist /generic_abiotic_nml/ co2_calc
 
   type(CO2_dope_vector)        :: CO2_dope_vec
   type(generic_abiotic_params) :: abiotic
-
+ 
 contains
 
   subroutine generic_abiotic_register(tracer_list)
@@ -372,7 +359,7 @@ contains
 
 !> \brief   Initialize the generic abiotic module
 !!
-!! This subroutine adds the dissicabio, dissi14cabio, ab_htotal, and ab_htotal14c tracers to the list of 
+!! This subroutine adds the dissicabio, dissi14cabio, and ab_htotal tracers to the list of 
 !! generic tracers passed to it via utility subroutine g_tracer_add().  Adds all the parameters 
 !! used by this module via utility subroutine g_tracer_add_param(). Allocates all work arrays used 
 !! in the module. 
@@ -458,10 +445,6 @@ contains
 
     vardesc_temp = vardesc("sfc_ab_htotal","Surface Abiotic Htotal",'h','1','s','mol kg-1','f')
     abiotic%id_sfc_ab_htotal = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
-         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
-
-    vardesc_temp = vardesc("sfc_ab_htotal14c","Surface Abiotic Htotal for 14C",'h','1','s','mol kg-1','f')
-    abiotic%id_sfc_ab_htotal14c = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("ab_pco2surf","Oceanic Abiotic pCO2",'h','1','s','uatm','f')
@@ -720,13 +703,6 @@ contains
          prog       = .false.,                        &
          init_value = abiotic%htotal_in )
 
-    call g_tracer_add(tracer_list,package_name,               &
-         name       = 'ab_htotal14c',                         &
-         longname   = 'abiotic H+ ion concentration for 14C', &
-         units      = 'mol/kg',                               &
-         prog       = .false.,                                &
-         init_value = abiotic%htotal14c_in )
-
   end subroutine user_add_tracers
 
 
@@ -762,7 +738,6 @@ contains
          grid_tmask=grid_tmask,grid_mask_coast=mask_coast,grid_kmt=grid_kmt)
 
     call g_tracer_get_values(tracer_list,'ab_htotal',    'field', abiotic%f_htotal       ,isd,jsd,ntau=1)
-    call g_tracer_get_values(tracer_list,'ab_htotal14c', 'field', abiotic%f_htotal14c    ,isd,jsd,ntau=1)
     call g_tracer_get_values(tracer_list,'dissicabio'   ,'field', abiotic%f_dissicabio   ,isd,jsd,ntau=tau)
     call g_tracer_get_values(tracer_list,'dissi14cabio' ,'field', abiotic%f_dissi14cabio ,isd,jsd,ntau=tau)
 
@@ -812,29 +787,22 @@ contains
          co2star=abiotic%abco2_csurf(:,:), alpha=abiotic%abco2_alpha(:,:), &
          pCO2surf=abiotic%abpco2_csurf(:,:))
 
-    call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,k),&
-         Temp(:,:,k), Salt(:,:,k),                    &
-         abiotic%f_dissi14cabio(:,:,k),                          &
-         abiotic%f_po4(:,:,k),                          &  
-         abiotic%f_sio4(:,:,k),                         &
-         abiotic%f_alk(:,:,k),                          &
-         abiotic%htotal14clo, abiotic%htotal14chi,&
-                                !InOut
-         abiotic%f_htotal14c(:,:,k),                       & 
-                                !OUT
-         co2star=abiotic%ab14co2_csurf(:,:), alpha=abiotic%ab14co2_alpha(:,:), &
-         pCO2surf=abiotic%abp14co2_csurf(:,:))
+    ! Update csurf and alpha based on the atmospheric 14C/12C ratio
 
-    ! Update alpha based on the atmospheric 14C/12C ratio
+    ! The 14C surface concentration (ab14co2_csurf, 14CO2*) is proportional to the 14C surface concentration
+    ! times the ratio of the *ocean* surface carbon concentration (i.e. DI14C/DIC). The 14C solubility (ab14co2_alpha) 
+    ! is proportional to abco2_alpha times the 14C to C ratio of the *atmos* carbon concentration as the 
+    ! ocean carbon solubility mainly depends on temperature and the atmos partial pressure of the gas.
 
     call data_override('OCN', 'delta_14catm', abiotic%delta_14catm(isc:iec,jsc:jec), model_time)
     do j = jsc, jec ; do i = isc, iec  !{
-       abiotic%ab14co2_alpha(i,j) = abiotic%ab14co2_alpha(i,j) * &
+       abiotic%ab14co2_csurf(i,j) = abiotic%abco2_csurf(i,j) * &
+                                   (abiotic%f_dissi14cabio(i,j,1)/(abiotic%f_dissicabio(i,j,1) + epsln))
+       abiotic%ab14co2_alpha(i,j) = abiotic%abco2_alpha(i,j) * &
                                     (1.0 + abiotic%delta_14catm(i,j) * 1.0e-03)
     enddo; enddo ; !} i, j
 
     call g_tracer_set_values(tracer_list,'ab_htotal',   'field',abiotic%f_htotal   ,isd,jsd,ntau=1)
-    call g_tracer_set_values(tracer_list,'ab_htotal14c','field',abiotic%f_htotal14c,isd,jsd,ntau=1)
 
     call g_tracer_set_values(tracer_list,'dissicabio','alpha',abiotic%abco2_alpha    ,isd,jsd)
     call g_tracer_set_values(tracer_list,'dissicabio','csurf',abiotic%abco2_csurf    ,isd,jsd)
@@ -844,7 +812,6 @@ contains
     call g_tracer_get_pointer(tracer_list,'dissicabio',  'field',abiotic%p_dissicabio)
     call g_tracer_get_pointer(tracer_list,'dissi14cabio','field',abiotic%p_dissi14cabio)
     call g_tracer_get_pointer(tracer_list,'ab_htotal','field',abiotic%p_htotal)
-    call g_tracer_get_pointer(tracer_list,'ab_htotal14c','field',abiotic%p_htotal14c)
 
     call g_tracer_get_pointer(tracer_list,'dissicabio','stf_gas',abiotic%stf_gas_dissicabio)
     call g_tracer_get_pointer(tracer_list,'dissi14cabio','stf_gas',abiotic%stf_gas_dissi14cabio)
@@ -920,11 +887,6 @@ contains
 
     if (abiotic%id_sfc_ab_htotal .gt. 0)  &
        used = g_send_data(abiotic%id_sfc_ab_htotal, abiotic%f_htotal(:,:,1),         &
-       model_time, rmask = grid_tmask(:,:,1),&
-       is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
-
-    if (abiotic%id_sfc_ab_htotal14c .gt. 0)  &
-       used = g_send_data(abiotic%id_sfc_ab_htotal14c, abiotic%f_htotal14c(:,:,1),         &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc,ie_in=iec, je_in=jec)
 
@@ -1010,7 +972,6 @@ contains
        call g_tracer_get_pointer(tracer_list,'dissi14cabio', 'field', dissi14cabio_field)
 
        call g_tracer_get_values(tracer_list, 'ab_htotal', 'field', htotal_field,isd,jsd,ntau=1)
-       call g_tracer_get_values(tracer_list, 'ab_htotal14c', 'field', htotal14c_field,isd,jsd,ntau=1)
 
        do j = jsc, jec ; do i = isc, iec  !{
           abiotic%htotallo(i,j) = abiotic%htotal_scale_lo * htotal_field(i,j,1)
@@ -1050,31 +1011,21 @@ contains
             co2star=abco2_csurf(:,:), alpha=abco2_alpha(:,:),  &
             pCO2surf=abiotic%abpco2_csurf(:,:))
 
+       ! Update csurf and alpha based on the atmospheric 14C/12C ratio
 
-       call FMS_ocmip2_co2calc(CO2_dope_vec,grid_tmask(:,:,1), &
-            SST(:,:), SSS(:,:),                                &
-            dissi14cabio_field(:,:,1,tau),                     &
-            abiotic%f_po4(:,:,1),                              &  
-            abiotic%f_sio4(:,:,1),                             &
-            abiotic%f_alk(:,:,1),                              &
-            abiotic%htotal14clo, abiotic%htotal14chi,          &
-                                !InOut
-            htotal14c_field(:,:,1),                            &
-                                !Optional In
-            co2_calc=trim(co2_calc),                           & 
-            zt=abiotic%zt(:,:,1),                               & 
-                                !OUT
-            co2star=ab14co2_csurf(:,:), alpha=ab14co2_alpha(:,:),&
-            pCO2surf=abiotic%abp14co2_csurf(:,:))
+       ! The 14C surface concentration (ab14co2_csurf, 14CO2*) is proportional to the 14C surface concentration
+       ! times the ratio of the *ocean* surface carbon concentration (i.e. DI14C/DIC). The 14C solubility (ab14co2_alpha) 
+       ! is proportional to abco2_alpha times the 14C to C ratio of the *atmos* carbon concentration as the 
+       ! ocean carbon solubility mainly depends on temperature and the atmos partial pressure of the gas.
 
-    ! Update alpha based on the atmospheric 14C/12C ratio
-    call data_override('OCN', 'delta_14catm', delta_14catm(isc:iec,jsc:jec), model_time)
-    do j = jsc, jec ; do i = isc, iec  !{
-       ab14co2_alpha(i,j) = ab14co2_alpha(i,j) * (1.0 + delta_14catm(i,j) * 1.0e-03)
-    enddo; enddo ; !} i, j
+       call data_override('OCN', 'delta_14catm', delta_14catm(isc:iec,jsc:jec), model_time)
+       do j = jsc, jec ; do i = isc, iec  !{
+          ab14co2_csurf(i,j) = abco2_csurf(i,j) * &
+                              (dissi14cabio_field(i,j,1,tau)/(dissicabio_field(i,j,1,tau) + epsln))
+          ab14co2_alpha(i,j) = abco2_alpha(i,j) * (1.0 + delta_14catm(i,j) * 1.0e-03)
+       enddo; enddo ; !} i, j
 
        call g_tracer_set_values(tracer_list,'ab_htotal' ,'field',htotal_field,isd,jsd,ntau=1)
-       call g_tracer_set_values(tracer_list,'ab_htotal14c','field',htotal14c_field,isd,jsd,ntau=1)
        call g_tracer_set_values(tracer_list,'dissicabio','alpha',abco2_alpha    ,isd,jsd)
        call g_tracer_set_values(tracer_list,'dissicabio','csurf',abco2_csurf    ,isd,jsd)
        call g_tracer_set_values(tracer_list,'dissi14cabio','alpha',ab14co2_alpha    ,isd,jsd)
