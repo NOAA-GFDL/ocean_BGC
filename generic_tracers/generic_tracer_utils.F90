@@ -373,6 +373,7 @@ module g_tracer_utils
   public :: g_register_diag_field
   public :: g_send_data
   public :: fm_string_len
+  public :: is_root_pe
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
   !   Add a new parameter for the generic tracer package
@@ -3950,5 +3951,13 @@ contains
 
   END FUNCTION g_send_data_3d
 
+ !> This returns .true. if the current PE is the root PE.
+function is_root_pe()
+  ! This returns .true. if the current PE is the root PE.
+  logical :: is_root_pe
+  is_root_pe = .false.
+  if (mpp_pe() == mpp_root_pe()) is_root_pe = .true.
+  return
+end function is_root_pe
 
 end module g_tracer_utils

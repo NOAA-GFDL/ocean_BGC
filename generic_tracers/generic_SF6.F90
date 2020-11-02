@@ -37,6 +37,8 @@ module generic_SF6
   use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL, stdout
   use time_manager_mod, only : time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
+  use fms_mod,          only: open_namelist_file, check_nml_error, close_file
+  use fms_mod,          only: stdout, stdlog, mpp_pe, mpp_root_pe
 
   use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
   use g_tracer_utils, only : g_tracer_add,g_tracer_add_param, g_tracer_set_files
@@ -46,7 +48,7 @@ module generic_SF6
 
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
   use g_tracer_utils, only : register_diag_field=>g_register_diag_field
-  use g_tracer_utils, only : g_send_data
+  use g_tracer_utils, only : g_send_data, is_root_pe
 
   implicit none ; private
 
@@ -61,10 +63,12 @@ module generic_SF6
   public generic_SF6_update_from_source
   public generic_SF6_set_boundary_values
   public generic_SF6_end
+  public as_param_sf6
 
-  !The following logical for using this module is overwritten 
-  ! by generic_tracer_nml namelist
+  !The following variables for using this module
+  ! are overwritten by generic_tracer_nml namelist
   logical, save :: do_generic_SF6 = .false.
+  character(len=10), save :: as_param_SF6   = 'gfdl_cmip6'
 
   real, parameter :: epsln=1.0e-30
   real, parameter :: missing_value1=-1.0e+10
@@ -78,18 +82,12 @@ module generic_SF6
   !nnz: Find out about the timing overhead for using type%x rather than x
 
   type generic_SF6_params
-     real :: d1, d2, d3, d4   ! Coefficients in the calculation of the
-                              ! SF6 solubility, in units of ND, K-1, log(K)^-1, K-2.
-
-     real :: e1, e2, e3       ! More coefficients in the calculation of the 
-                              ! SF6 solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
-
      real :: sA, sB, sC, sD, sE   ! Coefficients in the calculation of SF6
                                   ! Schmidt number, in units of ND, degC-1, degC-2, degC-3.
-    !real :: A1, A2, A3           ! Coefficients in the calculation of SF6
-    !                             ! solubility, in units of ND, K-1, log(K)^-1.
-    !real :: B1, B2, B3           ! More coefficients in the calculation of SF6
-    !                             ! solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+     real :: A1, A2, A3, A4       ! Coefficients in the calculation of SF6
+                                  ! solubility, in units of ND, K-1, log(K)^-1.
+     real :: B1, B2, B3           ! More coefficients in the calculation of SF6
+                                  ! solubility, in units of PSU-1, PSU-1 K-1, PSU-1 K-2.
       real :: Rho_0
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
@@ -231,11 +229,17 @@ contains
     !         for SF6
     !-----------------------------------------------------------------------
     !    g_tracer_add_param(name   , variable   ,  default_value)
-    call g_tracer_add_param('sA', param%sA,  3177.5)
-    call g_tracer_add_param('sB', param%sB, -200.57)
-    call g_tracer_add_param('sC', param%sC,  6.8865)
-    call g_tracer_add_param('sD', param%sD, -0.13335)
-    call g_tracer_add_param('sE', param%sE,  0.0010877)
+    if ((trim(as_param_SF6) == 'W14') .or. (trim(as_param_SF6) == 'gfdl_cmip6')) then
+        call g_tracer_add_param('sA', param%sA,  3177.5)
+        call g_tracer_add_param('sB', param%sB, -200.57)
+        call g_tracer_add_param('sC', param%sC,  6.8865)
+        call g_tracer_add_param('sD', param%sD, -0.13335)
+        call g_tracer_add_param('sE', param%sE,  0.0010877)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_sf6: Using Schmidt number coefficients for W14')
+    else
+        call mpp_error(FATAL,'generic_sf6: Unable to set Schmidt number coefficients for as_param '//trim(as_param_SF6))
+    endif
+
     !-----------------------------------------------------------------------
     !     Solubility coefficients for alpha in mol/l/atm
     !      for SF6
@@ -243,24 +247,27 @@ contains
     !
     ! NOTE: Constants below DO NOT match those in Orr et al. 2017 GMDD
     !-----------------------------------------------------------------------
-    !call g_tracer_add_param('A1', param%A1, -96.5975)
-    !call g_tracer_add_param('A2', param%A2,  139.883)
-    !call g_tracer_add_param('A3', param%A3,  37.8193)
-    !call g_tracer_add_param('B1', param%B1,  0.0310693)
-    !call g_tracer_add_param('B2', param%B2, -0.0356385)
-    !call g_tracer_add_param('B3', param%B3,  0.00743254)
-    !-----------------------------------------------------------------------
-    !     Solubility coefficients for alpha in mol/l/atm
-    !      (1) for CFC11, (2) for CFC12
-    !     after Warner and Weiss (1985) DSR, vol 32 for CFC11 and CFC12
-    !-----------------------------------------------------------------------
-    call g_tracer_add_param('d1', param%d1, -80.0343)
-    call g_tracer_add_param('d2', param%d2,  117.232)
-    call g_tracer_add_param('d3', param%d3,  29.5817)
-    call g_tracer_add_param('d4', param%d4,  0.0)
-    call g_tracer_add_param('e1', param%e1,  0.0335183)
-    call g_tracer_add_param('e2', param%e2, -0.0373942)
-    call g_tracer_add_param('e3', param%e3,  0.00774862)
+    if ((trim(as_param_SF6) == 'W92') .or. (trim(as_param_SF6) == 'gfdl_cmip6')) then
+        call g_tracer_add_param('A1', param%A1, -80.0343)
+        call g_tracer_add_param('A2', param%A2,  117.232)
+        call g_tracer_add_param('A3', param%A3,  29.5817)
+        call g_tracer_add_param('A4', param%A4,  0.0)        ! Not used for W92
+        call g_tracer_add_param('B1', param%B1,  0.0335183)
+        call g_tracer_add_param('B2', param%B2, -0.0373942)
+        call g_tracer_add_param('B3', param%B3,  0.00774862)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_sf6: using solubility coefficients for W92')
+    else if (trim(as_param_SF6) == 'W14') then
+        call g_tracer_add_param('A1', param%A1, -96.5975)
+        call g_tracer_add_param('A2', param%A2,  139.883)
+        call g_tracer_add_param('A3', param%A3,  37.8193)
+        call g_tracer_add_param('A4', param%A4,  0.0)        ! Not used for W92
+        call g_tracer_add_param('B1', param%B1,  0.0310693)
+        call g_tracer_add_param('B2', param%B2, -0.0356385)
+        call g_tracer_add_param('B3', param%B3,  0.00743254)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_sf6: using solubility coefficients for W14')
+    else
+        call mpp_error(FATAL,'Unable to set solubility coefficients for as_param '//trim(as_param_SF6))
+    endif
 
 
     !  Rho_0 is used in the Boussinesq
@@ -284,9 +291,19 @@ contains
   subroutine user_add_tracers(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
 
-
     character(len=fm_string_len), parameter :: sub_name = 'user_add_tracers'
+    real :: as_coeff_SF6
 
+    if ((trim(as_param_SF6) == 'W92') .or. (trim(as_param_SF6) == 'gfdl_cmip6')) then
+        ! Air-sea gas exchange coefficient presented in OCMIP2 protocol.
+        ! Value is 0.337 cm/hr in units of m/s.
+        as_coeff_SF6 = 9.36e-7
+    else if (trim(as_param_SF6) == 'W14') then
+        ! Value is 0.251 cm/hr in units of m/s
+        as_coeff_SF6 = 6.972e-7
+    else
+        call mpp_error(FATAL,'Unable to set wind speed coefficient coefficients for as_param '//trim(as_param_SF6))
+    endif
 
     call g_tracer_start_param_list(package_name)!nnz: Does this append?
     call g_tracer_add_param('ice_restart_file'   , param%ice_restart_file   , 'ice_ocmip_sf6.res.nc')
@@ -317,7 +334,7 @@ contains
          prog = .true.,                                           &
          flux_gas = .true.,                                       &
          flux_gas_type  = 'air_sea_gas_flux_generic',             &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),             &
+         flux_gas_param = (/ as_coeff_sf6, 9.7561e-06 /),         &
          flux_gas_restart_file  = 'ocmip_sf6_airsea_flux.res.nc', &
          standard_name = "mole_concentration_of_sulfur_hexafluoride_in_sea_water", &
          diag_field_units = 'mol m-3', &
@@ -470,29 +487,28 @@ contains
 
        !---------------------------------------------------------------------
        !     Calculate solubilities
-       !       Use Warner and Weiss (1985) DSR, vol 32, final result
-       !       in mol/l/atm (note, atmospheric data may be in 1 part per trillion 1e-12, pptv)
-       !
-       !       Use Bullister and Wisegavger for CCl4
        !---------------------------------------------------------------------
 
-       !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
-       !alpha = conv_fac * grid_tmask(i,j,1) * &
-       !     exp(param%A1 + param%A2/ta + param%A3*log(ta) +&
-       !     sal * (param%B1 + ta * (param%B2 + ta * param%B3))&
-       !     )
+       if ((trim(as_param_sf6) == 'W92') .or. (trim(as_param_sf6) == 'gfdl_cmip6')) then
+           alpha = conv_fac * grid_tmask(i,j,1) * &
+               exp(param%A1 + param%A2/ta + param%A3*log(ta) +&
+               sal * (param%B1 + ta * (param%B2 + ta * param%B3))&
+               )
 
-       alpha = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%d1 + param%d2/ta + param%d3*log(ta) + param%d4*ta*ta +&
-            sal * ((param%e3 * ta + param%e2) * ta + param%e1)&
-            )
+       else if (trim(as_param_sf6) == 'W14') then
+           alpha = conv_fac * grid_tmask(i,j,1) * &
+               exp(param%A1 + param%A2/ta + param%A3*log(ta) + param%A4*ta*ta +&
+               sal * ((param%B3 * ta + param%B2) * ta + param%B1)&
+               )
+       endif
 
        !---------------------------------------------------------------------
        !     Calculate Schmidt numbers
-       !      use coefficients given by Zheng et al (1998), JGR vol 103, C1
        !---------------------------------------------------------------------
-       sc_no(i,j) = param%sA + SST * (param%sB + SST * (param%sC + SST * (param%sD + &
-            SST * param%sE))) * grid_tmask(i,j,1)
+       if ((trim(as_param_sf6) == 'W14') .or. (trim(as_param_sf6) == 'gfdl_cmip6')) then
+           sc_no(i,j) = param%sA + SST * (param%sB + SST * (param%sC + SST * (param%sD + &
+               SST * param%sE))) * grid_tmask(i,j,1)
+       endif
 
        !sc_no_term = sqrt(660.0 / (sc + epsln))
        !
