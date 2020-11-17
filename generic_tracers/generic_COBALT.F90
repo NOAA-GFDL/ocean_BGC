@@ -146,7 +146,7 @@ module generic_COBALT
   use g_tracer_utils, only : g_tracer_get_values  
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
   use g_tracer_utils, only : register_diag_field=>g_register_diag_field
-  use g_tracer_utils, only : g_send_data
+  use g_tracer_utils, only : g_send_data, is_root_pe
 
   use FMS_ocmip2_co2calc_mod, only : FMS_ocmip2_co2calc, CO2_dope_vector
 
@@ -168,9 +168,12 @@ module generic_COBALT
   public generic_COBALT_update_from_bottom
   public generic_COBALT_set_boundary_values
   public generic_COBALT_end
+  public as_param_cobalt
 
-  !The following logical for using this module is overwritten 
+  !The following variables for using this module 
+  ! are overwritten by generic_tracer_nml namelist
   logical, save :: do_generic_COBALT = .false.
+  character(len=10), save :: as_param_cobalt = 'gfdl_cmip6'
 
   real, parameter :: sperd = 24.0 * 3600.0
   real, parameter :: spery = 365.25 * sperd
@@ -646,8 +649,8 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
 
      real    :: htotal_scale_lo, htotal_scale_hi, htotal_in
      real    :: Rho_0, a_0, a_1, a_2, a_3, a_4, a_5, b_0, b_1, b_2, b_3, c_0
-     real    :: a1_co2, a2_co2, a3_co2, a4_co2, a1_o2, a2_o2, a3_o2, a4_o2
-     real    :: sA_co2, sB_co2, sC_co2, sD_co2, sE_co2, sA_o2, sB_o2, sC_o2, sD_o2, sE_o2
+     real    :: a1_co2, a2_co2, a3_co2, a4_co2, a5_co2
+     real    :: a1_o2, a2_o2, a3_o2, a4_o2, a5_o2
 
      logical, dimension(:,:), ALLOCATABLE ::  &
           mask_z_sat_arag,&
@@ -5203,45 +5206,45 @@ write (stdlogunit, generic_COBALT_nml)
     !-----------------------------------------------------------------------
     !     Schmidt number coefficients
     !-----------------------------------------------------------------------
-    !
-    !  Compute the Schmidt number of CO2 in seawater using the 
-    !  formulation presented by Wanninkhof (1992, J. Geophys. Res., 97,
-    !  7373-7382).
-    !  2018/01/17 jgj  update Schmidt numbers for CO2 to 
-    !  Wanninkhof, Limnol. Oceanogr: Methods, 12, 2014, 351-362
-    !-----------------------------------------------------------------------
-    !New Wanninkhof numbers
-    !call g_tracer_add_param('a1_co2', cobalt%a1_co2,  2068.9)
-    !call g_tracer_add_param('a2_co2', cobalt%a2_co2, -118.63)
-    !call g_tracer_add_param('a3_co2', cobalt%a3_co2,  2.9311)
-    !call g_tracer_add_param('a4_co2', cobalt%a4_co2, -0.027)
-    !
-    !New Wanninkhof 2014 numbers
-    call g_tracer_add_param('sA_co2', cobalt%sA_co2,  2116.8)
-    call g_tracer_add_param('sB_co2', cobalt%sB_co2, -136.25)
-    call g_tracer_add_param('sC_co2', cobalt%sC_co2,  4.7353)
-    call g_tracer_add_param('sD_co2', cobalt%sD_co2, -0.092307)
-    call g_tracer_add_param('sE_co2', cobalt%sE_co2,  0.0007555)
-    !---------------------------------------------------------------------
-    !  Compute the Schmidt number of O2 in seawater using the 
-    !  formulation proposed by Keeling et al. (1998, Global Biogeochem.
-    !  Cycles, 12, 141-163).
-    !  2018/01/17 jgj  update Schmidt numbers for O2 to 
-    !  Wanninkhof, Limnol. Oceanogr: Methods, 12, 2014, 351-362
-    !---------------------------------------------------------------------
-    !New Wanninkhof numbers
-    !call g_tracer_add_param('a1_o2', cobalt%a1_o2, 1929.7)
-    !call g_tracer_add_param('a2_o2', cobalt%a2_o2, -117.46)
-    !call g_tracer_add_param('a3_o2', cobalt%a3_o2, 3.116)
-    !call g_tracer_add_param('a4_o2', cobalt%a4_o2, -0.0306)
-    !
-    !New Wanninkhof 2014 numbers
-    call g_tracer_add_param('sA_o2', cobalt%sA_o2, 1920.4)
-    call g_tracer_add_param('sB_o2', cobalt%sB_o2, -135.6)
-    call g_tracer_add_param('sC_o2', cobalt%sC_o2, 5.2122)
-    call g_tracer_add_param('sD_o2', cobalt%sD_o2, -0.10939)
-    call g_tracer_add_param('sE_o2', cobalt%sE_o2,  0.00093777)
-    !
+    if (trim(as_param_cobalt) == 'W92') then
+        !  Compute the Schmidt number of CO2 in seawater using the 
+        !  formulation presented by Wanninkhof (1992, J. Geophys. Res., 97,
+        !  7373-7382).
+        call g_tracer_add_param('a1_co2', cobalt%a1_co2,  2068.9)
+        call g_tracer_add_param('a2_co2', cobalt%a2_co2, -118.63)
+        call g_tracer_add_param('a3_co2', cobalt%a3_co2,  2.9311)
+        call g_tracer_add_param('a4_co2', cobalt%a4_co2, -0.027)
+        call g_tracer_add_param('a5_co2', cobalt%a5_co2,  0.0)     ! Not used for W92
+        !  Compute the Schmidt number of O2 in seawater using the 
+        !  formulation proposed by Keeling et al. (1998, Global Biogeochem.
+        !  Cycles, 12, 141-163).
+        call g_tracer_add_param('a1_o2', cobalt%a1_o2, 1929.7)
+        call g_tracer_add_param('a2_o2', cobalt%a2_o2, -117.46)
+        call g_tracer_add_param('a3_o2', cobalt%a3_o2, 3.116)
+        call g_tracer_add_param('a4_o2', cobalt%a4_o2, -0.0306)
+        call g_tracer_add_param('a5_o2', cobalt%a5_o2, 0.0)       ! Not used for W92
+        if (is_root_pe()) call mpp_error(NOTE,'generic_cobalt: Using Schmidt number coefficients for W92')
+    else if ((trim(as_param_cobalt) == 'W14') .or. (trim(as_param_cobalt) == 'gfdl_cmip6')) then
+        !  Compute the Schmidt number of CO2 in seawater using the 
+        !  formulation presented by Wanninkhof 
+        !  (2014, Limnol. Oceanogr., 12, 351-362)
+        call g_tracer_add_param('a1_co2', cobalt%a1_co2,    2116.8)
+        call g_tracer_add_param('a2_co2', cobalt%a2_co2,   -136.25)
+        call g_tracer_add_param('a3_co2', cobalt%a3_co2,    4.7353)
+        call g_tracer_add_param('a4_co2', cobalt%a4_co2, -0.092307)
+        call g_tracer_add_param('a5_co2', cobalt%a5_co2, 0.0007555)
+        !  Compute the Schmidt number of O2 in seawater using the 
+        !  formulation presented by Wanninkhof 
+        !  (2014, Limnol. Oceanogr., 12, 351-362)
+        call g_tracer_add_param('a1_o2', cobalt%a1_o2, 1920.4)
+        call g_tracer_add_param('a2_o2', cobalt%a2_o2, -135.6)
+        call g_tracer_add_param('a3_o2', cobalt%a3_o2, 5.2122)
+        call g_tracer_add_param('a4_o2', cobalt%a4_o2, -0.10939)
+        call g_tracer_add_param('a5_o2', cobalt%a5_o2, 0.00093777)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_cobalt: Using Schmidt number coefficients for W14')
+    else
+        call mpp_error(FATAL,'generic_cobalt: unable to set Schmidt number coefficients for as_param '//trim(as_param_cobalt))
+    endif
     !-----------------------------------------------------------------------
     ! Stoichiometry
     !-----------------------------------------------------------------------
@@ -5640,9 +5643,17 @@ write (stdlogunit, generic_COBALT_nml)
 
   subroutine user_add_tracers(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
-
-
     character(len=fm_string_len), parameter :: sub_name = 'user_add_tracers'
+    real :: as_coeff_cobalt
+
+    if ((trim(as_param_cobalt) == 'W92') .or. (trim(as_param_cobalt) == 'gfdl_cmip6')) then
+      ! Air-sea gas exchange coefficient presented in OCMIP2 protocol.
+      ! Value is 0.337 cm/hr in units of m/s.
+      as_coeff_cobalt=9.36e-7
+    else
+      ! Value is 0.251 cm/hr in units of m/s
+      as_coeff_cobalt=6.972e-7
+    endif
 
     !
     !Add here only the parameters that are required at the time of registeration 
@@ -5731,7 +5742,7 @@ write (stdlogunit, generic_COBALT_nml)
          flux_gas_name  = 'co2_flux',                                  &
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMCO2,                                      &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
+         flux_gas_param = (/ as_coeff_cobalt, 9.7561e-06 /),           &
          ! Uncomment for "no mass change" check
          ! flux_gas_param = (/ 0.0, 0.0 /),                            &
          flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',   &
@@ -5942,8 +5953,8 @@ write (stdlogunit, generic_COBALT_nml)
          flux_gas_name  = 'o2_flux',                                   &
          flux_gas_type  = 'air_sea_gas_flux_generic',                  &
          flux_gas_molwt = WTMO2,                                       &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),                  &
-         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',    &
+         flux_gas_param = (/ as_coeff_cobalt, 9.7561e-06 /),           &
+         flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc',   &
          flux_bottom= .true.             )
     !
     !    Pdet (Sinking detrital/particulate Phosphorus)
@@ -6075,7 +6086,7 @@ write (stdlogunit, generic_COBALT_nml)
          flux_gas_name  = 'c14o2_flux',                 &
          flux_gas_type  = 'air_sea_gas_flux',           &
          flux_gas_molwt = WTMCO2,                       &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),   &
+         flux_gas_param = (/ as_coeff_cobalt, 9.7561e-06 /),   &
          flux_gas_restart_file  = 'ocean_cobalt_airsea_flux.res.nc', &
          flux_runoff= .true.,                           &
          flux_param     = (/14.e-03  /),                &
@@ -12011,12 +12022,13 @@ write (stdlogunit, generic_COBALT_nml)
        !  2018/01/17 jgj  update Schmidt number for CO2 to use
        !  Wanninkhof, Limnol. Oceanogr: Methods, 12, 2014, 351-362
        !---------------------------------------------------------------------
-       !co2_sc_no(i,j) = cobalt%a1_co2 + ST * (cobalt%a2_co2 + ST * (cobalt%a3_co2 + ST * cobalt%a4_co2)) * &
-       !     grid_tmask(i,j,1)
-       ! 
-       co2_sc_no(i,j) = cobalt%sA_co2 + ST * (cobalt%sB_co2 + ST * (cobalt%sC_co2 + ST * (cobalt%sD_co2 + &
-            ST * cobalt%sE_co2))) * grid_tmask(i,j,1)
-
+       if (trim(as_param_cobalt) == 'W92') then
+         co2_sc_no(i,j) = cobalt%a1_co2 + ST*(cobalt%a2_co2 + ST*(cobalt%a3_co2 + ST*cobalt%a4_co2)) * & 
+                          grid_tmask(i,j,1)
+       else if ((trim(as_param_cobalt) == 'W14') .or. (trim(as_param_cobalt) == 'gfdl_cmip6')) then
+         co2_sc_no(i,j) = cobalt%a1_co2 + ST*(cobalt%a2_co2 + ST*(cobalt%a3_co2 + & 
+                          ST*(cobalt%a4_co2 + ST*cobalt%a5_co2))) * grid_tmask(i,j,1)
+       endif
 !       sc_no_term = sqrt(660.0 / (sc_co2 + epsln))
 !
 !       co2_alpha(i,j) = co2_alpha(i,j)* sc_no_term * cobalt%Rho_0 !nnz: MOM has rho(i,j,1,tau)
@@ -12075,11 +12087,13 @@ write (stdlogunit, generic_COBALT_nml)
        ! In 'ocmip2_generic' atmos_ocean_fluxes.F90 coupler formulation,
        ! the schmidt number is carried in explicitly
        !
-       !o2_sc_no(i,j)  = cobalt%a1_o2  + ST * (cobalt%a2_o2  + ST * (cobalt%a3_o2  + ST * cobalt%a4_o2 )) * &
-       !     grid_tmask(i,j,1)
-
-       o2_sc_no(i,j) = cobalt%sA_o2 + ST * (cobalt%sB_o2 + ST * (cobalt%sC_o2 + ST * (cobalt%sD_o2 + &
-            ST * cobalt%sE_o2))) * grid_tmask(i,j,1)
+       if (trim(as_param_cobalt) == 'W92') then
+         o2_sc_no(i,j)  = cobalt%a1_o2 + ST * (cobalt%a2_o2 + ST * (cobalt%a3_o2 + ST * cobalt%a4_o2 )) * &
+                          grid_tmask(i,j,1)
+       else if ((trim(as_param_cobalt) == 'W14') .or. (trim(as_param_cobalt) == 'gfdl_cmip6')) then
+         o2_sc_no(i,j) = cobalt%a1_o2 + ST*(cobalt%a2_o2 + ST*(cobalt%a3_o2 + &
+                         ST*(cobalt%a4_o2 + ST*cobalt%a5_o2))) * grid_tmask(i,j,1)
+       endif
        !
        !      renormalize the alpha value for atm o2
        !      data table override for o2_flux_pcair_atm is now set to 0.21
