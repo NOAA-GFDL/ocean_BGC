@@ -40,7 +40,7 @@ module FMS_ocmip2_co2calc_mod  !{
 !
 
 use fm_util_mod, only: fm_util_start_namelist, fm_util_end_namelist
-use fms_mod,     only: open_namelist_file, check_nml_error, close_file
+use fms_mod,     only: check_nml_error
 use mpp_mod,     only: input_nml_file, mpp_error, stdout, stdlog, WARNING, FATAL
 use mocsy_vars,  only: vars
 
@@ -98,16 +98,9 @@ subroutine read_mocsy_namelist()
     integer :: ioun, ierr, io_status, stdoutunit, stdlogunit
     stdoutunit=stdout();stdlogunit=stdlog()
 
-#ifdef INTERNAL_FILE_NML
     read (input_nml_file, nml=mocsy_nml, iostat=io_status)
     ierr = check_nml_error(io_status,'mocsy_nml')
-#else
-    ioun = open_namelist_file()
-    read  (ioun, mocsy_nml,iostat=io_status)
-    ierr = check_nml_error(io_status,'mocsy_nml')
-    call close_file (ioun)
-#endif
-    
+
     write (stdoutunit,'(/)')
     write (stdoutunit, mocsy_nml)
     write (stdlogunit, mocsy_nml)
