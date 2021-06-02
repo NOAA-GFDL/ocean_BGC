@@ -8487,7 +8487,7 @@ write (stdlogunit, generic_COBALT_nml)
                     cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
                     cobalt%p_nlgz(i,j,k,tau)))*grid_tmask(i,j,k)
         imbal = (post_totc(i,j,k) - pre_totc(i,j,k))*86400.0/dt*1.03e6
-         if (abs(imbal).gt.1.0e-10) then
+         if (abs(imbal).gt.1.0e-9) then
            call mpp_error(FATAL,&
            '==>biological source/sink imbalance (generic_COBALT_update_from_source): Carbon')
          endif
