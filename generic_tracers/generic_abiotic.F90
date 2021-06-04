@@ -180,7 +180,7 @@ module generic_abiotic
   use data_override_mod, only: data_override
   use field_manager_mod, only: fm_string_len
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist
-  use fms_mod,           only: open_namelist_file, check_nml_error, close_file
+  use fms_mod,           only: check_nml_error
   use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
   use time_manager_mod,  only: time_type
 
@@ -329,15 +329,8 @@ contains
 
     stdoutunit=stdout();stdlogunit=stdlog()
 
-#ifdef INTERNAL_FILE_NML
     read (input_nml_file, nml=generic_abiotic_nml, iostat=io_status)
     ierr = check_nml_error(io_status,'generic_abiotic_nml')
-#else
-    ioun = open_namelist_file()
-    read  (ioun, generic_abiotic_nml,iostat=io_status)
-    ierr = check_nml_error(io_status,'generic_abiotic_nml')
-    call close_file (ioun)
-#endif
     
     write (stdoutunit,'(/)')
     write (stdoutunit, generic_abiotic_nml)
