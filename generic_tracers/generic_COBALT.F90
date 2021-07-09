@@ -6214,6 +6214,9 @@ write (stdlogunit, generic_COBALT_nml)
          longname   = 'Chlorophyll', &
          units      = 'ug kg-1',     &
          prog       = .false.,       &
+         export2atm = .true.,        &
+         export2atm_name = 'export2atm_chl',   &
+         flux_param = (/ 1.0 /),     &
          init_value = 0.08           )
     !
     !       CO3_ion (Carbonate ion)
@@ -12043,6 +12046,9 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:,:,:), ALLOCATABLE :: htotal_field,co3_ion_field
     real, dimension(:,:), ALLOCATABLE :: co2_alpha,co2_csurf,co2_sc_no,o2_alpha,o2_csurf,o2_sc_no,nh3_alpha,nh3_csurf,nh3_sc_no,phos_nh3_exchange
     real, dimension(:,:), ALLOCATABLE :: c14o2_alpha,c14o2_csurf
+    real, dimension(:,:,:,:), pointer :: tr_field
+    real, dimension(:,:), ALLOCATABLE :: g_exported2atm
+    type(g_tracer_type), pointer      :: g_tracer
     real :: pka_nh3,tr,ltr
 
     logical :: phos_nh3_override
@@ -12350,6 +12356,20 @@ write (stdlogunit, generic_COBALT_nml)
        call g_tracer_set_values(tracer_list,'di14c','sc_no',co2_sc_no,isd,jsd)
 
     endif                                                  !RADIOCARBON>>
+
+    !Loop over tracers and for the ones that are registered as "export2atm" set values to be exported to ATM 
+    g_tracer => tracer_list !Local pointer. Do not change the input pointer!
+    do
+       if(g_tracer%export2atm) then
+          call g_tracer_get_pointer(tracer_list,g_tracer%name, 'field', tr_field)     
+          allocate(g_exported2atm(isd:ied, jsd:jed)); g_exported2atm(:,:)=tr_field(:,:,1,tau)* cobalt%Rho_0 / 1e9
+          call g_tracer_set_values(tracer_list,g_tracer%name,  'exported2atm',g_exported2atm,isd,jsd)
+          deallocate(g_exported2atm)
+       endif
+       !traverse the linked list till hit NULL
+       if(.NOT. associated(g_tracer%next)) exit
+       g_tracer => g_tracer%next
+    enddo
 
     deallocate(co2_alpha,co2_csurf,&
          co2_sc_no,o2_alpha,          &
