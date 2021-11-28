@@ -19,7 +19,7 @@ module g_tracer_utils
 #include <fms_platform.h>
 
   use coupler_types_mod, only: coupler_2d_bc_type, ind_flux, ind_deltap, ind_kw
-  use coupler_types_mod, only: ind_alpha, ind_csurf, ind_sc_no
+  use coupler_types_mod, only: ind_alpha, ind_csurf, ind_sc_no, ind_export_value_ice
   use FMS_coupler_util,  only: extract_coupler_values, set_coupler_values
   use atmos_ocean_fluxes_mod, only: aof_set_coupler_flux
   use mpp_mod,           only: mpp_error, NOTE, WARNING, FATAL
@@ -135,12 +135,14 @@ module g_tracer_utils
   !   logical :: flux_wetdep = .false. !Is there a wet deposition?
   !   logical :: flux_drydep = .false. !Is there a dry deposition?
   !   logical :: flux_bottom = .false. !Is there a flux through bottom?
+  !   logical :: export2atm = .false.  !Should the surface value be exported to atm ?
   !
   !   ! Flux identifiers to be set by aof_set_coupler_flux()
   !   integer :: flux_gas_ind    = -1  
   !   integer :: flux_runoff_ind = -1
   !   integer :: flux_wetdep_ind = -1
   !   integer :: flux_drydep_ind = -1
+  !   integer :: export2atm_ind = -1
   !
   !end type g_tracer_type
   !
@@ -168,6 +170,7 @@ module g_tracer_utils
 
      ! Tracer flux names recognized by component models (OCN, LND, ICE, ATM) 
      character(len=fm_string_len) :: flux_gas_name, flux_gas_type, flux_runoff_name, flux_wetdep_name, flux_drydep_name,implementation
+     character(len=fm_string_len) :: export2atm_name
      real, _ALLOCATABLE, dimension(:) :: flux_param, flux_gas_param
 
      ! IN and OUT (restart) files
@@ -215,6 +218,9 @@ module g_tracer_utils
      ! Dry deposition flux of tracer
      real, _ALLOCATABLE, dimension(:,:)    :: drydep _NULL 
 
+     ! Property of tracer to be exported directly to ATM
+     real, _ALLOCATABLE, dimension(:,:)    :: exported2atm _NULL 
+
      ! Tracer saturation, alpha and schmidt number 
      real, _ALLOCATABLE, dimension(:,:)    :: csurf  _NULL 
 
@@ -257,12 +263,13 @@ module g_tracer_utils
      logical :: flux_drydep = .false. !Is there a dry deposition?
      logical :: flux_bottom = .false. !Is there a flux through bottom?
      logical :: has_btm_reservoir = .false. !Is there a flux bottom reservoir?
-
+     logical :: export2atm = .false.  !Is there a surface value to be exported to atmosphere?
      ! Flux identifiers to be set by aof_set_coupler_flux()
      integer :: flux_gas_ind    = -1  
      integer :: flux_runoff_ind = -1
      integer :: flux_wetdep_ind = -1
      integer :: flux_drydep_ind = -1
+     integer :: export2atm_ind = -1
 
      logical :: requires_restart = .true.
      ! Tracer source: filename, type, var name, units, record, gridfile  
@@ -749,7 +756,7 @@ contains
   ! </SUBROUTINE>
 
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
-       flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
+                  flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, export2atm, export2atm_name,&
        flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, &
        flux_gas_type,requires_src_info,standard_name,diag_name,diag_field_units,diag_field_scaling_factor,implementation) 
 
@@ -764,12 +771,14 @@ contains
     logical,            intent(in), optional :: flux_wetdep
     logical,            intent(in), optional :: flux_drydep
     logical,            intent(in), optional :: flux_bottom
+    logical,            intent(in), optional :: export2atm
     logical,            intent(in), optional :: btm_reservoir
     logical,            intent(in), optional :: move_vertical
     logical,            intent(in), optional :: diff_vertical
     real,               intent(in), optional :: flux_gas_molwt
     real, dimension(:), intent(in), optional :: flux_gas_param
     real, dimension(:), intent(in), optional :: flux_param
+    character(len=*),   intent(in), optional :: export2atm_name
     character(len=*),   intent(in), optional :: flux_gas_name
     character(len=*),   intent(in), optional :: implementation
     character(len=*),   intent(in), optional :: flux_gas_type
@@ -910,6 +919,15 @@ contains
        g_tracer%flux_drydep_name=trim("dry_dep_") // trim(g_tracer%alias)
     endif
 
+    if(present(export2atm)) g_tracer%export2atm = export2atm
+    if(g_tracer%export2atm) then
+       if(present(export2atm_name))then
+          g_tracer%export2atm_name=trim(export2atm_name)
+       else
+          g_tracer%export2atm_name=trim("export2atm_") // trim(g_tracer%alias)
+       endif
+    endif
+
     if(present(flux_bottom))  g_tracer%flux_bottom = flux_bottom
 
     if(present(btm_reservoir)) g_tracer%has_btm_reservoir = btm_reservoir
@@ -1007,6 +1025,10 @@ contains
        allocate(g_tracer%drydep(isd:ied,jsd:jed));g_tracer%drydep(:,:) = 0.0 
     endif
 
+    if(g_tracer%export2atm) then
+       allocate(g_tracer%exported2atm(isd:ied,jsd:jed));g_tracer%exported2atm(:,:) = 0. 
+    endif
+
     if(g_tracer%flux_bottom) then
        allocate(g_tracer%btf(isd:ied,jsd:jed));g_tracer%btf(:,:) = 0.0 
     endif
@@ -1022,6 +1044,7 @@ contains
     if(g_tracer%diff_vertical) then
        allocate(g_tracer%vdiff(isd:ied,jsd:jed, nk));g_tracer%vdiff(:,:,:) = 0. 
     endif
+
     !Surface flux %stf exists if one of the following fluxes were requested:
 
     if(g_tracer%flux_gas .or. g_tracer%flux_runoff .or. g_tracer%flux_wetdep .or. g_tracer%flux_drydep) then
@@ -1086,7 +1109,17 @@ contains
             )
     endif
     
-    
+    !The following aof call must match a corresponding call in ATM
+    !(e.g., atmos_tracer_driver module)
+    !for the flux name,type,implementation
+    if(g_tracer%export2atm) then
+       g_tracer%export2atm_ind  = aof_set_coupler_flux(g_tracer%export2atm_name,&
+            flux_type           = 'export_value',                                 &
+            implementation      = 'direct',                                     &
+            param               = g_tracer%flux_param,                          &
+            verbosity           = verbosity                                     &
+            )
+    endif
 
   end subroutine g_tracer_flux_init
 
@@ -1371,6 +1404,17 @@ contains
                )
        endif
 
+       if(_ALLOCATED(g_tracer%exported2atm)) then
+          !This is to export a field directly to ATM component
+          call set_coupler_values(g_tracer%exported2atm,   &
+               BC_struc   = IOB_struc,              &
+               BC_index   = g_tracer%export2atm_ind,  &
+               BC_element = ind_export_value_ice,         &
+               ilb=g_tracer_com%isd, jlb=g_tracer_com%jsd ,&
+               is=g_tracer_com%isc, ie=g_tracer_com%iec,&
+               js=g_tracer_com%jsc, je=g_tracer_com%jec &
+               )
+       endif
        !traverse the linked list till hit NULL
        if(.NOT. associated(g_tracer%next)) exit
        g_tracer => g_tracer%next
@@ -1827,6 +1871,8 @@ contains
        array_ptr => g_tracer%drydep
     case ('wetdep') 
        array_ptr => g_tracer%wetdep
+    case ('exported2atm') 
+       array_ptr => g_tracer%exported2atm
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -1963,6 +2009,8 @@ contains
        array = g_tracer%drydep
     case ('wetdep') 
        array = g_tracer%wetdep
+    case ('exported2atm') 
+       array = g_tracer%exported2atm
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
@@ -2098,6 +2146,8 @@ contains
        g_tracer%drydep = w0*g_tracer%drydep + w1*array
     case ('wetdep')
        g_tracer%wetdep = w0*g_tracer%wetdep + w1*array
+    case ('exported2atm')
+       g_tracer%exported2atm = w0*g_tracer%exported2atm + w1*array
     case default 
        call mpp_error(FATAL, trim(sub_name)//": Not a known member variable: "//trim(member))   
     end select
