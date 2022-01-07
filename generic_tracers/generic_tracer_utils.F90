@@ -268,6 +268,8 @@ module g_tracer_utils
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
      character(len=fm_string_len) :: obc_src_file_name,obc_src_field_name
+     real    :: obc_lfac_in = 1. 
+     real    :: obc_lfac_out= 1.
      logical :: obc_has = .true.
      integer :: src_var_record
      logical :: requires_src_info = .false.
@@ -942,6 +944,8 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_obc_has",g_tracer%obc_has , .true.) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_file_name",g_tracer%obc_src_file_name ,  'obgc_obc.nc') 
     call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_field_name",g_tracer%obc_src_field_name,trim(g_tracer%name)) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_lfac_in" ,g_tracer%obc_lfac_in , 1.0) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_lfac_out",g_tracer%obc_lfac_out, 1.0) 
     
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
@@ -2004,7 +2008,7 @@ contains
     character(len=*),         intent(in) :: name
     character(len=*),         intent(in) :: member
     type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
-    character(len=fm_string_len), intent(out) :: string
+    character(len=*), intent(out) :: string
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_string'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
@@ -3748,11 +3752,12 @@ contains
 
   end subroutine g_tracer_get_src_info
 
-  subroutine g_tracer_get_obc_segment_props(g_tracer_list, name, obc_has, src_file, src_var_name)
+  subroutine g_tracer_get_obc_segment_props(g_tracer_list, name, obc_has, src_file, src_var_name,lfac_in,lfac_out)
     type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
     character(len=*),         intent(in) :: name
     logical,                  intent(out):: obc_has                !<.true. if This tracer has OBC  
     character(len=*),optional,intent(out):: src_file, src_var_name !<OBC source file and variable in file
+    real,            optional,intent(out):: lfac_in,lfac_out       !<OBC reservoir inverse lengthscale factor    
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_obc_segment_props'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
@@ -3764,9 +3769,11 @@ contains
     if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
          ": No tracer in the list with name="//trim(name))
 
-    src_file = g_tracer%obc_src_file_name
-    src_var_name = g_tracer%obc_src_field_name
     obc_has = g_tracer%obc_has
+    if(present(src_file))     src_file = g_tracer%obc_src_file_name
+    if(present(src_var_name)) src_var_name = g_tracer%obc_src_field_name
+    if(present(lfac_in))      lfac_in  = g_tracer%obc_lfac_in
+    if(present(lfac_out))     lfac_out = g_tracer%obc_lfac_out
   end subroutine g_tracer_get_obc_segment_props
 
   function g_register_diag_field(module_name, field_name, axes, init_time,         &
