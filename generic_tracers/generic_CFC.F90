@@ -390,21 +390,6 @@ contains
          standard_name = "mole_concentration_of_cfc11_in_sea_water", &
          diag_field_units = 'mol m-3', &
          diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
-    !fake passive tracers
-    call g_tracer_add(tracer_list,package_name,        &
-         name       = 'gtr1',                        &
-         longname   = 'fake passive tracer1',          &
-         units      = 'NA',                        &
-         prog       = .true.,                          &
-         requires_src_info  = .false.,                 &
-         flux_gas       = .false.)
-    call g_tracer_add(tracer_list,package_name,        &
-         name       = 'gtr2',                        &
-         longname   = 'fake passive tracer2',          &
-         units      = 'NA',                        &
-         prog       = .true.,                          &
-         requires_src_info  = .false.,                 &
-         flux_gas       = .false.)
 
   end subroutine user_add_tracers
 
