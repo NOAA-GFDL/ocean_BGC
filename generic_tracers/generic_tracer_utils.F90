@@ -33,7 +33,7 @@ module g_tracer_utils
 
 #ifdef _USE_MOM6_DIAG
     use MOM_diag_mediator, only : register_diag_field_MOM=>register_diag_field
-    use MOM_diag_mediator, only : post_data_MOM=>post_data, post_data_1d_k
+    use MOM_diag_mediator, only : post_data_MOM=>post_data
     use MOM_diag_mediator, only : g_diag_ctrl=>diag_ctrl
 #else
     use diag_manager_mod, only : register_diag_field_FMS=>register_diag_field
@@ -3885,7 +3885,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_1d_k(diag_field_id, field, diag_CS_ptr)     
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)     
     g_send_data_1d = .TRUE.
 #else
     g_send_data_1d = send_data_FMS(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
@@ -3913,7 +3913,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask)         
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)
     g_send_data_2d = .TRUE.
 #else
     g_send_data_2d = send_data_FMS(diag_field_id, field, time, is_in, js_in, &
@@ -3942,7 +3942,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask) 
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)
     g_send_data_3d = .TRUE.
 #else
     g_send_data_3d = send_data_FMS(diag_field_id, field, time, is_in, js_in, ks_in, &
