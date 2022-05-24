@@ -1011,6 +1011,7 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           runoff_flux_sldop,&
           runoff_flux_srdop,&
           dry_fed, wet_fed,&
+          dry_alk, wet_alk,&
           dry_lith, wet_lith,&
           dry_no3, wet_no3,&
           dry_nh4, wet_nh4,&
@@ -1071,6 +1072,8 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           id_dep_wet_po4   = -1,       &
           id_dep_wet_lith  = -1,       &
           id_dep_dry_lith  = -1,       &
+          id_dep_wet_alk   = -1,       &
+          id_dep_dry_alk   = -1,       &
           id_omega_arag    = -1,       &
           id_omega_calc    = -1,       &
           id_chl           = -1,       &
@@ -2832,6 +2835,14 @@ write (stdlogunit, generic_COBALT_nml)
     !
     !  Save river, depositon and bulk elemental fluxes
     !
+
+    vardesc_temp = vardesc("dep_dry_alk","Dry Deposition of Alkalinity on to the ocean",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_dep_dry_alk = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("dep_wet_alk","Wet Deposition of Alkalinity on to the ocean",'h','1','s','mol m-2 s-1','f')
+    cobalt%id_dep_wet_alk = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
 
     vardesc_temp = vardesc("dep_dry_fed","Dry Deposition of Iron to the ocean",'h','1','s','mol m-2 s-1','f')
     cobalt%id_dep_dry_fed = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
@@ -5879,6 +5890,8 @@ write (stdlogunit, generic_COBALT_nml)
          units      = 'mol/kg',      &
          prog       = .true.,        &
          flux_runoff= .true.,        &
+         flux_wetdep= .true.,        &
+         flux_drydep= .true.,        &
          flux_param = (/ 1.0e-03 /), &
          flux_bottom= .true.         )
     !
@@ -9518,6 +9531,8 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_get_values(tracer_list,'fed','runoff_tracer_flux',cobalt%runoff_flux_fed,isd,jsd)
     call g_tracer_get_values(tracer_list,'fed','drydep',cobalt%dry_fed,isd,jsd)
     call g_tracer_get_values(tracer_list,'fed','wetdep',cobalt%wet_fed,isd,jsd)
+    call g_tracer_get_values(tracer_list,'alk','drydep',cobalt%dry_alk,isd,jsd)
+    call g_tracer_get_values(tracer_list,'alk','wetdep',cobalt%wet_alk,isd,jsd)
     call g_tracer_get_values(tracer_list,'lith','runoff_tracer_flux',cobalt%runoff_flux_lith,isd,jsd)
     call g_tracer_get_values(tracer_list,'lith','drydep',cobalt%dry_lith,isd,jsd)
     call g_tracer_get_values(tracer_list,'lith','wetdep',cobalt%wet_lith,isd,jsd)
@@ -10496,6 +10511,14 @@ write (stdlogunit, generic_COBALT_nml)
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_dep_wet_po4 .gt. 0)     &
        used = g_send_data(cobalt%id_dep_wet_po4, cobalt%wet_po4,                          &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_dep_wet_alk .gt. 0)     &
+       used = g_send_data(cobalt%id_dep_wet_alk, cobalt%wet_alk,                          &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+    if (cobalt%id_dep_dry_alk .gt. 0)     &
+       used = g_send_data(cobalt%id_dep_dry_alk, cobalt%dry_alk,                          &
        model_time, rmask = grid_tmask(:,:,1),&
        is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
     if (cobalt%id_runoff_flux_alk .gt. 0)     &
@@ -13045,6 +13068,8 @@ write (stdlogunit, generic_COBALT_nml)
       allocate(cobalt%runoff_flux_srdop(isd:ied, jsd:jed));    cobalt%runoff_flux_srdop=0.0
       allocate(cobalt%dry_fed(isd:ied, jsd:jed));              cobalt%dry_fed=0.0
       allocate(cobalt%wet_fed(isd:ied, jsd:jed));              cobalt%wet_fed=0.0
+      allocate(cobalt%dry_alk(isd:ied, jsd:jed));              cobalt%dry_alk=0.0
+      allocate(cobalt%wet_alk(isd:ied, jsd:jed));              cobalt%wet_alk=0.0
       allocate(cobalt%dry_lith(isd:ied, jsd:jed));             cobalt%dry_lith=0.0
       allocate(cobalt%wet_lith(isd:ied, jsd:jed));             cobalt%wet_lith=0.0
       allocate(cobalt%dry_no3(isd:ied, jsd:jed));              cobalt%dry_no3=0.0
@@ -13528,6 +13553,8 @@ write (stdlogunit, generic_COBALT_nml)
       deallocate(cobalt%runoff_flux_srdop)
       deallocate(cobalt%dry_fed)
       deallocate(cobalt%wet_fed)
+      deallocate(cobalt%dry_alk)
+      deallocate(cobalt%wet_alk)
       deallocate(cobalt%dry_lith)
       deallocate(cobalt%wet_lith)
       deallocate(cobalt%dry_no3)
