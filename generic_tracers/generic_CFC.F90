@@ -45,8 +45,10 @@ module generic_CFC
   use coupler_types_mod, only: coupler_2d_bc_type
   use field_manager_mod, only: fm_string_len
   use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL, stdout
-  use time_manager_mod, only : time_type
-  use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
+  use time_manager_mod, only: time_type
+  use fm_util_mod,      only: fm_util_start_namelist, fm_util_end_namelist  
+  use fms_mod,          only: open_namelist_file, check_nml_error, close_file
+  use fms_mod,          only: stdout, stdlog, mpp_pe, mpp_root_pe
 
   use g_tracer_utils, only : g_tracer_type,g_tracer_start_param_list,g_tracer_end_param_list
   use g_tracer_utils, only : g_tracer_add,g_tracer_add_param, g_tracer_set_files
@@ -56,7 +58,7 @@ module generic_CFC
 
   use g_tracer_utils, only : g_diag_type, g_diag_field_add
   use g_tracer_utils, only : register_diag_field=>g_register_diag_field
-  use g_tracer_utils, only : g_send_data
+  use g_tracer_utils, only : g_send_data, is_root_pe
 
   implicit none ; private
 
@@ -71,10 +73,12 @@ module generic_CFC
   public generic_CFC_update_from_source
   public generic_CFC_set_boundary_values
   public generic_CFC_end
+  public as_param_cfc
 
-  !The following logical for using this module is overwritten 
-  ! by generic_tracer_nml namelist
+  !The following variables for using this module
+  ! are overwritten by generic_tracer_nml namelist
   logical, save :: do_generic_CFC = .false.
+  character(len=10), save :: as_param_cfc   = 'gfdl_cmip6'
 
   real, parameter :: epsln=1.0e-30
   real, parameter :: missing_value1=-1.0e+10
@@ -88,25 +92,18 @@ module generic_CFC
   !nnz: Find out about the timing overhead for using type%x rather than x
 
   type generic_CFC_params
-     !real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
-     !real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
-     ! units of ND, degC-1, degC-2, degC-3.
-     real :: d1_11, d2_11, d3_11, d4_11   ! Coefficients in the calculation of the
-     real :: d1_12, d2_12, d3_12, d4_12   ! CFC11 and CFC12 solubilities, in units
-                                          ! of ND, K-1, log(K)^-1, K-2.
-     real :: e1_11, e2_11, e3_11          ! More coefficients in the calculation of
-     real :: e1_12, e2_12, e3_12          ! the CFC11 and CFC12 solubilities, in
+     real :: a1_11, a2_11, a3_11, a4_11   ! Coefficients in the calculation of the
+     real :: a1_12, a2_12, a3_12, a4_12   ! CFC11 and CFC12 Schmidt numbers, in
+     
+     real :: b1_11, b2_11, b3_11          ! More coefficients in the calculation of
+     real :: b1_12, b2_12, b3_12          ! the CFC11 and CFC12 solubilities, in
                                           ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
+
      real :: sA_11, sB_11, sC_11, sD_11, sE_11   ! Coefficients in the calculation of the
      real :: sA_12, sB_12, sC_12, sD_12, sE_12   ! CFC11 and CFC12 Schmidt numbers, in
                                                  ! units of ND, degC-1, degC-2, degC-3.
-     !real :: A1_11, A2_11, A3_11                ! Coefficients in the calculation of the
-     !real :: A1_12, A2_12, A3_12                ! CFC11 and CFC12 solubilities, in units
-                                                 ! of ND, K-1, log(K)^-1, K-2.
-     !real :: B1_11, B2_11, B3_11                ! More coefficients in the calculation of
-     !real :: B1_12, B2_12, B3_12                ! the CFC11 and CFC12 solubilities, in
-                                                 ! units of PSU-1, PSU-1 K-1, PSU-1 K-2.
-      real :: Rho_0
+     real :: Rho_0
+
      character(len=fm_string_len) :: ice_restart_file
      character(len=fm_string_len) :: ocean_restart_file,IC_file
   end type generic_CFC_params
@@ -127,11 +124,22 @@ module generic_CFC
 
   type generic_CFC_type
     integer :: &
-      id_fgcfc11      = -1, &
-      id_fgcfc12      = -1
+      id_fgcfc11      = -1,    &
+      id_fgcfc12      = -1,    &
+      id_wc_vert_int_cfc11 = -1, &
+      id_wc_vert_int_cfc12 = -1
+
+    real, dimension(:,:), ALLOCATABLE :: &
+      wc_vert_int_cfc11, &
+      wc_vert_int_cfc12
+
     real, dimension (:,:), pointer :: &
       stf_gas_cfc11, &
       stf_gas_cfc12
+
+    real, dimension(:,:,:,:), pointer :: &
+      p_cfc11, &
+      p_cfc12
 
   end type generic_CFC_type
 
@@ -147,8 +155,6 @@ contains
     !Specify all prognostic and diagnostic tracers of this modules.
     call user_add_tracers(tracer_list)
 
-    
-    
   end subroutine generic_CFC_register
 
   ! <SUBROUTINE NAME="generic_CFC_init">
@@ -178,7 +184,7 @@ contains
     call user_add_params
 
     !Allocate and initiate all the private work arrays used by this module.
-    !    call user_allocate_arrays !None for CFC module currently
+    call user_allocate_arrays
 
   end subroutine generic_CFC_init
 
@@ -217,13 +223,32 @@ contains
          init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1, &
          standard_name="surface_downward_mole_flux_of_cfc12")
 
+    vardesc_temp = vardesc("wc_vert_int_cfc11","Total CFC11 vertical integral",'h','1','s','mol m-2','f')
+    cfc%id_wc_vert_int_cfc11 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
+    vardesc_temp = vardesc("wc_vert_int_cfc12","Total CFC12 vertical integral",'h','1','s','mol m-2','f')
+    cfc%id_wc_vert_int_cfc12 = register_diag_field(package_name, vardesc_temp%name, axes(1:2),&
+         init_time, vardesc_temp%longname,vardesc_temp%units, missing_value = missing_value1)
+
   end subroutine generic_CFC_register_diag
 
 
   subroutine user_allocate_arrays
-    !Allocate all the private arrays.
-    !None for CFC module currently
+    integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,n
+    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau) 
+
+    allocate(cfc%wc_vert_int_cfc11(isd:ied, jsd:jed))  ; cfc%wc_vert_int_cfc11=0.0
+    allocate(cfc%wc_vert_int_cfc12(isd:ied, jsd:jed))  ; cfc%wc_vert_int_cfc12=0.0
+
   end subroutine user_allocate_arrays
+
+  subroutine user_deallocate_arrays
+
+    deallocate(cfc%wc_vert_int_cfc11)
+    deallocate(cfc%wc_vert_int_cfc12)
+
+  end subroutine user_deallocate_arrays
 
   !
   !   This is an internal sub, not a public interface.
@@ -254,66 +279,74 @@ contains
     !         for CFC11 and CFC12
     !-----------------------------------------------------------------------
     !    g_tracer_add_param(name   , variable   ,  default_value)
-    !call g_tracer_add_param('a1_11', param%a1_11,  3501.8)
-    !call g_tracer_add_param('a2_11', param%a2_11, -210.31)
-    !call g_tracer_add_param('a3_11', param%a3_11,  6.1851)
-    !call g_tracer_add_param('a4_11', param%a4_11, -0.07513)
-    !call g_tracer_add_param('a1_12', param%a1_12,  3845.4)
-    !call g_tracer_add_param('a2_12', param%a2_12, -228.95)
-    !call g_tracer_add_param('a3_12', param%a3_12,  6.1908)
-    !call g_tracer_add_param('a4_12', param%a4_12, -0.067430)
-    !-----------------------------------------------------------------------
-    !     Schmidt number coefficients
-    !      Use coefficients given by Wanninkhof (2014), L&O: Methods, 12, 351-362
-    !         for CFC11 and CFC12
-    !-----------------------------------------------------------------------
-    !    g_tracer_add_param(name   , variable   ,  default_value)
-    call g_tracer_add_param('sA_11', param%sA_11,  3579.2)
-    call g_tracer_add_param('sB_11', param%sB_11, -222.63)
-    call g_tracer_add_param('sC_11', param%sC_11,  7.5749)
-    call g_tracer_add_param('sD_11', param%sD_11, -0.14595)
-    call g_tracer_add_param('sE_11', param%sE_11,  0.0011874)
-    call g_tracer_add_param('sA_12', param%sA_12,  3828.1)
-    call g_tracer_add_param('sB_12', param%sB_12, -249.86)
-    call g_tracer_add_param('sC_12', param%sC_12,  8.7603)
-    call g_tracer_add_param('sD_12', param%sD_12, -0.1716)
-    call g_tracer_add_param('sE_12', param%sE_12,  0.001408)
+    if (trim(as_param_cfc) == 'W92') then
+        call g_tracer_add_param('sA_11', param%sA_11,  3501.8)
+        call g_tracer_add_param('sB_11', param%sB_11, -210.31)
+        call g_tracer_add_param('sC_11', param%sC_11,  6.1851)
+        call g_tracer_add_param('sD_11', param%sD_11, -0.07513)
+        call g_tracer_add_param('sE_11', param%sE_11,  0.0)      ! Not used for W92
+        call g_tracer_add_param('sA_12', param%sA_12,  3845.4)
+        call g_tracer_add_param('sB_12', param%sB_12, -228.95)
+        call g_tracer_add_param('sC_12', param%sC_12,  6.1908)
+        call g_tracer_add_param('sD_12', param%sD_12, -0.067430)
+        call g_tracer_add_param('sE_12', param%sE_12,  0.0)      ! Not used for W92
+        if (is_root_pe()) call mpp_error(NOTE,'generic_cfc: using Schmidt number coefficients for W92')
+    else if ((trim(as_param_cfc) == 'W14') .or. (trim(as_param_cfc) == 'gfdl_cmip6')) then 
+        call g_tracer_add_param('sA_11', param%sA_11,  3579.2)
+        call g_tracer_add_param('sB_11', param%sB_11, -222.63)
+        call g_tracer_add_param('sC_11', param%sC_11,  7.5749)
+        call g_tracer_add_param('sD_11', param%sD_11, -0.14595)
+        call g_tracer_add_param('sE_11', param%sE_11,  0.0011874)
+        call g_tracer_add_param('sA_12', param%sA_12,  3828.1)
+        call g_tracer_add_param('sB_12', param%sB_12, -249.86)
+        call g_tracer_add_param('sC_12', param%sC_12,  8.7603)
+        call g_tracer_add_param('sD_12', param%sD_12, -0.1716)
+        call g_tracer_add_param('sE_12', param%sE_12,  0.001408)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_cfc: using Schmidt number coefficients for W14')
+    else
+        call mpp_error(FATAL,'Unable to set Schmidt number coefficients for as_param '//trim(as_param_cfc))
+    endif
+
     !-----------------------------------------------------------------------
     !     Solubility coefficients for alpha in mol/l/atm
     !      (1) for CFC11, (2) for CFC12
     !     after Warner and Weiss (1985) DSR, vol 32 for CFC11 and CFC12
     !-----------------------------------------------------------------------
-    call g_tracer_add_param('d1_11', param%d1_11, -229.9261)
-    call g_tracer_add_param('d2_11', param%d2_11,  319.6552)
-    call g_tracer_add_param('d3_11', param%d3_11,  119.4471)
-    call g_tracer_add_param('d4_11', param%d4_11, -1.39165)
-    call g_tracer_add_param('e1_11', param%e1_11, -0.142382)
-    call g_tracer_add_param('e2_11', param%e2_11,  0.091459)
-    call g_tracer_add_param('e3_11', param%e3_11, -0.0157274)
-    call g_tracer_add_param('d1_12', param%d1_12, -218.0971)
-    call g_tracer_add_param('d2_12', param%d2_12,  298.9702)
-    call g_tracer_add_param('d3_12', param%d3_12,  113.8049)
-    call g_tracer_add_param('d4_12', param%d4_12, -1.39165)
-    call g_tracer_add_param('e1_12', param%e1_12, -0.143566)
-    call g_tracer_add_param('e2_12', param%e2_12,  0.091015)
-    call g_tracer_add_param('e3_12', param%e3_12, -0.0153924)
-    !-----------------------------------------------------------------------
-    !     Solubility coefficients for alpha in mol/l/atm
-    !      (1) for CFC11, (2) for CFC12
-    !     after Wanninkhof (2014), L&O: Methods, 12, 351-362
-    !-----------------------------------------------------------------------
-    !call g_tracer_add_param('A1_11', param%A1_11, -134.1536)
-    !call g_tracer_add_param('A2_11', param%A2_11,  203.2156)
-    !call g_tracer_add_param('A3_11', param%A3_11,  56.2320)
-    !call g_tracer_add_param('B1_11', param%B1_11, -0.144449)
-    !call g_tracer_add_param('B2_11', param%B2_11,  0.092952)
-    !call g_tracer_add_param('B3_11', param%B3_11, -0.0159977)
-    !call g_tracer_add_param('A1_12', param%A1_12, -122.3246)
-    !call g_tracer_add_param('A2_12', param%A2_12,  182.5306)
-    !call g_tracer_add_param('A3_12', param%A3_12,  50.5898)
-    !call g_tracer_add_param('B1_12', param%B1_12, -0.145633)
-    !call g_tracer_add_param('B2_12', param%B2_12,  0.092509)
-    !call g_tracer_add_param('B3_12', param%B3_12, -0.0156627)
+    if ((trim(as_param_cfc) == 'W92') .or. (trim(as_param_cfc) == 'gfdl_cmip6')) then
+        call g_tracer_add_param('A1_11', param%A1_11, -229.9261)
+        call g_tracer_add_param('A2_11', param%A2_11,  319.6552)
+        call g_tracer_add_param('A3_11', param%A3_11,  119.4471)
+        call g_tracer_add_param('A4_11', param%A4_11, -1.39165)
+        call g_tracer_add_param('B1_11', param%B1_11, -0.142382)
+        call g_tracer_add_param('B2_11', param%B2_11,  0.091459)
+        call g_tracer_add_param('B3_11', param%B3_11, -0.0157274)
+        call g_tracer_add_param('A1_12', param%A1_12, -218.0971)
+        call g_tracer_add_param('A2_12', param%A2_12,  298.9702)
+        call g_tracer_add_param('A3_12', param%A3_12,  113.8049)
+        call g_tracer_add_param('A4_12', param%A4_12, -1.39165)
+        call g_tracer_add_param('B1_12', param%B1_12, -0.143566)
+        call g_tracer_add_param('B2_12', param%B2_12,  0.091015)
+        call g_tracer_add_param('B3_12', param%B3_12, -0.0153924)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_cfc: using solubility coefficients for W92')
+    else if (trim(as_param_cfc) == 'W14') then
+        call g_tracer_add_param('A1_11', param%A1_11, -134.1536)
+        call g_tracer_add_param('A2_11', param%A2_11,  203.2156)
+        call g_tracer_add_param('A3_11', param%A3_11,  56.2320)
+        call g_tracer_add_param('A4_11', param%A4_11,  0.0)        ! Not used in W14
+        call g_tracer_add_param('B1_11', param%B1_11, -0.144449)
+        call g_tracer_add_param('B2_11', param%B2_11,  0.092952)
+        call g_tracer_add_param('B3_11', param%B3_11, -0.0159977)
+        call g_tracer_add_param('A1_12', param%A1_12, -122.3246)
+        call g_tracer_add_param('A2_12', param%A2_12,  182.5306)
+        call g_tracer_add_param('A3_12', param%A3_12,  50.5898)
+        call g_tracer_add_param('A4_12', param%A4_12,  0.0)        ! Not used in W14
+        call g_tracer_add_param('B1_12', param%B1_12, -0.145633)
+        call g_tracer_add_param('B2_12', param%B2_12,  0.092509)
+        call g_tracer_add_param('B3_12', param%B3_12, -0.0156627)
+        if (is_root_pe()) call mpp_error(NOTE,'generic_cfc: using solubility coefficients for W14')
+    else
+        call mpp_error(FATAL,'Unable to set solubility coefficients for as_param '//trim(as_param_cfc))
+    endif
 
     !  Rho_0 is used in the Boussinesq
     !  approximation to calculations of pressure and
@@ -325,8 +358,6 @@ contains
     !Block Ends: g_tracer_add_param
     !===========
 
-
-
   end subroutine user_add_params
 
   !
@@ -336,9 +367,19 @@ contains
   subroutine user_add_tracers(tracer_list)
     type(g_tracer_type), pointer :: tracer_list
 
-
     character(len=fm_string_len), parameter :: sub_name = 'user_add_tracers'
+    real :: as_coeff_cfc
 
+    if ((trim(as_param_cfc) == 'W92') .or. (trim(as_param_cfc) == 'gfdl_cmip6')) then
+        ! Air-sea gas exchange coefficient presented in OCMIP2 protocol.
+        ! Value is 0.337 cm/hr in units of m/s.
+        as_coeff_cfc = 9.36e-7
+    else if (trim(as_param_cfc) == 'W14') then
+        ! Value is 0.251 cm/hr in units of m/s
+        as_coeff_cfc = 6.972e-7
+    else
+        call mpp_error(FATAL,'Unable to set wind speed coefficient coefficients for as_param '//trim(as_param_cfc))
+    endif
 
     call g_tracer_start_param_list(package_name)!nnz: Does this append?
     call g_tracer_add_param('ice_restart_file'   , param%ice_restart_file   , 'ice_ocmip2_cfc.res.nc')
@@ -362,35 +403,35 @@ contains
     !diag_tracers: none
     !
     !cfc12
-    call g_tracer_add(tracer_list,package_name,&
-         name       = 'cfc12',               &
-         longname   = 'Moles Per Unit Mass of CFC-12 in sea water',          &
-         units      = 'mol/kg',                        &
-         prog       = .true.,                          &
-         requires_src_info  = .false.,                 &
-         flux_gas       = .true.,                      &
-         flux_gas_type  = 'air_sea_gas_flux_generic',  &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
-         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc', &
+
+    call g_tracer_add(tracer_list,package_name,                      &
+         name       = 'cfc12',                                       &
+         longname   = 'Moles Per Unit Mass of CFC-12 in sea water',  &
+         units      = 'mol/kg',                                      &
+         prog       = .true.,                                        &
+         requires_src_info  = .false.,                               &
+         flux_gas       = .true.,                                    &
+         flux_gas_type  = 'air_sea_gas_flux_generic',                &
+         flux_gas_param = (/ as_coeff_cfc, 9.7561e-06 /),            &
+         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc',   &
          standard_name = "mole_concentration_of_cfc12_in_sea_water", &
-         diag_field_units = 'mol m-3', &
+         diag_field_units = 'mol m-3',                               &
          diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
 
     !cfc11
-    call g_tracer_add(tracer_list,package_name,        &
-         name       = 'cfc11',                        &
-         longname   = 'Moles Per Unit Mass of CFC-11 in sea water',          &
-         units      = 'mol/kg',                        &
-         prog       = .true.,                          &
-         requires_src_info  = .false.,                 &
-         flux_gas       = .true.,                      &
-         flux_gas_type  = 'air_sea_gas_flux_generic',  &
-         flux_gas_param = (/ 9.36e-07, 9.7561e-06 /),  &
-         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc', &
+    call g_tracer_add(tracer_list,package_name,                      &
+         name       = 'cfc11',                                       &
+         longname   = 'Moles Per Unit Mass of CFC-11 in sea water',  &
+         units      = 'mol/kg',                                      &
+         prog       = .true.,                                        &
+         requires_src_info  = .false.,                               &
+         flux_gas       = .true.,                                    &
+         flux_gas_type  = 'air_sea_gas_flux_generic',                &
+         flux_gas_param = (/ as_coeff_cfc, 9.7561e-06 /),            &
+         flux_gas_restart_file  = 'ocmip2_cfc_airsea_flux.res.nc',   &
          standard_name = "mole_concentration_of_cfc11_in_sea_water", &
-         diag_field_units = 'mol m-3', &
+         diag_field_units = 'mol m-3',                               &
          diag_field_scaling_factor = 1035.0)   ! rho = 1035.0 kg/m3, converts mol/kg to mol/m3
-
 
   end subroutine user_add_tracers
 
@@ -440,6 +481,7 @@ contains
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_SF6_update_from_source'
     integer :: isc,iec, jsc,jec,isd,ied,jsd,jed,nk,ntau 
+    integer :: i, j, k
     real, dimension(:,:,:) ,pointer :: grid_tmask
     integer, dimension(:,:),pointer :: mask_coast, grid_kmt
 
@@ -451,6 +493,20 @@ contains
     call g_tracer_get_pointer(tracer_list,'cfc11','stf_gas',cfc%stf_gas_cfc11)
     call g_tracer_get_pointer(tracer_list,'cfc12','stf_gas',cfc%stf_gas_cfc12)
 
+    call g_tracer_get_pointer(tracer_list,'cfc11','field',  cfc%p_cfc11)
+    call g_tracer_get_pointer(tracer_list,'cfc12','field',  cfc%p_cfc12)
+
+    !-- calculate water column vertical integrals
+    do j = jsc, jec ; do i = isc, iec !{
+       cfc%wc_vert_int_cfc11(i,j) = 0.0
+       cfc%wc_vert_int_cfc12(i,j) = 0.0
+    enddo; enddo !} i,j
+
+    do j = jsc, jec ; do i = isc, iec ; do k = 1, nk  !{
+       cfc%wc_vert_int_cfc11(i,j) = cfc%wc_vert_int_cfc11(i,j) + (cfc%p_cfc11(i,j,k,tau) * rho_dzt(i,j,k))
+       cfc%wc_vert_int_cfc12(i,j) = cfc%wc_vert_int_cfc12(i,j) + (cfc%p_cfc12(i,j,k,tau) * rho_dzt(i,j,k))
+    enddo; enddo; enddo  !} i,j,k
+
     if (cfc%id_fgcfc11 .gt. 0)            &
         used = g_send_data(cfc%id_fgcfc11,  cfc%stf_gas_cfc11,   &
         model_time, rmask = grid_tmask(:,:,1),&
@@ -460,6 +516,16 @@ contains
         used = g_send_data(cfc%id_fgcfc12,  cfc%stf_gas_cfc12,   &
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (cfc%id_wc_vert_int_cfc11 .gt. 0)       &
+       used = g_send_data(cfc%id_wc_vert_int_cfc11, cfc%wc_vert_int_cfc11, &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
+
+    if (cfc%id_wc_vert_int_cfc12 .gt. 0)       &
+       used = g_send_data(cfc%id_wc_vert_int_cfc12, cfc%wc_vert_int_cfc12, &
+       model_time, rmask = grid_tmask(:,:,1),&
+       is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
     return
   end subroutine generic_CFC_update_from_source
@@ -555,53 +621,41 @@ contains
        !
        !       Use Bullister and Wisegavger for CCl4
        !---------------------------------------------------------------------
-
-       !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
-       alpha_11 = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%d1_11 + param%d2_11/ta + param%d3_11*log(ta) + param%d4_11*ta*ta +&
-            sal * ((param%e3_11 * ta + param%e2_11) * ta + param%e1_11)&
-            )
-
-       alpha_12 = conv_fac * grid_tmask(i,j,1) * &
-            exp(param%d1_12 + param%d2_12/ta + param%d3_12*log(ta) + param%d4_12*ta*ta +&
-            sal * ((param%e3_12 * ta + param%e2_12) * ta + param%e1_12)&
-            )
-       !---------------------------------------------------------------------
-       !     Calculate solubilities
-       !       Use Warner and Weiss (1985) DSR, vol 32, final result
-       !       in mol/l/atm (note, atmospheric data may be in 1 part per trillion 1e-12, pptv)
-       !
-       !       Use Bullister and Wisegavger for CCl4
-       !---------------------------------------------------------------------
-
-       !nnz: MOM hmask=grid_tmask(i,j,1), GOLD hmask=G%hmask 
-       !alpha_11 = conv_fac * grid_tmask(i,j,1) * &
-       !     exp(param%A1_11 + param%A2_11/ta + param%A3_11*log(ta) +&
-       !     sal * (param%B1_11 + ta * (param%B2_11 + ta * param%B3_11))&
-       !     )
-
-       !alpha_12 = conv_fac * grid_tmask(i,j,1) * &
-       !     exp(param%A1_12 + param%A2_12/ta + param%A3_12*log(ta) +&
-       !     sal * (param%B1_12 + ta * (param%B2_12 + ta * param%B3_12))&
-       !     )
+       if ((trim(as_param_cfc) == 'W92') .or. (trim(as_param_cfc) == 'gfdl_cmip6')) then
+           alpha_11 = conv_fac * grid_tmask(i,j,1) * &
+                exp(param%A1_11 + param%A2_11/ta + param%A3_11*log(ta) + param%A4_11*ta*ta +&
+                sal * ((param%B3_11 * ta + param%B2_11) * ta + param%B1_11)&
+                )
+           alpha_12 = conv_fac * grid_tmask(i,j,1) * &
+                exp(param%A1_12 + param%A2_12/ta + param%A3_12*log(ta) + param%A4_12*ta*ta +&
+                sal * ((param%B3_12 * ta + param%B2_12) * ta + param%B1_12)&
+                )
+       else if (trim(as_param_cfc) == 'W14') then
+           alpha_11 = conv_fac * grid_tmask(i,j,1) * &
+                exp(param%A1_11 + param%A2_11/ta + param%A3_11*log(ta) +&
+                sal * (param%B1_11 + ta * (param%B2_11 + ta * param%B3_11))&
+                )
+           alpha_12 = conv_fac * grid_tmask(i,j,1) * &
+                exp(param%A1_12 + param%A2_12/ta + param%A3_12*log(ta) +&
+                sal * (param%B1_12 + ta * (param%B2_12 + ta * param%B3_12))&
+                )
+       endif
 
        !---------------------------------------------------------------------
        !     Calculate Schmidt numbers
        !      use coefficients given by Zheng et al (1998), JGR vol 103, C1
        !---------------------------------------------------------------------
-       !sc_no_11(i,j) = param%a1_11 + SST * (param%a2_11 + SST * (param%a3_11 + SST * param%a4_11)) * &
-       !     grid_tmask(i,j,1)
-       !sc_no_12(i,j) = param%a1_12 + SST * (param%a2_12 + SST * (param%a3_12 + SST * param%a4_12)) * &
-       !     grid_tmask(i,j,1)
-
-       !---------------------------------------------------------------------
-       !     Calculate Schmidt numbers
-       !      use coefficients given by Zheng et al (1998), JGR vol 103, C1
-       !---------------------------------------------------------------------
-       sc_no_11(i,j) = param%sA_11 + SST * (param%sB_11 + SST * (param%sC_11 + SST * (param%sD_11 + &
-            SST * param%sE_11))) * grid_tmask(i,j,1)
-       sc_no_12(i,j) = param%sA_12 + SST * (param%sB_12 + SST * (param%sC_12 + SST * (param%sD_12 + &
-            SST * param%sE_12))) * grid_tmask(i,j,1)
+       if (trim(as_param_cfc) == 'W92') then
+           sc_no_11(i,j) = param%sA_11 + SST * (param%sB_11 + SST * (param%sC_11 + SST * param%sD_11)) * &
+                grid_tmask(i,j,1)
+           sc_no_12(i,j) = param%sA_12 + SST * (param%sB_12 + SST * (param%sC_12 + SST * param%sD_12)) * &
+                grid_tmask(i,j,1)
+       else if ((trim(as_param_cfc) == 'W14') .or. (trim(as_param_cfc) == 'gfdl_cmip6')) then
+           sc_no_11(i,j) = param%sA_11 + SST * (param%sB_11 + SST * (param%sC_11 + SST * (param%sD_11 + &
+                SST * param%sE_11))) * grid_tmask(i,j,1)
+           sc_no_12(i,j) = param%sA_12 + SST * (param%sB_12 + SST * (param%sC_12 + SST * (param%sD_12 + &
+                SST * param%sE_12))) * grid_tmask(i,j,1)
+       endif
 
        !sc_no_term = sqrt(660.0 / (sc_11 + epsln))
        !
@@ -650,6 +704,8 @@ contains
 
   subroutine generic_CFC_end
     character(len=fm_string_len), parameter :: sub_name = 'generic_CFC_end'
+
+    call user_deallocate_arrays
 
   end subroutine generic_CFC_end
 
