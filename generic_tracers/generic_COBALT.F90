@@ -617,8 +617,9 @@ namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange
           alk_2_n_denit,    &
           n_2_n_denit,      &
           k_no3_denit,      &
-          no3_2_nh4_amx,     &
+          no3_2_nh4_amx,    &
           alk_2_nh4_amx,    &
+          alk_2_nh4_nit,    &
           z_burial,         &
           phi_surfresp_cased, & 
           phi_deepresp_cased, &
@@ -5493,7 +5494,7 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('thetamax_Sm', phyto(SMALL)%thetamax, 0.03)                    ! g Chl g C-1
     call g_tracer_add_param('bresp_Di', phyto(DIAZO)%bresp,0.05/sperd)                     ! sec-1 
     call g_tracer_add_param('bresp_Lg', phyto(LARGE)%bresp,0.05/sperd)                     ! sec-1 
-    call g_tracer_add_param('bresp_Sm', phyto(SMALL)%bresp,0.03/sperd)                     ! sec-1 
+    call g_tracer_add_param('bresp_Sm', phyto(SMALL)%bresp,0.01/sperd)                     ! sec-1 
     call g_tracer_add_param('thetamin', cobalt%thetamin, 0.002)                            ! g Chl g C-1
     call g_tracer_add_param('thetamin_nolim', cobalt%thetamin_nolim, 0.0)                  ! g Chl g C-1
     call g_tracer_add_param('zeta', cobalt%zeta, 0.05)                                     ! dimensionless
@@ -5516,13 +5517,14 @@ write (stdlogunit, generic_COBALT_nml)
     call g_tracer_add_param('c_2_n', cobalt%c_2_n, 106.0 / 16.0)
     call g_tracer_add_param('alk_2_n_denit', cobalt%alk_2_n_denit, 552.0/472.0)             ! eq. alk mol NO3-1
     call g_tracer_add_param('alk_2_nh4_amx', cobalt%alk_2_nh4_amx, 3732.0/8030.0)           ! eq. alk mol NH4-1
+    call g_tracer_add_param('alk_2_nh4_nit', cobalt%alk_2_nh4_nit, 7436.0/3726.0)           ! eq. alk mol NH4-1
     call g_tracer_add_param('p_2_n_static_Di', phyto(DIAZO)%p_2_n_static,1.0/40.0 )         ! mol P mol N-1
     call g_tracer_add_param('p_2_n_static_Lg', phyto(LARGE)%p_2_n_static,1.0/14.0 )         ! mol P mol N-1
     call g_tracer_add_param('p_2_n_static_Sm', phyto(SMALL)%p_2_n_static,1.0/24.0 )         ! mol P mol N-1
     call g_tracer_add_param('si_2_n_static_Lg', phyto(LARGE)%si_2_n_static, 2.0)            ! mol Si mol N-1
     call g_tracer_add_param('si_2_n_max_Lg', phyto(LARGE)%si_2_n_max, 3.0)                  ! mol Si mol N-1
-    call g_tracer_add_param('ca_2_n_arag', cobalt%ca_2_n_arag, 0.050 * 106.0 / 16.0)        ! mol Ca mol N-1
-    call g_tracer_add_param('ca_2_n_calc', cobalt%ca_2_n_calc, 0.015 * 106.0 / 16.0)        ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_arag', cobalt%ca_2_n_arag, 0.040 * 106.0 / 16.0)        ! mol Ca mol N-1
+    call g_tracer_add_param('ca_2_n_calc', cobalt%ca_2_n_calc, 0.014 * 106.0 / 16.0)        ! mol Ca mol N-1
     call g_tracer_add_param('caco3_sat_max', cobalt%caco3_sat_max,10.0)                     ! dimensionless
     !
     !-----------------------------------------------------------------------
@@ -7220,7 +7222,7 @@ write (stdlogunit, generic_COBALT_nml)
        cobalt%jo2resp_wc(i,j,k) = cobalt%jo2resp_wc(i,j,k)+cobalt%juptake_nh4nitrif(i,j,k)*cobalt%o2_2_nitrif
 
        ! bacterial production from nitrifying bacteria
-       bact(1)%jprod_n_nitrif(i,j,k) = min(cobalt%juptake_nh4nitrif(i,j,k)*bact(1)%amx_ge, &
+       bact(1)%jprod_n_nitrif(i,j,k) = min(cobalt%juptake_nh4nitrif(i,j,k)*bact(1)%nitrif_ge, &
                                         0.5*cobalt%f_po4(i,j,k)/(dt*bact(1)%q_p_2_n))
        bact(1)%juptake_po4(i,j,k)=bact(1)%juptake_po4(i,j,k) + &
                bact(1)%jprod_n_nitrif(i,j,k)*bact(1)%q_p_2_n
@@ -8057,9 +8059,14 @@ write (stdlogunit, generic_COBALT_nml)
           if (cobalt%f_ndet_btf(i,j,1) .gt. 0.0) then !{
              ! fpoc_bottom in mmoles C m-2 day-1 for burial relationship
              fpoc_btm = cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*sperd*1000.0
-             !cobalt%frac_burial(i,j) = (0.013 + 0.53*fpoc_btm**2.0)/((7.0+fpoc_btm)**2.0)
-             cobalt%frac_burial(i,j) = 0.013 + 0.53*fpoc_btm**2.0/((7.0+fpoc_btm)**2.0) * &
-                  cobalt%zt(i,j,k) / (cobalt%z_burial + cobalt%zt(i,j,k))
+             cobalt%frac_burial(i,j) = 0.013 + 0.53*fpoc_btm**2.0/((3.5+fpoc_btm)**2.0) * &
+                  cobalt%zt(i,j,k) / (cobalt%z_burial + cobalt%zt(i,j,k))i
+
+             !increase burial below 500m by 4 fold
+             if (cobalt%zt(i,j,k) .gt. 500.0) then !{
+                   cobalt%frac_burial(i,j) = cobalt%frac_burial(i,j)*1.7
+             endif !}
+
              ! uncomment for "no mass change" test
              !cobalt%frac_burial(i,j) = 0.0
              cobalt%fndet_burial(i,j) = cobalt%frac_burial(i,j)*cobalt%f_ndet_btf(i,j,1)
@@ -8602,7 +8609,7 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%alk_2_n_denit*cobalt%jno3denit_wc(i,j,k) - & 
           cobalt%alk_2_nh4_amx*cobalt%juptake_nh4amx(i,j,k) - & 
           phyto(DIAZO)%juptake_nh4(i,j,k) - phyto(LARGE)%juptake_nh4(i,j,k) - &  
-          phyto(SMALL)%juptake_nh4(i,j,k) - 2.0 * cobalt%juptake_nh4nitrif(i,j,k)
+          phyto(SMALL)%juptake_nh4(i,j,k) - cobalt%alk_2_nh4_nit*cobalt%juptake_nh4nitrif(i,j,k)
 	   
        cobalt%p_alk(i,j,k,tau) = cobalt%p_alk(i,j,k,tau) + cobalt%jalk(i,j,k) * dt * grid_tmask(i,j,k)
        !
