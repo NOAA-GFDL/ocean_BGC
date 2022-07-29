@@ -23,7 +23,7 @@ module generic_blres
   use field_manager_mod, only: fm_string_len
   !use mpp_mod, only : mpp_error, NOTE, WARNING, FATAL, stdout
   use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
-  use fms_mod,           only: write_version_number, open_namelist_file, check_nml_error, close_file
+  use fms_mod,           only: write_version_number, check_nml_error
   use time_manager_mod, only : time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  
 
@@ -92,15 +92,8 @@ integer                                                 :: stdoutunit,stdlogunit
 !
 stdoutunit=stdout();stdlogunit=stdlog()
 
-#ifdef INTERNAL_FILE_NML
 read (input_nml_file, nml=generic_blres_nml, iostat=io_status)
 ierr = check_nml_error(io_status,'generic_blres_nml')
-#else
-ioun = open_namelist_file()
-read  (ioun, generic_bling_nml,iostat=io_status)
-ierr = check_nml_error(io_status,'generic_blres_nml')
-call close_file (ioun)
-#endif
 
 write (stdoutunit,'(/)')
 write (stdoutunit, generic_blres_nml)

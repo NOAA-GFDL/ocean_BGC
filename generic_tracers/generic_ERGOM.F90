@@ -34,7 +34,7 @@ module generic_ERGOM
 
   use coupler_types_mod,   only: coupler_2d_bc_type
   use field_manager_mod,   only: fm_string_len
-  use fms_mod,             only: write_version_number, open_namelist_file, close_file, check_nml_error  
+  use fms_mod,             only: write_version_number, check_nml_error
   use mpp_mod,             only: mpp_error, NOTE, WARNING, FATAL, stdout, stdlog, input_nml_file
   use mpp_mod,             only: mpp_clock_id, mpp_clock_begin, mpp_clock_end, CLOCK_ROUTINE
   use time_manager_mod,    only: time_type
@@ -856,13 +856,7 @@ contains
     call write_version_number( version, tagname )
 
     ! provide for namelist over-ride of defaults 
-#ifdef INTERNAL_FILE_NML
     read (input_nml_file, nml=ergom_nml, iostat=io_status)
-#else
-    ioun = open_namelist_file()
-    read  (ioun, ergom_nml,iostat=io_status)
-    call close_file (ioun)
-#endif
     ierr = check_nml_error(io_status,'ergom_nml')
 
     write (stdoutunit,'(/)')

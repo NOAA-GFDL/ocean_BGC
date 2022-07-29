@@ -33,7 +33,7 @@
 
 module generic_tracer
 
-  use fms_mod,           only: open_namelist_file, close_file, check_nml_error  
+  use fms_mod,           only: check_nml_error
   use field_manager_mod, only: fm_string_len
   use mpp_mod, only : input_nml_file, mpp_error, NOTE, WARNING, FATAL, stdout, stdlog
   use time_manager_mod, only : time_type
@@ -159,15 +159,8 @@ contains
 
     stdoutunit=stdout();stdlogunit=stdlog()
     ! provide for namelist over-ride of defaults 
-#ifdef INTERNAL_FILE_NML
-read (input_nml_file, nml=generic_tracer_nml, iostat=io_status)
-ierr = check_nml_error(io_status,'generic_tracer_nml')
-#else
-    ioun = open_namelist_file()
-    read  (ioun, generic_tracer_nml,iostat=io_status)
+    read (input_nml_file, nml=generic_tracer_nml, iostat=io_status)
     ierr = check_nml_error(io_status,'generic_tracer_nml')
-    call close_file (ioun)
-#endif
 
     write (stdoutunit,'(/)')
     write (stdoutunit, generic_tracer_nml)
