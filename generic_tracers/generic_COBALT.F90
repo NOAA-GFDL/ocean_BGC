@@ -8053,7 +8053,7 @@ write (stdlogunit, generic_COBALT_nml)
              ! fpoc_bottom in mmoles C m-2 day-1 for burial relationship
              fpoc_btm = cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*sperd*1000.0
              cobalt%frac_burial(i,j) = 0.013 + 0.53*fpoc_btm**2.0/((3.5+fpoc_btm)**2.0) * &
-                  cobalt%zt(i,j,k) / (cobalt%z_burial + cobalt%zt(i,j,k))i
+                  cobalt%zt(i,j,k) / (cobalt%z_burial + cobalt%zt(i,j,k))
 
              !increase burial below 500m by 4 fold
              if (cobalt%zt(i,j,k) .gt. 500.0) then !{
