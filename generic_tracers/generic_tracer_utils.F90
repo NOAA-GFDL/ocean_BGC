@@ -2004,8 +2004,8 @@ contains
   subroutine g_tracer_get_string(g_tracer_list,name,member,string)
     character(len=*),         intent(in) :: name
     character(len=*),         intent(in) :: member
-    type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
-    character(len=fm_string_len), intent(out) :: string
+    type(g_tracer_type),      pointer    :: g_tracer_list, g_tracer 
+    character(len=*),        intent(out) :: string
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_string'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
