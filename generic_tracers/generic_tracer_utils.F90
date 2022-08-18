@@ -33,7 +33,7 @@ module g_tracer_utils
 
 #ifdef _USE_MOM6_DIAG
     use MOM_diag_mediator, only : register_diag_field_MOM=>register_diag_field
-    use MOM_diag_mediator, only : post_data_MOM=>post_data, post_data_1d_k
+    use MOM_diag_mediator, only : post_data_MOM=>post_data
     use MOM_diag_mediator, only : g_diag_ctrl=>diag_ctrl
 #else
     use diag_manager_mod, only : register_diag_field_FMS=>register_diag_field
@@ -377,6 +377,8 @@ module g_tracer_utils
   public :: g_register_diag_field
   public :: g_send_data
   public :: g_tracer_get_obc_segment_props
+  public :: fm_string_len
+  public :: is_root_pe
   ! <INTERFACE NAME="g_tracer_add_param">
   !  <OVERVIEW>
   !   Add a new parameter for the generic tracer package
@@ -1038,8 +1040,9 @@ contains
     
   end subroutine g_tracer_init
 
-  subroutine g_tracer_flux_init(g_tracer)
+  subroutine g_tracer_flux_init(g_tracer, verbosity)
     type(g_tracer_type), pointer :: g_tracer
+    integer, optional, intent(in) :: verbosity  !< A 0-9 integer indicating a level of verbosity.
 
 
     !===================================================================
@@ -1058,7 +1061,8 @@ contains
             mol_wt            = g_tracer%flux_gas_molwt,                                      &
             param             = g_tracer%flux_gas_param,                                      &
             ice_restart_file  = g_tracer%ice_restart_file,                                    &
-            ocean_restart_file= g_tracer%flux_gas_restart_file                                &
+            ocean_restart_file= g_tracer%flux_gas_restart_file,                               &
+            verbosity         = verbosity                                                     &
             )
     endif
 
@@ -1067,7 +1071,8 @@ contains
             flux_type            = 'land_sea_runoff',                                         &
             implementation       = 'river',                                                   &
             param                = g_tracer%flux_param,                                       &
-            ice_restart_file     = g_tracer%ice_restart_file                                  &
+            ice_restart_file     = g_tracer%ice_restart_file,                                 &
+            verbosity            = verbosity                                                  &
             )
     endif
 
@@ -1076,7 +1081,8 @@ contains
             flux_type            = 'air_sea_deposition',                                      &
             implementation       = 'wet',                                                     &
             param                = g_tracer%flux_param,                                       &
-            ice_restart_file       = g_tracer%ice_restart_file                                &
+            ice_restart_file     = g_tracer%ice_restart_file,                                 &
+            verbosity            = verbosity                                                  &
             )
     endif
 
@@ -1085,7 +1091,8 @@ contains
             flux_type            = 'air_sea_deposition',                                      &
             implementation       = 'dry',                                                     &
             param                = g_tracer%flux_param,                                       &
-            ice_restart_file     = g_tracer%ice_restart_file                                  &
+            ice_restart_file     = g_tracer%ice_restart_file,                                 &
+            verbosity            = verbosity                                                  &
             )
     endif
     
@@ -3579,20 +3586,28 @@ contains
   end subroutine g_diag_field_add
 
 
-  subroutine g_tracer_print_info(g_tracer_list)
-    type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
-    integer               :: num_prog,num_diag
+  subroutine g_tracer_print_info(g_tracer_list, verbosity)
+    type(g_tracer_type),    pointer    :: g_tracer_list ! A pointer to the start of the generic tracer list
+    integer,      optional, intent(in) :: verbosity     ! A 0-9 integer indicating a level of verbosity.
+    type(g_tracer_type),    pointer    :: g_tracer
+    integer :: num_prog, num_diag
+    integer :: verbose
 
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_print_info'
     character(len=256) :: errorstring
 
     if(.NOT. associated(g_tracer_list)) return
 
-    write(errorstring, '(a)')  ': Dumping generic tracer namelists tree: '
-    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+    verbose = 5
+    if (present(verbosity)) verbose = verbosity
 
-    if (.not. fm_dump_list('/ocean_mod/namelists', recursive = .true.)) then
-       call mpp_error(FATAL, trim(sub_name) // ': Problem dumping generic tracer namelists tree')
+    if (verbose >= 5) then
+       write(errorstring, '(a)')  ': Dumping generic tracer namelists tree: '
+       call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+
+       if (.not. fm_dump_list('/ocean_mod/namelists', recursive = .true.)) then
+          call mpp_error(FATAL, trim(sub_name) // ': Problem dumping generic tracer namelists tree')
+       endif
     endif
 
     num_prog = 0
@@ -3713,13 +3728,16 @@ contains
 
     if(errorstring .ne. '') then
        !The following cannot be FATAL for backward compatibility with MOM5 and GOLD
-       call mpp_error(WARNING, trim(sub_name) // ' : there are tracers with required source properties that are not set in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!'  )
+       call mpp_error(WARNING, trim(sub_name) // ' : there are tracers with required source properties that are not set '//&
+                      'in the field_table. Grep the stdout for NOTEs from g_tracer_print_info and correct the field_table!')
     endif
 
-    write(errorstring, '(a,i4)')  ': Number of prognostic generic tracers = ',num_prog
-    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
-    write(errorstring, '(a,i4)')  ': Number of diagnostic generic tracers = ',num_diag
-    call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))     
+    if (verbose >= 3) then
+       write(errorstring, '(a,i4)')  ': Number of prognostic generic tracers = ',num_prog
+       call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))    
+       write(errorstring, '(a,i4)')  ': Number of diagnostic generic tracers = ',num_diag
+       call mpp_error(NOTE, trim(sub_name) //  trim(errorstring))     
+    endif
 
   end subroutine g_tracer_print_info
 
@@ -3901,7 +3919,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_1d_k(diag_field_id, field, diag_CS_ptr)     
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)     
     g_send_data_1d = .TRUE.
 #else
     g_send_data_1d = send_data_FMS(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
@@ -3967,5 +3985,13 @@ contains
 
   END FUNCTION g_send_data_3d
 
+ !> This returns .true. if the current PE is the root PE.
+function is_root_pe()
+  ! This returns .true. if the current PE is the root PE.
+  logical :: is_root_pe
+  is_root_pe = .false.
+  if (mpp_pe() == mpp_root_pe()) is_root_pe = .true.
+  return
+end function is_root_pe
 
 end module g_tracer_utils
