@@ -257,6 +257,7 @@ module g_tracer_utils
      logical :: flux_drydep = .false. !Is there a dry deposition?
      logical :: flux_bottom = .false. !Is there a flux through bottom?
      logical :: has_btm_reservoir = .false. !Is there a flux bottom reservoir?
+     logical :: runoff_added_to_stf = .false. ! Has flux in from runoff been added to stf?
 
      ! Flux identifiers to be set by aof_set_coupler_flux()
      integer :: flux_gas_ind    = -1  
@@ -2089,7 +2090,16 @@ contains
     case ('sc_no')
        g_tracer%sc_no  = w0*g_tracer%sc_no + w1*array
     case ('stf') 
-       g_tracer%stf    = w0*g_tracer%stf + w1*array
+       ! Check for edge case where the new value is a weighted combination of old and new values
+       ! and the old value had runoff added to it later. In this case, the result would be
+       ! invalid if the new value did not also have runoff added to it (which is not known).
+       if (w1 < 1 .and. g_tracer%runoff_added_to_stf) then
+         call mpp_error(FATAL, trim(sub_name)//&
+           ": Cannot set stf to a weighted combination of values with and without runoff.")
+       else     
+         g_tracer%stf    = w0*g_tracer%stf + w1*array 
+         g_tracer%runoff_added_to_stf = .false.
+       endif
     case ('stf_gas') 
        g_tracer%stf_gas= w0*g_tracer%stf_gas + w1*array
     case ('deltap') 
@@ -2234,6 +2244,7 @@ contains
        g_tracer%sc_no     = value 
     case ('stf') 
        g_tracer%stf       = value 
+       g_tracer%runoff_added_to_stf = .false.
     case ('stf_gas') 
        g_tracer%stf_gas   = value 
     case ('deltap') 
