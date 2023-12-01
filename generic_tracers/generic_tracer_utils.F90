@@ -33,7 +33,7 @@ module g_tracer_utils
 
 #ifdef _USE_MOM6_DIAG
     use MOM_diag_mediator, only : register_diag_field_MOM=>register_diag_field
-    use MOM_diag_mediator, only : post_data_MOM=>post_data, post_data_1d_k
+    use MOM_diag_mediator, only : post_data_MOM=>post_data
     use MOM_diag_mediator, only : g_diag_ctrl=>diag_ctrl
 #else
     use diag_manager_mod, only : register_diag_field_FMS=>register_diag_field
@@ -257,6 +257,7 @@ module g_tracer_utils
      logical :: flux_drydep = .false. !Is there a dry deposition?
      logical :: flux_bottom = .false. !Is there a flux through bottom?
      logical :: has_btm_reservoir = .false. !Is there a flux bottom reservoir?
+     logical :: runoff_added_to_stf = .false. ! Has flux in from runoff been added to stf?
 
      ! Flux identifiers to be set by aof_set_coupler_flux()
      integer :: flux_gas_ind    = -1  
@@ -267,6 +268,10 @@ module g_tracer_utils
      logical :: requires_restart = .true.
      ! Tracer source: filename, type, var name, units, record, gridfile  
      character(len=fm_string_len) :: src_file, src_var_name, src_var_unit, src_var_gridspec
+     character(len=fm_string_len) :: obc_src_file_name,obc_src_field_name
+     real    :: obc_lfac_in = 1. 
+     real    :: obc_lfac_out= 1.
+     logical :: obc_has = .true.
      integer :: src_var_record
      logical :: requires_src_info = .false.
      real    :: src_var_unit_conversion = 1.0 !This factor depends on the tracer. Ask  Jasmin
@@ -372,6 +377,7 @@ module g_tracer_utils
   public :: g_tracer_get_src_info
   public :: g_register_diag_field
   public :: g_send_data
+  public :: g_tracer_get_obc_segment_props
   public :: fm_string_len
   public :: is_root_pe
   ! <INTERFACE NAME="g_tracer_add_param">
@@ -938,6 +944,11 @@ contains
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_min",        g_tracer%src_var_valid_min , -99.0) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_valid_max",        g_tracer%src_var_valid_max , +1.0e64) 
     call  g_tracer_add_param(trim(g_tracer%name)//"_requires_restart", g_tracer%requires_restart , .true.) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_has",g_tracer%obc_has , .true.) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_file_name",g_tracer%obc_src_file_name ,  'obgc_obc.nc') 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_src_field_name",g_tracer%obc_src_field_name,trim(g_tracer%name)) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_lfac_in" ,g_tracer%obc_lfac_in , 1.0) 
+    call  g_tracer_add_param(trim(g_tracer%name)//"_obc_lfac_out",g_tracer%obc_lfac_out, 1.0) 
     
     !===================================================================
     !Reversed Linked List implementation! Make this new node to be the head of the list.
@@ -2005,7 +2016,7 @@ contains
     character(len=*),         intent(in) :: name
     character(len=*),         intent(in) :: member
     type(g_tracer_type),    pointer    :: g_tracer_list, g_tracer 
-    character(len=fm_string_len), intent(out) :: string
+    character(len=*), intent(out) :: string
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_string'
 
     if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
@@ -2079,7 +2090,16 @@ contains
     case ('sc_no')
        g_tracer%sc_no  = w0*g_tracer%sc_no + w1*array
     case ('stf') 
-       g_tracer%stf    = w0*g_tracer%stf + w1*array
+       ! Check for edge case where the new value is a weighted combination of old and new values
+       ! and the old value had runoff added to it later. In this case, the result would be
+       ! invalid if the new value did not also have runoff added to it (which is not known).
+       if (w1 < 1 .and. g_tracer%runoff_added_to_stf) then
+         call mpp_error(FATAL, trim(sub_name)//&
+           ": Cannot set stf to a weighted combination of values with and without runoff.")
+       else     
+         g_tracer%stf    = w0*g_tracer%stf + w1*array 
+         g_tracer%runoff_added_to_stf = .false.
+       endif
     case ('stf_gas') 
        g_tracer%stf_gas= w0*g_tracer%stf_gas + w1*array
     case ('deltap') 
@@ -2224,6 +2244,7 @@ contains
        g_tracer%sc_no     = value 
     case ('stf') 
        g_tracer%stf       = value 
+       g_tracer%runoff_added_to_stf = .false.
     case ('stf_gas') 
        g_tracer%stf_gas   = value 
     case ('deltap') 
@@ -3760,6 +3781,30 @@ contains
 
   end subroutine g_tracer_get_src_info
 
+  subroutine g_tracer_get_obc_segment_props(g_tracer_list, name, obc_has, src_file, src_var_name,lfac_in,lfac_out)
+    type(g_tracer_type),      pointer    :: g_tracer_list,g_tracer
+    character(len=*),         intent(in) :: name
+    logical,                  intent(out):: obc_has                !<.true. if This tracer has OBC  
+    character(len=*),optional,intent(out):: src_file, src_var_name !<OBC source file and variable in file
+    real,            optional,intent(out):: lfac_in,lfac_out       !<OBC reservoir inverse lengthscale factor    
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_obc_segment_props'
+
+    if(.NOT. associated(g_tracer_list)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list.")
+
+    g_tracer => g_tracer_list !Local pointer. Do not change the input pointer!
+    !Find the node which has name=name
+    call g_tracer_find(g_tracer,name)
+    if(.NOT. associated(g_tracer)) call mpp_error(FATAL, trim(sub_name)//&
+         ": No tracer in the list with name="//trim(name))
+
+    obc_has = g_tracer%obc_has
+    if(present(src_file))     src_file = g_tracer%obc_src_file_name
+    if(present(src_var_name)) src_var_name = g_tracer%obc_src_field_name
+    if(present(lfac_in))      lfac_in  = g_tracer%obc_lfac_in
+    if(present(lfac_out))     lfac_out = g_tracer%obc_lfac_out
+  end subroutine g_tracer_get_obc_segment_props
+
   function g_register_diag_field(module_name, field_name, axes, init_time,         &
        long_name, units, missing_value, range, mask_variant, standard_name,      &
        verbose, do_not_log, err_msg, interp_method, tile_count, cmor_field_name, &
@@ -3885,7 +3930,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_1d_k(diag_field_id, field, diag_CS_ptr)     
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)     
     g_send_data_1d = .TRUE.
 #else
     g_send_data_1d = send_data_FMS(diag_field_id, field, time, is_in, mask, rmask, ie_in, weight, err_msg)
