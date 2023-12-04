@@ -202,6 +202,7 @@ module generic_COBALT
   real    :: irr_inhibit = 10.
   real    :: gamma_nitrif= 3.5e6 !month(-1)
   real    :: k_nh3_nitrif= 3.1e-9 !mol/kg
+  real    :: imbalance_tolerance=1.0e-9 !the tolerance for non-conservation in C,N,P,Sc,Fe
 
   integer :: scheme_no3_nh4_lim = 2 !1-Frost and Franzen (1992)
                                     !2-O'Neill
@@ -212,8 +213,7 @@ module generic_COBALT
 
 namelist /generic_COBALT_nml/ do_14c, co2_calc, debug, do_nh3_atm_ocean_exchange, scheme_nitrif, &
      k_nh4_small,k_nh4_large,k_nh4_diazo,scheme_no3_nh4_lim,k_no3_small,k_no3_large,k_no3_diazo, &
-     o2_min_nit,k_o2_nit,irr_inhibit,k_nh3_nitrif, &
-     gamma_nitrif
+     o2_min_nit,k_o2_nit,irr_inhibit,k_nh3_nitrif,gamma_nitrif,imbalance_tolerance
 
   ! Declare phytoplankton, zooplankton and cobalt variable types, which contain
   ! the vast majority of all variables used in this module. 
@@ -8819,7 +8819,7 @@ write (stdlogunit, generic_COBALT_nml)
                     cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
                     cobalt%p_nlgz(i,j,k,tau))*grid_tmask(i,j,k)
          imbal = (post_totn(i,j,k) - pre_totn(i,j,k) - net_srcn(i,j,k))*86400.0/dt*1.03e6
-         if (abs(imbal).gt.1.0e-9) then
+         if (abs(imbal).gt.imbalance_tolerance) then
            call mpp_error(FATAL,&
            '==>biological source/sink imbalance (generic_COBALT_update_from_source): Nitrogen')
          endif
@@ -8833,7 +8833,7 @@ write (stdlogunit, generic_COBALT_nml)
                     cobalt%p_nsmz(i,j,k,tau) + cobalt%p_nmdz(i,j,k,tau) + &
                     cobalt%p_nlgz(i,j,k,tau)))*grid_tmask(i,j,k)
         imbal = (post_totc(i,j,k) - pre_totc(i,j,k))*86400.0/dt*1.03e6
-         if (abs(imbal).gt.1.0e-9) then
+         if (abs(imbal).gt.imbalance_tolerance) then
            call mpp_error(FATAL,&
            '==>biological source/sink imbalance (generic_COBALT_update_from_source): Carbon')
          endif
@@ -8848,7 +8848,7 @@ write (stdlogunit, generic_COBALT_nml)
                     cobalt%p_nlgz(i,j,k,tau)*zoo(3)%q_p_2_n + &
                     bact(1)%q_p_2_n*cobalt%p_nbact(i,j,k,tau))*grid_tmask(i,j,k)
          imbal = (post_totp(i,j,k) - pre_totp(i,j,k) - net_srcp(i,j,k))*86400.0/dt*1.03e6
-         if (abs(imbal).gt.1.0e-9) then
+         if (abs(imbal).gt.imbalance_tolerance) then
            call mpp_error(FATAL,&
            '==>biological source/sink imbalance (generic_COBALT_update_from_source): Phosphorus')
          endif
@@ -8857,7 +8857,7 @@ write (stdlogunit, generic_COBALT_nml)
                     cobalt%p_felg(i,j,k,tau) + cobalt%p_fesm(i,j,k,tau) + &
                     cobalt%p_fedet(i,j,k,tau))*grid_tmask(i,j,k)
          imbal = (post_totfe(i,j,k) - pre_totfe(i,j,k) - net_srcfe(i,j,k))*86400.0/dt*1.03e6
-         if (abs(imbal).gt.1.0e-9) then
+         if (abs(imbal).gt.imbalance_tolerance) then
            call mpp_error(FATAL,&
            '==>biological source/sink imbalance (generic_COBALT_update_from_source): Iron')
          endif
@@ -8865,7 +8865,7 @@ write (stdlogunit, generic_COBALT_nml)
          post_totsi(i,j,k) = (cobalt%p_sio4(i,j,k,tau) + cobalt%p_silg(i,j,k,tau) + &
                     cobalt%p_sidet(i,j,k,tau))*grid_tmask(i,j,k)
          imbal = (post_totsi(i,j,k) - pre_totsi(i,j,k))*86400.0/dt*1.03e6
-         if (abs(imbal).gt.1.0e-9) then
+         if (abs(imbal).gt.imbalance_tolerance) then
            call mpp_error(FATAL,&
            '==>biological source/sink imbalance (generic_COBALT_update_from_source): Silica')
          endif
