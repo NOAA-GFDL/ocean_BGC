@@ -9509,13 +9509,13 @@ write (stdlogunit, generic_COBALT_nml)
              do n = 1,NUM_PHYTO
                 phyto(n)%nlim_bw_100(i,j) = phyto(n)%nlim_bw_100(i,j) + & 
                    (phyto(n)%no3lim(i,j,k)+phyto(n)%nh4lim(i,j,k))* &
-                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/(phyto(n)%f_n_100(i,j)+epsln)
                 phyto(n)%plim_bw_100(i,j) = phyto(n)%plim_bw_100(i,j) + phyto(n)%po4lim(i,j,k)* &
-                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/(phyto(n)%f_n_100(i,j)+epsln)
                 phyto(n)%def_fe_bw_100(i,j) = phyto(n)%def_fe_bw_100(i,j) + phyto(n)%def_fe(i,j,k)* &
-                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/(phyto(n)%f_n_100(i,j)+epsln)
                 phyto(n)%irrlim_bw_100(i,j) = phyto(n)%irrlim_bw_100(i,j) + phyto(n)%irrlim(i,j,k)* &
-                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/phyto(n)%f_n_100(i,j)
+                   phyto(n)%f_n(i,j,k)*rho_dzt(i,j,k)/(phyto(n)%f_n_100(i,j)+epsln)
              enddo
           endif
        enddo  !} k
@@ -9525,13 +9525,13 @@ write (stdlogunit, generic_COBALT_nml)
           do n = 1,NUM_PHYTO
              phyto(n)%nlim_bw_100(i,j) = phyto(n)%nlim_bw_100(i,j) + &
                 (phyto(n)%no3lim(i,j,k_100)+phyto(n)%nh4lim(i,j,k_100))* &
-                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/(phyto(n)%f_n_100(i,j)+epsln)
              phyto(n)%plim_bw_100(i,j) = phyto(n)%plim_bw_100(i,j) + phyto(n)%po4lim(i,j,k_100)* &
-                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/(phyto(n)%f_n_100(i,j)+epsln)
              phyto(n)%def_fe_bw_100(i,j) = phyto(n)%def_fe_bw_100(i,j) + phyto(n)%def_fe(i,j,k_100)* &
-                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/(phyto(n)%f_n_100(i,j)+epsln)
              phyto(n)%irrlim_bw_100(i,j) = phyto(n)%irrlim_bw_100(i,j) + phyto(n)%irrlim(i,j,k_100)* &
-                phyto(n)%f_n(i,j,k_100)*drho_dzt/phyto(n)%f_n_100(i,j)
+                phyto(n)%f_n(i,j,k_100)*drho_dzt/(phyto(n)%f_n_100(i,j)+epsln)
           enddo
         endif
     enddo; enddo  !} i, j
