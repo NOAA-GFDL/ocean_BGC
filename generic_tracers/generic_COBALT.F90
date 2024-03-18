@@ -9698,10 +9698,23 @@ write (stdlogunit, generic_COBALT_nml)
     end if
     if (allocated(pka_nh3)) deallocate(pka_nh3)
     deallocate(phos_nh3_exchange)
-!
-!---------------------------------------------------------------------
-!
+
+    !Send cobalt diagnostics
+    call cobalt_send_diagnostics(model_time,grid_tmask,Temp,rho_dzt,dzt,isc,iec,jsc,jec,nk,tau)
+
+    call mpp_clock_end(id_clock_cobalt_send_diagnostics)
+
+  end subroutine generic_COBALT_update_from_source
+
 ! Send phytoplankton diagnostic data
+  subroutine cobalt_send_diagnostics(model_time,grid_tmask,Temp,rho_dzt,dzt,&
+                                     isc,iec,jsc,jec,nk,tau)
+    type(time_type),  intent(in) :: model_time
+    real, dimension(:,:,:) ,pointer :: grid_tmask
+    real, dimension(isc:,jsc:,:),   intent(in) :: Temp,rho_dzt,dzt
+    integer,          intent(in) :: isc,iec,jsc,jec,nk,tau
+    integer :: n
+    logical :: used
 
     do n= 1, NUM_PHYTO
        if (phyto(n)%id_def_fe .gt. 0)          &
@@ -12322,11 +12335,8 @@ write (stdlogunit, generic_COBALT_nml)
         model_time, rmask = grid_tmask(:,:,1),&
         is_in=isc, js_in=jsc, ie_in=iec, je_in=jec)
 
-!==============================================================================================================
+  end subroutine cobalt_send_diagnostics
 
-    call mpp_clock_end(id_clock_cobalt_send_diagnostics)
-
-  end subroutine generic_COBALT_update_from_source
 
 
   ! <SUBROUTINE NAME="generic_COBALT_set_boundary_values">
