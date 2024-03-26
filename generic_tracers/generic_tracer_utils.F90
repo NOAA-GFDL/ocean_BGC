@@ -3958,7 +3958,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask)         
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)
     g_send_data_2d = .TRUE.
 #else
     g_send_data_2d = send_data_FMS(diag_field_id, field, time, is_in, js_in, &
@@ -3987,7 +3987,7 @@ contains
     else
        call g_tracer_get_diagCS(diag_CS_ptr)
     endif
-    call post_data_MOM(diag_field_id, field, diag_CS_ptr)!, mask=rmask) 
+    call post_data_MOM(diag_field_id, field, diag_CS_ptr)
     g_send_data_3d = .TRUE.
 #else
     g_send_data_3d = send_data_FMS(diag_field_id, field, time, is_in, js_in, ks_in, &
