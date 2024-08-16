@@ -105,6 +105,11 @@ module generic_tracer
   use generic_COBALT,  only : generic_COBALT_set_boundary_values, generic_COBALT_end, do_generic_COBALT
   use generic_COBALT, only : as_param_cobalt
 
+  use generic_WOMBATlite, only : generic_WOMBATlite_register
+  use generic_WOMBATlite, only : generic_WOMBATlite_init, generic_WOMBATlite_update_from_source, generic_WOMBATlite_register_diag
+  use generic_WOMBATlite, only : generic_WOMBATlite_update_from_bottom, generic_WOMBATlite_update_from_coupler
+  use generic_WOMBATlite, only : generic_WOMBATlite_set_boundary_values, generic_WOMBATlite_end, do_generic_WOMBATlite
+
   implicit none ; private
 
   character(len=fm_string_len), parameter :: mod_name       = 'generic_tracer'
@@ -116,6 +121,7 @@ module generic_tracer
   public generic_tracer_source
   public generic_tracer_diag
   public generic_tracer_update_from_bottom
+  public generic_tracer_update_from_coupler
   public generic_tracer_coupler_get
   public generic_tracer_coupler_set
   public generic_tracer_coupler_zero
@@ -142,7 +148,7 @@ module generic_tracer
 
   namelist /generic_tracer_nml/ do_generic_tracer, do_generic_abiotic, do_generic_age, do_generic_argon, do_generic_CFC, &
       do_generic_SF6, do_generic_TOPAZ,do_generic_ERGOM, do_generic_BLING, do_generic_miniBLING, do_generic_COBALT, &
-      force_update_fluxes, do_generic_blres, as_param
+      do_generic_WOMBATlite, force_update_fluxes, do_generic_blres, as_param
 
 contains
 
@@ -209,6 +215,9 @@ contains
 
     if(do_generic_COBALT) &
          call generic_COBALT_register(tracer_list)
+
+    if(do_generic_WOMBATlite) &
+         call generic_WOMBATlite_register(tracer_list)
     
     call g_tracer_print_info(tracer_list, verbosity)
 
@@ -259,7 +268,8 @@ contains
     !Allocate and initialize all registered generic tracers
     !JGJ 2013/05/31  merged COBALT into siena_201303
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_WOMBATlite &
+       .or. do_generic_blres) then
        g_tracer => tracer_list        
        !Go through the list of tracers 
        do  
@@ -307,6 +317,9 @@ contains
     if(do_generic_COBALT) &
          call generic_COBALT_init(tracer_list, force_update_fluxes)
 
+    if(do_generic_WOMBATlite) &
+         call generic_WOMBATlite_init(tracer_list, force_update_fluxes)
+
   end subroutine generic_tracer_init
 
   subroutine generic_tracer_register_diag
@@ -317,7 +330,8 @@ contains
     !JGJ 2013/05/31  merged COBALT into siena_201303
 
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_WOMBATlite &
+       .or. do_generic_blres) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -349,6 +363,8 @@ contains
     if(do_generic_SF6) call generic_SF6_register_diag(diag_list)
     
     if(do_generic_CFC) call generic_CFC_register_diag(diag_list)
+
+    if(do_generic_WOMBATlite)  call generic_WOMBATlite_register_diag(diag_list)
 
   end subroutine generic_tracer_register_diag
 
@@ -559,6 +575,10 @@ contains
     if(do_generic_CFC)  call generic_CFC_update_from_source(tracer_list,rho_dzt,dzt,hblt_depth,&
          ilb,jlb,tau,dtts,grid_dat,model_time)
 
+    if(do_generic_WOMBATlite)  call generic_WOMBATlite_update_from_source(tracer_list,Temp,Salt,rho_dzt,dzt,&
+         hblt_depth,ilb,jlb,tau,dtts,grid_dat,model_time,&
+         nbands,max_wavelength_band,sw_pen_band,opacity_band)
+
     return
 
   end subroutine generic_tracer_source
@@ -608,9 +628,60 @@ contains
 
     if(do_generic_COBALT)  call generic_COBALT_update_from_bottom(tracer_list,dt, tau, model_time)
 
+    if(do_generic_WOMBATlite)  call generic_WOMBATlite_update_from_bottom(tracer_list,dt, tau, model_time)
+
     return
 
   end subroutine generic_tracer_update_from_bottom
+
+  ! <SUBROUTINE NAME="generic_tracer_update_from_coupler">
+  !  <OVERVIEW>
+  !   Modify the values obtained from the coupler
+  !  </OVERVIEW>
+  !  <DESCRIPTION>
+  !   Calls the corresponding generic_X_update_from_coupler routine for each package X.
+  !  </DESCRIPTION>
+  !  <TEMPLATE>
+  !   call generic_tracer_update_from_coupler(ilb, jlb, salt_flux_added)
+  !  </TEMPLATE>
+  !  <IN NAME="ilb,jlb" TYPE="integer">
+  !   Lower bounds of x and y extents of input arrays on data domain
+  !  </IN>
+  !  <IN NAME="salt_flux_added" TYPE="real, dimension(ilb:,jlb:)">
+  !   Surface salt flux into ocean from restoring or flux adjustment [g/m^2/sec]
+  !  </IN>
+  ! </SUBROUTINE>
+
+  subroutine generic_tracer_update_from_coupler(ilb, jlb, salt_flux_added)
+    integer,                     intent(in) :: ilb, jlb
+    real, dimension(ilb:,jlb:),  intent(in) :: salt_flux_added
+
+    character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_coupler'
+
+    !Specific tracers
+    !    if(do_generic_blres)  call generic_age_update_from_coupler(tracer_list) !Nothing to do for mixed layer tracer
+
+    !    if(do_generic_age)    call generic_blres_update_from_coupler(tracer_list) !Nothing to do for age
+
+    !    if(do_generic_argon)    call generic_argon_update_from_coupler(tracer_list) !Nothing to do for argon
+
+    !    if(do_generic_CFC)    call generic_CFC_update_from_coupler(tracer_list) !Nothing to do for CFC
+
+    !    if(do_generic_SF6)    call generic_SF6_update_from_coupler(tracer_list) !Nothing to do for SF6
+
+    if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_coupler(tracer_list)
+
+    if(do_generic_BLING)  call generic_BLING_update_from_coupler(tracer_list)
+
+    if(do_generic_miniBLING)  call generic_miniBLING_update_from_coupler(tracer_list)
+
+    if(do_generic_COBALT)  call generic_COBALT_update_from_coupler(tracer_list)
+
+    if(do_generic_WOMBATlite)  call generic_WOMBATlite_update_from_coupler(tracer_list, ilb, jlb, salt_flux_added)
+
+    return
+
+   end subroutine generic_tracer_update_from_coupler
 
 
   ! <SUBROUTINE NAME="generic_tracer_vertdiff_G">
@@ -638,7 +709,8 @@ contains
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
+       .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_WOMBATlite &
+       .or. do_generic_blres) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -679,7 +751,8 @@ contains
     !nnz: Should I loop here or inside the sub g_tracer_vertdiff ?    
     !JGJ 2013/05/31  merged COBALT into siena_201303
     if(do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_TOPAZ .or. do_generic_ERGOM &
-       .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) then
+       .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_WOMBATlite &
+       .or. do_generic_blres) then
 
        g_tracer => tracer_list        
        !Go through the list of tracers 
@@ -778,13 +851,17 @@ contains
     if(do_generic_COBALT) &
          call generic_COBALT_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau,dzt,model_time)
 
+    if(do_generic_WOMBATlite) &
+         call generic_WOMBATlite_set_boundary_values(tracer_list,ST,SS,rho,ilb,jlb,tau,dzt)
+
     !
     !Set coupler fluxes from tracer boundary values (%alpha and %csurf)
     !for each tracer in the tracer_list that has been marked by the user routine above
     !JGJ 2013/05/31  merged COBALT into siena_201303
     !
     if(do_generic_abiotic .or. do_generic_age .or. do_generic_argon .or. do_generic_CFC .or. do_generic_SF6 .or. do_generic_TOPAZ &
-      .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_blres) &
+      .or. do_generic_ERGOM .or. do_generic_BLING .or. do_generic_miniBLING .or. do_generic_COBALT .or. do_generic_WOMBATlite &
+      .or. do_generic_blres) &
        call g_tracer_coupler_set(tracer_list,IOB_struc)
 
   end subroutine generic_tracer_coupler_set
@@ -830,6 +907,7 @@ contains
     if(do_generic_BLING)  call generic_BLING_end
     if(do_generic_miniBLING)  call generic_miniBLING_end
     if(do_generic_COBALT)  call generic_COBALT_end
+    if(do_generic_WOMBATlite)  call generic_WOMBATlite_end
 
   end subroutine generic_tracer_end
 

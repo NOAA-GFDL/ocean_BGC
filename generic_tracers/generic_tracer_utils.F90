@@ -135,6 +135,7 @@ module g_tracer_utils
   !   logical :: flux_wetdep = .false. !Is there a wet deposition?
   !   logical :: flux_drydep = .false. !Is there a dry deposition?
   !   logical :: flux_bottom = .false. !Is there a flux through bottom?
+  !   logical :: flux_virtual = .false. !Is there a virtual flux to be applid to the surface flux?
   !
   !   ! Flux identifiers to be set by aof_set_coupler_flux()
   !   integer :: flux_gas_ind    = -1  
@@ -256,6 +257,7 @@ module g_tracer_utils
      logical :: flux_wetdep = .false. !Is there a wet deposition?
      logical :: flux_drydep = .false. !Is there a dry deposition?
      logical :: flux_bottom = .false. !Is there a flux through bottom?
+     logical :: flux_virtual = .false. !Is there a virtual flux to be applid to the surface flux?
      logical :: has_btm_reservoir = .false. !Is there a flux bottom reservoir?
      logical :: runoff_added_to_stf = .false. ! Has flux in from runoff been added to stf?
 
@@ -724,6 +726,9 @@ contains
   !  <IN NAME="flux_bottom" TYPE="logical">
   !   .true. if there is bottom flux.
   !  </IN>
+  !  <IN NAME="flux_virtual" TYPE="logical">
+  !   .true. to ensure that stf is allocated so that a surface virtual flux can be applied
+  !  </IN>
   !  <IN NAME="btm_reservoir" TYPE="logical">
   !   .true. if there is bottom reservoir.
   !  </IN>
@@ -757,7 +762,8 @@ contains
   subroutine g_tracer_add(node_ptr, package, name, longname, units,  prog, const_init_value,init_value,&
        flux_gas, flux_gas_name, flux_runoff, flux_wetdep, flux_drydep, flux_gas_molwt, flux_gas_param, &
        flux_param, flux_bottom, btm_reservoir, move_vertical, diff_vertical, sink_rate, flux_gas_restart_file, &
-       flux_gas_type,requires_src_info,standard_name,diag_name,diag_field_units,diag_field_scaling_factor,implementation) 
+       flux_gas_type,requires_src_info,standard_name,diag_name,diag_field_units,diag_field_scaling_factor, &
+       implementation, flux_virtual)
 
     type(g_tracer_type), pointer :: node_ptr 
     character(len=*),   intent(in) :: package,name,longname,units
@@ -770,6 +776,7 @@ contains
     logical,            intent(in), optional :: flux_wetdep
     logical,            intent(in), optional :: flux_drydep
     logical,            intent(in), optional :: flux_bottom
+    logical,            intent(in), optional :: flux_virtual
     logical,            intent(in), optional :: btm_reservoir
     logical,            intent(in), optional :: move_vertical
     logical,            intent(in), optional :: diff_vertical
@@ -918,6 +925,8 @@ contains
 
     if(present(flux_bottom))  g_tracer%flux_bottom = flux_bottom
 
+    if(present(flux_virtual))  g_tracer%flux_virtual = flux_virtual
+
     if(present(btm_reservoir)) g_tracer%has_btm_reservoir = btm_reservoir
 
     if(present(move_vertical)) g_tracer%move_vertical = move_vertical
@@ -932,7 +941,8 @@ contains
        g_tracer%requires_src_info = requires_src_info 
     elseif(trim(g_tracer%package_name) .eq. 'generic_cobalt' .or. &
            trim(g_tracer%package_name) .eq. 'generic_abiotic' .or. &
-           trim(g_tracer%package_name) .eq. 'generic_bling') then !Niki: later we can make this just else
+           trim(g_tracer%package_name) .eq. 'generic_bling' .or. &
+           trim(g_tracer%package_name) .eq. 'generic_wombatlite') then !Niki: later we can make this just else
        call  g_tracer_add_param('enforce_src_info', g_tracer%requires_src_info ,  .true.) 
     endif
        
@@ -1035,7 +1045,8 @@ contains
     endif
     !Surface flux %stf exists if one of the following fluxes were requested:
 
-    if(g_tracer%flux_gas .or. g_tracer%flux_runoff .or. g_tracer%flux_wetdep .or. g_tracer%flux_drydep) then
+    if(g_tracer%flux_gas .or. g_tracer%flux_runoff .or. g_tracer%flux_wetdep .or. g_tracer%flux_drydep &
+       .or. g_tracer%flux_virtual) then
        allocate(g_tracer%stf(isd:ied,jsd:jed)); g_tracer%stf(:,:) = 0.0 
     endif
     
@@ -1536,7 +1547,8 @@ contains
        !runoff contributes to %stf in GOLD but not in MOM, 
        !so it will be added later in the model-dependent driver code (GOLD_generic_tracer.F90)
 
-       if(g_tracer%flux_gas .or. g_tracer%flux_drydep .or. g_tracer%flux_wetdep .or. g_tracer%flux_runoff ) then
+       if(g_tracer%flux_gas .or. g_tracer%flux_drydep .or. g_tracer%flux_wetdep .or. g_tracer%flux_runoff &
+         .or. g_tracer%flux_virtual) then
           call g_tracer_set_values(g_tracer,g_tracer%name,'stf',stf_array,&
                g_tracer_com%isd,g_tracer_com%jsd, weight)
        endif
@@ -3701,9 +3713,23 @@ contains
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case('do14c')
                 g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('no3')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('o2')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
+             case('adic')
+                g_tracer%src_var_unit_conversion = 1.0 / 1.0e6
              case default
                 write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
                 call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring)) 
+             end select
+          elseif(g_tracer%src_var_unit .eq. 'moles_per_liter') then
+             select case (trim(g_tracer%name))
+             case('fe')
+                g_tracer%src_var_unit_conversion = 1000.0 / 1035.0
+             case default
+                write(errorstring, '(a)') trim(g_tracer%name)//' : cannot determine src_var_unit_conversion'
+                call mpp_error(FATAL, trim(sub_name) //': '//  trim(errorstring))
              end select
           else 
               write(errorstring, '(a)') trim(g_tracer%name)//' : src_var_unit is set in the field_table to '//&
