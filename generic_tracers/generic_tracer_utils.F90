@@ -3146,6 +3146,8 @@ contains
     integer :: i, j, k, nz
     logical :: do_diagnostic
 
+    character(len=fm_string_len), parameter :: sub_name = 'g_tracer_vertdiff_G'
+
     !
     !   Save the current state for calculation of the implicit vertical diffusion term
     !

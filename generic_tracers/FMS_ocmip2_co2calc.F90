@@ -143,14 +143,17 @@ end subroutine read_mocsy_namelist
 !
 !       co2_calc   = carbonate formalation -- choices are 'ocmip2'(default)
 !                    or 'mocsy'
+!       pcorr_ocmip2 = whether on not to apply pressure corrections to carbon
+!                    conversion constants. Defaults to false to preserve answers.
+!                    Only used if co2_calc='ocmip2'.
 !
 ! OUTPUT
 !       co2star    = CO2*water, or H2CO3 concentration (mol/kg)
 !       alpha      = Solubility of CO2 for air (mol/kg/atm)
 !       pco2surf   = oceanic pCO2 (ppmv)
 !       co3_ion    = Carbonate ion, or CO3-- concentration (mol/kg)
-!       omega_arag = aragonite saturation state (mol/kg ; avail. only w/ mocsy)
-!       omega_calc = aragonite saturation state (mol/kg ; avail. only w/ mocsy)
+!       omega_arag = aragonite saturation state (mol/kg)
+!       omega_calc = aragonite saturation state (mol/kg)
 !
 ! FILES and PROGRAMS NEEDED: drtsafe, ta_iter_1
 !
@@ -162,7 +165,7 @@ end subroutine read_mocsy_namelist
 subroutine FMS_ocmip2_co2calc(dope_vec, mask,                      &
                           t_in, s_in, dic_in, pt_in, sit_in, ta_in, htotallo, &
                           htotalhi, htotal, co2_calc, zt, co2star, alpha, pCO2surf, &
-                          co3_ion, omega_arag, omega_calc)  !{
+                          co3_ion, omega_arag, omega_calc, pcorr_ocmip2)  !{
 
 implicit none
 
@@ -205,6 +208,8 @@ real, dimension(dope_vec%isd:dope_vec%ied,dope_vec%jsd:dope_vec%jed), &
                                co3_ion, &
                                omega_arag, &
                                omega_calc
+logical, intent(in), optional :: pcorr_ocmip2
+
 !
 !       local variables
 !
@@ -213,6 +218,7 @@ integer :: i,j,ipc
 real :: alpha_internal
 real :: bt
 real :: co2star_internal
+real :: co3_ion_internal
 real :: dlogtk
 real :: ft
 real :: htotal2
@@ -257,6 +263,7 @@ DATA b1 /0.0877e-3, -0.1475e-3, 0.0,        0.0794e-3, 0.09e-3,  0.054e-3,  0.36
 DATA b2 /12*0.0/
 
 character(len=10) :: co2_calc_method
+logical           :: pres_corr_ocmip2
 
 if (present(co2_calc)) then
   co2_calc_method = trim(co2_calc)
@@ -269,7 +276,11 @@ else
   co2_calc_method = 'ocmip2'
 end if
 
-R = 83.14472
+if (present(pcorr_ocmip2)) then
+  pres_corr_ocmip2 = pcorr_ocmip2
+else
+  pres_corr_ocmip2 = .false.
+end if
 
 ! Set the loop indices.
   isc = dope_vec%isc ; iec = dope_vec%iec
@@ -513,64 +524,68 @@ R = 83.14472
       ! This must be done to ensure that the co2 sys    !
       ! calculations are accurate beneath the surface   !
 
-      do ipc=1,12
-        deltav(ipc)  = a0(ipc) + a1(ipc)*t_in(i,j) + a2(ipc)*t_in(i,j)*t_in(i,j)
-        deltak(ipc)  = b0(ipc) + b1(ipc)*t_in(i,j) + b2(ipc)*t_in(i,j)*t_in(i,j)
-        lnkpok0(ipc) = ( -deltav(ipc) + (0.5*deltak(ipc) * prb) )*prb/(R*tk)
-      enddo
+      if (pres_corr_ocmip2) then
+        R = 83.14472
 
-      ! Conversion factor total -> free scale at pressure zero
-      total2free_0p  = 1.0/(1.0 + st/ks)   ! Kfree = Ktotal*total2free
-      ks_0p = ks*1
-      ks = ks * EXP(lnkpok0(5))
-      ! Conversion factor total -> free scale
-      total2free     = 1.0/(1.0 + st/ks)   ! Kfree = Ktotal*total2free
+        do ipc=1,12
+          deltav(ipc)  = a0(ipc) + a1(ipc)*t_in(i,j) + a2(ipc)*t_in(i,j)*t_in(i,j)
+          deltak(ipc)  = b0(ipc) + b1(ipc)*t_in(i,j) + b2(ipc)*t_in(i,j)*t_in(i,j)
+          lnkpok0(ipc) = ( -deltav(ipc) + (0.5*deltak(ipc) * prb) )*prb/(R*tk)
+        enddo
 
-      kf_0p = kf * total2free_0p
-      kf    = kf_0p * EXP(lnkpok0(6))
-      kf    = kf / total2free
+        ! Conversion factor total -> free scale at pressure zero
+        total2free_0p  = 1.0/(1.0 + st/ks)   ! Kfree = Ktotal*total2free
+        ks_0p = ks*1
+        ks = ks * EXP(lnkpok0(5))
+        ! Conversion factor total -> free scale
+        total2free     = 1.0/(1.0 + st/ks)   ! Kfree = Ktotal*total2free
 
-      ! Convert between seawater and total hydrogen (pH) scales
-      free2SWS  = 1.0 + st/ks + ft/(kf*total2free)  ! using Kf on free scale
-      total2SWS = total2free * free2SWS             ! KSWS = Ktotal*total2SWS
-      SWS2total = 1.0 / total2SWS
-      ! Conversion at pressure zero
-      free2SWS_0p  = 1.0 + st/ks_0p + ft/(kf_0p)    ! using Kf on free scale
-      total2SWS_0p = total2free_0p * free2SWS_0p    ! KSWS = Ktotal*total2SWS
+        kf_0p = kf * total2free_0p
+        kf    = kf_0p * EXP(lnkpok0(6))
+        kf    = kf / total2free
 
-      ! Convert from Total to Seawater scale before pressure correction
-      ! Must change to SEAWATER scale: Kb
-      kb = kb*total2SWS_0p
+        ! Convert between seawater and total hydrogen (pH) scales
+        free2SWS  = 1.0 + st/ks + ft/(kf*total2free)  ! using Kf on free scale
+        total2SWS = total2free * free2SWS             ! KSWS = Ktotal*total2SWS
+        SWS2total = 1.0 / total2SWS
+        ! Conversion at pressure zero
+        free2SWS_0p  = 1.0 + st/ks_0p + ft/(kf_0p)    ! using Kf on free scale
+        total2SWS_0p = total2free_0p * free2SWS_0p    ! KSWS = Ktotal*total2SWS
 
-      ! Already on SEAWATER scale: K1p, K2p, K3p, Kb, Ksi, Kw
+        ! Convert from Total to Seawater scale before pressure correction
+        ! Must change to SEAWATER scale: Kb
+        kb = kb*total2SWS_0p
 
-      ! Other contants (keep on another scale):
-      !    - K0         (independent of pH scale, already pressure corrected)
-      !    - Ks         (already on Free scale;   already pressure corrected)
-      !    - Kf         (already on Total scale;  already pressure corrected)
-      !    - Kspc, Kspa (independent of pH scale; pressure-corrected below)
+        ! Already on SEAWATER scale: K1p, K2p, K3p, Kb, Ksi, Kw
 
-      ! Perform actual pressure correction (on seawater scale)
-      k1 = k1*EXP(lnkpok0(1))
-      k2 = k2*EXP(lnkpok0(2))
-      kb = kb*EXP(lnkpok0(3))
-      kw = kw*EXP(lnkpok0(4))
-      Kspc = Kspc*EXP(lnkpok0(7))
-      Kspa = Kspa*EXP(lnkpok0(8))
-      k1p = k1p*EXP(lnkpok0(9))
-      k2p = k2p*EXP(lnkpok0(10))
-      k3p = k3p*EXP(lnkpok0(11))
-      ksi = ksi*EXP(lnkpok0(12))
+        ! Other contants (keep on another scale):
+        !    - K0         (independent of pH scale, already pressure corrected)
+        !    - Ks         (already on Free scale;   already pressure corrected)
+        !    - Kf         (already on Total scale;  already pressure corrected)
+        !    - Kspc, Kspa (independent of pH scale; pressure-corrected below)
 
-      ! Convert back to original total scale:
-      k1  = k1 *SWS2total
-      k2  = k2 *SWS2total
-      k1p = k1p*SWS2total
-      k2p = k2p*SWS2total
-      k3p = k3p*SWS2total
-      kb  = kb *SWS2total
-      ksi = ksi*SWS2total
-      kw  = kw *SWS2total
+        ! Perform actual pressure correction (on seawater scale)
+        k1 = k1*EXP(lnkpok0(1))
+        k2 = k2*EXP(lnkpok0(2))
+        kb = kb*EXP(lnkpok0(3))
+        kw = kw*EXP(lnkpok0(4))
+        Kspc = Kspc*EXP(lnkpok0(7))
+        Kspa = Kspa*EXP(lnkpok0(8))
+        k1p = k1p*EXP(lnkpok0(9))
+        k2p = k2p*EXP(lnkpok0(10))
+        k3p = k3p*EXP(lnkpok0(11))
+        ksi = ksi*EXP(lnkpok0(12))
+
+        ! Convert back to original total scale:
+        k1  = k1 *SWS2total
+        k2  = k2 *SWS2total
+        k1p = k1p*SWS2total
+        k2p = k2p*SWS2total
+        k3p = k3p*SWS2total
+        kb  = kb *SWS2total
+        ksi = ksi*SWS2total
+        kw  = kw *SWS2total
+      endif
 
 !
 !***********************************************************************
@@ -611,10 +626,10 @@ R = 83.14472
         if (present(co2star)) co2star(i,j) = co2star_internal
         if (present(co3_ion)) co3_ion(i,j) = co2star_internal * k1 * k2 / htotal2
         if (present(omega_arag) .or. present(omega_calc)) then
-          co3_ion(i,j) = co2star_internal * k1 * k2 / htotal2
+          co3_ion_internal = co2star_internal * k1 * k2 / htotal2
           calcium = (0.02128/40.078)*s_in(i,j)/1.80655
-          if (present(omega_arag)) omega_arag(i,j) = (calcium * co3_ion(i,j)) / Kspa
-          if (present(omega_calc)) omega_calc(i,j) = (calcium * co3_ion(i,j)) / Kspc
+          if (present(omega_arag)) omega_arag(i,j) = (calcium * co3_ion_internal) / Kspa
+          if (present(omega_calc)) omega_calc(i,j) = (calcium * co3_ion_internal) / Kspc
         endif
 !
 ! Weiss & Price (1980, Mar. Chem., 8, 347-359; Eq 13 with table 6
