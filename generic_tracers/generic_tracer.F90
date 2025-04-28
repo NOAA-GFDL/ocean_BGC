@@ -116,6 +116,7 @@ module generic_tracer
   public generic_tracer_source
   public generic_tracer_diag
   public generic_tracer_update_from_bottom
+  public generic_tracer_update_from_coupler
   public generic_tracer_coupler_get
   public generic_tracer_coupler_set
   public generic_tracer_coupler_zero
@@ -612,6 +613,52 @@ contains
 
   end subroutine generic_tracer_update_from_bottom
 
+  ! <SUBROUTINE NAME="generic_tracer_update_from_coupler">
+  !  <OVERVIEW>
+  !   Modify the values obtained from the coupler
+  !  </OVERVIEW>
+  !  <DESCRIPTION>
+  !   Calls the corresponding generic_X_update_from_coupler routine for each package X.
+  !  </DESCRIPTION>
+  !  <TEMPLATE>
+  !   call generic_tracer_update_from_coupler(ilb, jlb, salt_flux_added)
+  !  </TEMPLATE>
+  !  <IN NAME="ilb,jlb" TYPE="integer">
+  !   Lower bounds of x and y extents of input arrays on data domain
+  !  </IN>
+  !  <IN NAME="salt_flux_added" TYPE="real, dimension(ilb:,jlb:)">
+  !   Surface salt flux into ocean from restoring or flux adjustment [g/m^2/sec]
+  !  </IN>
+  ! </SUBROUTINE>
+
+  subroutine generic_tracer_update_from_coupler(ilb, jlb, salt_flux_added)
+    integer,                     intent(in) :: ilb, jlb
+    real, dimension(ilb:,jlb:),  intent(in) :: salt_flux_added
+
+    character(len=fm_string_len), parameter :: sub_name = 'generic_tracer_update_from_coupler'
+
+    !Specific tracers
+    !    if(do_generic_blres)  call generic_age_update_from_coupler(tracer_list) !Nothing to do for mixed layer tracer
+
+    !    if(do_generic_age)    call generic_blres_update_from_coupler(tracer_list) !Nothing to do for age
+
+    !    if(do_generic_argon)    call generic_argon_update_from_coupler(tracer_list) !Nothing to do for argon
+
+    !    if(do_generic_CFC)    call generic_CFC_update_from_coupler(tracer_list) !Nothing to do for CFC
+
+    !    if(do_generic_SF6)    call generic_SF6_update_from_coupler(tracer_list) !Nothing to do for SF6
+
+    if(do_generic_TOPAZ)  call generic_TOPAZ_update_from_coupler(tracer_list)
+
+    if(do_generic_BLING)  call generic_BLING_update_from_coupler(tracer_list)
+
+    if(do_generic_miniBLING)  call generic_miniBLING_update_from_coupler(tracer_list)
+
+    if(do_generic_COBALT)  call generic_COBALT_update_from_coupler(tracer_list)
+
+    return
+
+   end subroutine generic_tracer_update_from_coupler
 
   ! <SUBROUTINE NAME="generic_tracer_vertdiff_G">
   !  <OVERVIEW>
