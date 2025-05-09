@@ -26,7 +26,7 @@ module g_tracer_utils
   use mpp_mod,           only: mpp_pe, mpp_root_pe, mpp_sync
   use time_manager_mod, only : time_type
 
-  use field_manager_mod, only: fm_string_len, fm_path_name_len, fm_new_list, fm_change_list, fm_get_value
+  use field_manager_mod, only: fm_string_len, fm_new_list, fm_change_list, fm_get_value
   use field_manager_mod, only: fm_dump_list, fm_loop_over_list
 
   use fms_mod,           only: stdout

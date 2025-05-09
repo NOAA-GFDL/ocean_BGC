@@ -127,7 +127,7 @@
 module generic_COBALT
 
   use coupler_types_mod, only: coupler_2d_bc_type
-  use field_manager_mod, only: fm_string_len, fm_path_name_len
+  use field_manager_mod, only: fm_string_len
   use mpp_mod,           only: mpp_clock_id, mpp_clock_begin, mpp_clock_end
   use mpp_mod,           only: CLOCK_COMPONENT, CLOCK_SUBCOMPONENT, CLOCK_MODULE
   use mpp_mod,           only: input_nml_file, mpp_error, stdlog, NOTE, WARNING, FATAL, stdout, mpp_chksum
