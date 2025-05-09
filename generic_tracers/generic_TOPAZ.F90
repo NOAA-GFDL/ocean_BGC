@@ -78,7 +78,7 @@
 module generic_TOPAZ
 
   use coupler_types_mod, only: coupler_2d_bc_type
-  use field_manager_mod, only: fm_string_len, fm_path_name_len
+  use field_manager_mod, only: fm_string_len
   use mpp_mod,           only: mpp_error, NOTE, WARNING, FATAL, stdout, mpp_chksum
   use time_manager_mod,  only: time_type
   use fm_util_mod,       only: fm_util_start_namelist, fm_util_end_namelist  

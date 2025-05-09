@@ -88,7 +88,7 @@ module generic_miniBLING_mod
 #include <fms_platform.h>
 
   use coupler_types_mod, only: coupler_2d_bc_type
-  use field_manager_mod, only: fm_string_len, fm_path_name_len, fm_field_name_len
+  use field_manager_mod, only: fm_string_len, fm_field_name_len
   use mpp_mod,           only: mpp_error, NOTE, FATAL
   use mpp_mod,           only: stdout
   use time_manager_mod,  only: time_type
