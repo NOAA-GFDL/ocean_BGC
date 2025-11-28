@@ -6448,7 +6448,12 @@ write (stdlogunit, generic_COBALT_nml)
     real, dimension(:),             intent(in) :: max_wavelength_band
     real, dimension(:,ilb:,jlb:),   intent(in) :: sw_pen_band
     real, dimension(:,ilb:,jlb:,:), intent(in) :: opacity_band
-    real, dimension(ilb:,jlb:),     intent(in) :: internal_heat
+
+    ! internal_heat is optional because it will be a NULL pointer if
+    ! geothermal heating is disabled.
+    ! Later it will be tested if it is present (not NULL).
+    real, dimension(ilb:,jlb:),     intent(in), optional :: internal_heat
+
     real, dimension(ilb:,jlb:),     intent(in) :: frunoff 
 
     character(len=fm_string_len), parameter :: sub_name = 'generic_COBALT_update_from_source'
@@ -7847,7 +7852,13 @@ write (stdlogunit, generic_COBALT_nml)
           cobalt%ffe_sed(i,j) = cobalt%ffe_sed_max * tanh( (cobalt%f_ndet_btf(i,j,1)*cobalt%c_2_n*sperd*1.0e3)/ &
                                 max(cobalt%f_o2(i,j,k)*1.0e6,epsln) )
 
-          cobalt%ffe_geotherm(i,j) = cobalt%ffe_geotherm_ratio*internal_heat(i,j)*4184.0/dt
+          ! Have ffe_geotherm default to zero if geothermal heating is disabled (internal_heat is null pointer)
+          if(present(internal_heat)) then
+              cobalt%ffe_geotherm(i,j) = cobalt%ffe_geotherm_ratio*internal_heat(i,j)*4184.0/dt
+          else
+              cobalt%ffe_geotherm(i,j) = 0.0
+          endif
+
           ! default for icebergs: 40 nanomoles fe dissolved per kg of icemelt
           ! sediments: Raiswell et al., 2008: 0.5 kg sed per m-3 of iceberg; 0.1% mean Fe, 5-10% soluble
           ! ~500 nanomoles Fe per kg-1 icemelt 
